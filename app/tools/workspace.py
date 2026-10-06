@@ -58,6 +58,19 @@ def resolve_path(workspace_root: Path, chat_id: int, user_path: str) -> tuple[Pa
     return target, PurePosixPath(*parts).as_posix()
 
 
+def workspace_dir(workspace_root: Path, chat_id: int) -> Path:
+    """每群 workspace 根：创建 + resolve + 复核仍在本实例 workspace 根内（沙箱挂载源）。"""
+    base = workspace_root / str(chat_id)
+    base.mkdir(parents=True, exist_ok=True)
+    if base.is_symlink():
+        raise ToolError(PATH_ERROR, "不支持符号链接")
+    resolved = base.resolve()
+    root = workspace_root.resolve()
+    if not resolved.is_relative_to(root):
+        raise ToolError(PATH_ERROR, "工作区路径越界")
+    return resolved
+
+
 def read_text_file(path: Path) -> str:
     """读取 UTF-8 文本；超限 too_large，非文本 invalid_arguments。"""
     if not path.is_file():

@@ -22,6 +22,8 @@ from app.llm.loop import Responder
 from app.logging_setup import setup_logging
 from app.outbound.queue import OutboundQueue
 from app.outbound.ratelimit import RateLimiter
+from app.sandbox.backends import build_backend
+from app.sandbox.runner import SandboxRunner
 from app.session.context import ContextBuilder
 from app.session.mood import MoodTracker
 from app.session.runner import SessionRunner
@@ -53,6 +55,7 @@ class Application:
         self._llm: DeepSeekClient | None = None
         self._outbound: OutboundQueue | None = None
         self._chat_queue: ChatQueue | None = None
+        self._sandbox: SandboxRunner | None = None
         self._tasks: list[asyncio.Task[None]] = []
 
     def request_stop(self) -> None:
@@ -87,8 +90,23 @@ class Application:
         outbound = OutboundQueue(AiogramSender(bot), limiter)
         self._outbound = outbound
 
+        # 沙箱：启动时探测一次并固定后端（docs/security.md §4），运行期不再探测
+        sandbox = SandboxRunner(build_backend(settings), settings)
+        self._sandbox = sandbox
+        try:
+            await sandbox.cleanup_stale()
+        except Exception:
+            logger.warning("清理残留沙箱容器失败", exc_info=True)
+        logger.info("沙箱状态 %s", sandbox.describe())
+
         mood = MoodTracker()
-        registry = build_registry(settings, store=DbStickerStore(connection), outbound=outbound, mood=mood)
+        registry = build_registry(
+            settings,
+            store=DbStickerStore(connection),
+            outbound=outbound,
+            mood=mood,
+            sandbox=sandbox,
+        )
         policy = Policy(registry)
         tools = ToolExecutor(registry, policy)
         responder = Responder(self._llm, settings, tools)
@@ -163,9 +181,13 @@ class Application:
         self._stop.set()
         if self._dispatcher is not None:
             await self._dispatcher.stop_polling()
+        if self._sandbox is not None:
+            await self._sandbox.shutdown()
         for task in self._tasks:
             task.cancel()
         await asyncio.gather(*self._tasks, return_exceptions=True)
+        if self._sandbox is not None:
+            await self._sandbox.shutdown()
 
         if self._chat_queue is not None:
             await self._chat_queue.drain(SHUTDOWN_DRAIN_SECONDS)

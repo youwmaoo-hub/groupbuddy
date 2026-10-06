@@ -12,7 +12,9 @@
 阶段 3：**已完成**（工具主干：注册表 / 权限判定 / 执行器 + `calc` + `search_web` 接口）。
 阶段 4：**已完成**（工作区与文件：`read_file` / `write_file` + 共享路径安全）。
 阶段 5：**已完成**（贴纸：`stickers` 表、情绪匹配、冷却与出站媒体通道）。
-阶段 6：**已完成**（记忆：分档窗口 + 字符预算、噪声标记、模板化摘要、FTS 检索）。一次只推进一个阶段；不得跳阶段。
+阶段 6：**已完成**（记忆：分档窗口 + 字符预算、噪声标记、模板化摘要、FTS 检索）。
+阶段 7：**已完成**（沙箱 run_code：固定容器参数 + rootless Podman/Docker + fail-closed）；Linux/Podman 真实验收待目标机执行 `scripts/verify_sandbox.py`。
+一次只推进一个阶段；不得跳阶段。
 阶段 0 含部署约束增补：Windows 开发 / Linux VPS 24/7 生产，同一份代码（见 `docs/deployment.md`）。
 阶段 10（Web 控制面板与多实例）：**仅完成架构预留**（`docs/domain.md`、`docs/architecture.md` §10），未开发面板，未建控制面表。
 
@@ -88,10 +90,15 @@
 
 ### 阶段 7 · 沙箱 run_code
 
-- 交付：F4.6（`app/sandbox/runner.py` + 固定容器参数）
-- 前置：本机有可用的 Docker/Podman；否则该工具保持 fail-closed。
-  调用方式在阶段 7 决定：Bot 进程不接触 docker/podman socket（见 `docs/security.md` §4、`docs/deployment.md` §10）。
-- 验收：容器内无网络、越界写失败、超时被 kill 且容器销毁。
+- 交付：F4.6（`app/sandbox/` + 固定容器参数）；`spec.py` 是 argv 白名单唯一拼装点，`backends.py` 启动时探测一次后端
+  （rootless Podman 优先、Docker 备选）并只用 CLI 调用，`runner.py` 是唯一执行入口（并发 2、超时 kill 并销毁容器、
+  输出各 8 KB 截断、临时输出目录用后即删、启动清理 `groupbuddy=1` 残留容器），`preflight.py` 只记日志提示；
+  工具与装配见 `app/tools/builtin/run_code.py`；Tier B 仅在 rootless Podman + `SANDBOX_TIER_B=auto` 时可用。
+- 前置：本机有可用的 Podman/Docker；否则 `run_code` 一律返回 `sandbox_unavailable`（fail-closed，不退化到宿主机）。
+  Bot 进程不接触 docker/podman socket（见 `docs/security.md` §4、`docs/deployment.md` §10）。
+- 验收：容器内无网络、越界写失败、超时被 kill 且容器销毁；离线覆盖 `tests/offline/test_sandbox.py`（27 条）；
+  真实验收由目标机（Linux + rootless Podman）执行 `scripts/verify_sandbox.py`，Tier B 未全 PASS 就设为 `SANDBOX_TIER_B=off`。
+- 明确不做：Tier C、`pip install`、容器联网、自定义镜像、microVM/gVisor/Kata、Redis/K8s、配额与管理员权限。
 
 ### 阶段 8 · 权限、配额与运维
 

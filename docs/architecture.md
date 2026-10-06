@@ -55,8 +55,11 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | | `app/tools/policy.py` | 权限判定唯一出口（等级 → 本群开关，见 `docs/security.md` §2） |
 | | `app/tools/executor.py` | 注册表 → 权限 → schema → 执行 → 结构化结果；失败计数与熔断 |
 | | `app/tools/workspace.py` | 路径解析与文件安全（workspace 越界、符号/硬链接、UTF-8、1 MB、原子写 + 单层 `.bak`）——`read_file`/`write_file` 共用的唯一实现 |
-| | `app/tools/builtin/*.py` | 已实现 `calc`、`search_web`（接口）、`read_file`、`write_file`、`send_sticker`；`host_info`/`run_code` 属后续阶段 |
-| 沙箱 | `app/sandbox/runner.py` | 容器调用的唯一实现（阶段 7） |
+| | `app/tools/builtin/*.py` | 已实现 `calc`、`search_web`（接口）、`read_file`、`write_file`、`send_sticker`、`run_code`；`host_info` 属阶段 8 |
+| 沙箱 | `app/sandbox/spec.py` | 容器 argv 白名单的唯一拼装点（模型改不了镜像/挂载/runtime） |
+| | `app/sandbox/backends.py` | podman/docker CLI 调用与**启动时探测一次**；`FakeBackend` 供离线测试 |
+| | `app/sandbox/runner.py` | `run_code` 唯一执行入口：并发闸门、超时销毁容器、输出截断、临时文件清理 |
+| | `app/sandbox/preflight.py` | 代码预扫描，仅记日志（不是安全边界） |
 | 存储 | `app/storage/db.py` | aiosqlite 连接、WAL、`user_version` 迁移 |
 | | `app/storage/repo/*.py` | messages / settings / usage / stickers / notes 读写 |
 | 领域 | `app/domain/bot_instance.py` | 领域对象：`BotInstance` 与 `LLMCredentials`（凭据唯一归属，见 `docs/domain.md` §1、§4） |
@@ -95,6 +98,8 @@ Telegram Update
 - **主动发言闸门**：未点名的候选消息（`question`/`troubleshoot`/`resource`/`followup`）先过冷却与每窗口上限，被压住即 `wait`（0 token、只入库）；被点名不受限制（`docs/requirements.md` §2.1）。
 - **出站串行**：同一群的文本与贴纸发送共用一把锁（`app/outbound/queue.py`）；贴纸走独立的 1 条/20 秒限速通道。
 - **摘要调度**：后台任务 `summary-scheduler` 按 `chat_id` 串行、异步、可重试、幂等，随关闭信号停止，不阻塞回复（`app/session/summary.py`）。
+- **沙箱执行**：`run_code` 只经 `app/sandbox/runner.py` 在一次性容器里执行（无网络、只读根、非 root、`--rm`），并发上限 2（超出排队），
+  超时即 kill 并销毁容器，临时输出目录用后即删；没有可用运行时即 fail-closed，绝不退化到宿主机（`docs/security.md` §4）。
 - 每群邮箱有容量上限，溢出策略：合并待处理批次并保留最新若干条，不无限堆积。
 - `update_id` 落库是幂等来源；同一条更新重复到达不会被处理两次。
 - 单个 LLM 调用、单个工具调用都有超时；超时按失败处理，不阻塞队列后续任务。
@@ -114,7 +119,8 @@ Telegram Update
 | 每群独立 Bot | 单 Token + `chat_id` 租户键 | 多 Token 部署多实例 |
 | 模型档位 | 单模型名可配置 | 按复杂度路由（见 token §运行侧） |
 | 代码执行强度 | Docker/Podman | gVisor/Kata/Firecracker（仅在确有高风险需求时） |
-| 沙箱隔离强度 | 一次性容器，Bot 进程不接触容器运行时 socket | 受控沙箱服务 / rootless / microVM（确有必要时） |
+| 沙箱隔离强度 | 一次性容器 + rootless Podman（Tier B 用 `keep-id`），Bot 进程不接触容器运行时 socket；
+Docker 只支持 Tier A | 独立沙箱服务 / microVM（确有必要时） |
 | 部署方式 | 单机单进程 + long polling | systemd 或容器托管，24/7 自愈（阶段 9） |
 | 情绪注入 | 动态段末条可选，默认不注入 | 阶段 5+ 由贴纸/情绪数据驱动（`docs/persona.md` §2） |
 | 控制面板与多实例 | 单进程单实例、`chat_id` 租户键、控制面不存在 | 每实例一进程 + Control API 调服务层（阶段 10，对象与租户键见 `docs/domain.md`） |

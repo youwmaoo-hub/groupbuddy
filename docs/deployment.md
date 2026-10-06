@@ -76,6 +76,12 @@
 - `run_code` 经独立沙箱执行（见 `docs/security.md` §4）；沙箱只看到本群 workspace 与一个干净临时目录。
 - 若确需调用容器运行时，只能由权限受限的独立组件用固定模板调用（白名单参数）。
 - 模型永远拿不到宿主 shell、容器 socket、宿主目录、宿主环境变量。
+- 沙箱镜像 `python:3.12-slim` 由**部署阶段预拉取**（`podman pull` / `docker pull`），运行期不 pull、容器无网络；
+  `run_code` 运行期只做本地执行，不做任何下载。
+- 沙箱后端用 rootless Podman：专用非 root 用户运行，`SANDBOX_TIER_B=auto` 时用 `--userns=keep-id` 映射宿主 uid，
+  容器内仍是非 root 用户并只能读写本群 workspace；Docker 只支持 Tier A（无 workspace 写入）。
+- 上线或换机后跑一次真实验收 `scripts/verify_sandbox.py`（无网络、非 root、只读根、越界写失败、超时销毁、
+  其他群 workspace 与宿主目录不可见）；Tier B 任一项不 PASS 就把 `SANDBOX_TIER_B=off` 只保留 Tier A。
 
 ## 11. 明确不做（阶段 1–9）
 

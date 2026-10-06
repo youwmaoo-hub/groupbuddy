@@ -158,11 +158,11 @@ F2.1 只覆盖强触发；"不需要 @ 也能主动回复"（§2.1 第 1 条）�
 | 2 | 是否做模型档位路由 | 阶段 8 再评估；先用 `deepseek-flash` 单档 |
 | 3 | 贴纸素材来源 | 群主手动登记，模型只给 valence/arousal/tags |
 | 4 | 复杂度/追问判定方式 | 纯规则（正则 + 距离阈值），不引入分类模型 |
-| 5 | 部署形态 | 阶段 1–6 本机/VPS；阶段 7 起需要容器运行时 |
+| 5 | 部署形态 | 阶段 1–6 本机/VPS；阶段 7 起容器运行时是可选依赖：没有 Podman/Docker 时 `run_code` 自动 fail-closed，其余功能不受影响 |
 | 6 | 语言约定 | 文档与注释中文；标识符与工具名英文 |
 | 7 | 记账时区与展示时区 | 存储 UTC；`usage.day` 与展示按 `TIMEZONE`（默认 Asia/Shanghai） |
 | 8 | 备份频率与保留 | 程序内每周 1 次、保留 7 份（`BACKUP_KEEP` 可配），见 `docs/database.md` §5 |
-| 9 | 沙箱调用方式（Bot 不接触 docker/podman socket 时怎么起容器） | 阶段 7 定；候选 rootless Podman 的受限 CLI 调用，或独立沙箱服务 |
+| 9 | 沙箱调用方式（Bot 不接触 docker/podman socket 时怎么起容器） | 已定（阶段 7）：rootless Podman 的受限 CLI 调用（白名单 argv、无 shell、启动时探测一次）；Docker 备选且只有 Tier A；独立沙箱服务保留为将来预留（`docs/security.md` §4） |
 | 10 | 多实例数据形态 | 阶段 10 定；默认每实例一份 `DATA_DIR`/`DB_PATH`/`WORKSPACE_ROOT`（迁移最小、隔离最强），备选单库加 `bot_instance_id` 列 |
 | 11 | 凭据加密与主密钥托管 | 阶段 10 定；候选 AES-GCM + 600 权限主密钥文件或系统 keyring，引入新依赖需单独批准 |
 | 12 | Control API 鉴权与 Web 框架 / 前端栈 | 阶段 10 定；是否引入 FastAPI 等新依赖、自建账号还是 OAuth、公开部署如何防滥用 |

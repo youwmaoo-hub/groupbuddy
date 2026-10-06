@@ -59,20 +59,36 @@
 
 ## 4. 沙箱（`run_code`）
 
-容器运行时：Docker/Podman，一次性容器，执行后销毁。固定参数：
+容器运行时：Podman（rootless 优先）/ Docker，一次性容器，执行后销毁。实现在 `app/sandbox/`：
+`spec.py` 是 argv 白名单的唯一拼装点，`backends.py` 只用 CLI（无 shell）调用运行时，
+`runner.py` 是 `run_code` 的唯一执行入口，`preflight.py` 只做提示。
+`SANDBOX_BACKEND=auto` 只在**启动阶段**探测一次并固定后端，运行期不再探测。固定参数：
 
 | 项 | 取值 |
 |---|---|
 | 网络 | `--network=none` |
-| 根文件系统 | `--read-only`（必要时用 tmpfs 提供可写临时目录） |
-| 用户 | 非 root |
-| 挂载 | 仅 `storage/workspaces/<chat_id>`（只挂本群） |
-| 禁止 | docker/podman socket、宿主目录、宿主环境变量、密钥 |
-| 限制 | CPU、内存、PID 数、单文件大小、执行时间（默认 15s，上限 30s） |
-| 超时 | kill 进程并销毁容器 |
+| 根文件系统 | `--read-only`；`--tmpfs /tmp:rw,noexec,nosuid,size=16m` 提供可写临时目录 |
+| 用户 | 非 root：Tier A `--user 65534:65534`；Tier B `--userns=keep-id --user <宿主 uid>:<gid>` |
+| 挂载 | Tier A 不挂载任何宿主目录；Tier B 只挂 `storage/workspaces/<chat_id>` → `/workspace:rw` |
+| 禁止 | docker/podman socket、宿主目录、宿主环境变量、密钥（子进程环境是白名单拷贝） |
+| 限制 | `--memory 256m --memory-swap 256m --cpus 0.5 --pids-limit 64 --ulimit nofile=64:64 --ulimit fsize=8388608:8388608` |
+| 时间 | 默认 15s、上限 30s（`SANDBOX_TIMEOUT_DEFAULT` / `SANDBOX_TIMEOUT_MAX`） |
+| 并发 | `SANDBOX_MAX_CONCURRENT=2`（进程内信号量，超出排队） |
+| 输出 | stdout/stderr 各 8 KB，超出即截断并追加 `[output truncated: N bytes]` |
+| 镜像/执行 | `python:3.12-slim`（只能部署阶段预拉取）→ `python -I -c <code>`，code 作为单个 argv 参数 |
+| 超时 | kill 进程并销毁容器（`--rm` 兜底 + 显式 kill/rm） |
 
+- Tier A（默认）：纯计算，无挂载、无网络、非 root、一次一销毁。
+- Tier B（workspace 写入）：只在 rootless Podman + `SANDBOX_TIER_B=auto` 时启用，用 user namespace `keep-id`
+  把宿主用户映射进容器，容器内仍是非 root 用户；Docker 与 rootful Podman 一律不启用，
+  `workspace=true` 直接返回 `sandbox_unavailable`（不为了兼容放宽权限）。
 - 无可用运行时 → 直接拒绝（`sandbox_unavailable`），禁止退化为宿主机执行。
-- 代码扫描（`os.system`/`subprocess`/`eval`/`__import__`）只作 **preflight 提示**，不作为安全边界。
+- 模型不能指定镜像、挂载、工作目录或任何 runtime 参数；容器 argv 全部由 `app/sandbox/spec.py` 生成。
+- 临时输出目录 `storage/sandbox/`：正常、异常、超时、取消、Bot 关停都立即删除；
+  启动时清理带 `groupbuddy=1` 标签的残留容器（上次进程被强杀留下的）。
+- 代码扫描（`app/sandbox/preflight.py`：`os.system`/`subprocess`/`eval`/`__import__`/网络/写入…）只作 **preflight 提示**（只记日志），不作为安全边界。
+- 真实验收：在目标机（Linux + rootless Podman）运行 `scripts/verify_sandbox.py`，逐项验证无网络、非 root、只读根、
+  越界写失败、超时销毁、其他群 workspace 不可见、宿主目录不可见；全部 PASS 才允许开启 Tier B。
 - **红线：禁止挂载 docker/podman socket**（等价于宿主机 root 权限），**禁止 privileged / host network / 宿主目录挂载**。
 - 若确需调用容器运行时，只允许由权限受限的独立组件用固定模板调用（白名单参数）；模型无法影响镜像、参数与宿主路径。
 - 不使用 microVM/Kata/gVisor（阶段 1–8）；确有高风险需求时再评估。

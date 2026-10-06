@@ -67,6 +67,20 @@ class Settings(BaseSettings):
     # search_web 后端未定（docs/requirements.md §4 #1）：none = 不注册该工具
     search_backend: Literal["none", "fake"] = Field(default="none", alias="SEARCH_BACKEND")
 
+    # --- 沙箱（阶段 7，docs/security.md §4） ---
+    sandbox_backend: Literal["auto", "podman", "docker", "none"] = Field(default="auto", alias="SANDBOX_BACKEND")
+    sandbox_image: str = Field(default="python:3.12-slim", alias="SANDBOX_IMAGE")
+    # auto=rootless Podman（keep-id 映射）允许 workspace 写入；off=关闭。Docker 一律不启用 Tier B
+    sandbox_tier_b: Literal["auto", "off"] = Field(default="auto", alias="SANDBOX_TIER_B")
+    sandbox_timeout_default: int = Field(default=15, ge=1, le=120, alias="SANDBOX_TIMEOUT_DEFAULT")
+    sandbox_timeout_max: int = Field(default=30, ge=1, le=300, alias="SANDBOX_TIMEOUT_MAX")
+    sandbox_memory_mb: int = Field(default=256, ge=32, alias="SANDBOX_MEMORY_MB")
+    sandbox_cpus: float = Field(default=0.5, gt=0, alias="SANDBOX_CPUS")
+    sandbox_pids: int = Field(default=64, ge=8, alias="SANDBOX_PIDS")
+    sandbox_max_concurrent: int = Field(default=2, ge=1, le=8, alias="SANDBOX_MAX_CONCURRENT")
+    sandbox_output_kb: int = Field(default=8, ge=1, le=1024, alias="SANDBOX_OUTPUT_KB")
+    sandbox_temp_dir: Path = Field(default=Path("storage/sandbox"), alias="SANDBOX_TEMP_DIR")
+
     # --- 全局人格（System1，见 docs/persona.md） ---
     persona: str = Field(default="", alias="PERSONA")
 
@@ -143,6 +157,16 @@ class Settings(BaseSettings):
             "PROACTIVE_MAX_PER_WINDOW": self.proactive_max_per_window,
             "TOOL_MAX_ROUNDS": self.tool_max_rounds,
             "SEARCH_BACKEND": self.search_backend,
+            "SANDBOX_BACKEND": self.sandbox_backend,
+            "SANDBOX_IMAGE": self.sandbox_image,
+            "SANDBOX_TIER_B": self.sandbox_tier_b,
+            "SANDBOX_TIMEOUT_DEFAULT": self.sandbox_timeout_default,
+            "SANDBOX_TIMEOUT_MAX": self.sandbox_timeout_max,
+            "SANDBOX_MEMORY_MB": self.sandbox_memory_mb,
+            "SANDBOX_CPUS": self.sandbox_cpus,
+            "SANDBOX_PIDS": self.sandbox_pids,
+            "SANDBOX_MAX_CONCURRENT": self.sandbox_max_concurrent,
+            "SANDBOX_OUTPUT_KB": self.sandbox_output_kb,
             "TIMEZONE": self.timezone,
             "LOG_LEVEL": self.log_level,
             "BOT_TOKEN": REDACTED,
@@ -150,9 +174,27 @@ class Settings(BaseSettings):
         }
         return " ".join(f"{key}={value}" for key, value in items.items())
 
+    def subprocess_env(self) -> dict[str, str]:
+        """给沙箱 CLI 子进程的最小环境：白名单拷贝，绝不含凭据（docs/security.md §4）。
+
+        只有本模块可以读环境变量（AGENTS.md §3 规则 11 + 分层测试）。
+        """
+        allowed = (
+            "PATH",
+            "HOME",
+            "LANG",
+            "LC_ALL",
+            "TMPDIR",
+            "XDG_RUNTIME_DIR",
+            "XDG_DATA_HOME",
+            "DBUS_SESSION_BUS_ADDRESS",
+            "CONTAINER_HOST",
+        )
+        return {name: os.environ[name] for name in allowed if os.environ.get(name)}
+
     def ensure_directories(self) -> None:
         """创建持久化目录；容器部署时这些目录由 volume 挂载。"""
-        for path in (self.data_dir, self.db_path.parent, self.workspace_root, self.log_dir):
+        for path in (self.data_dir, self.db_path.parent, self.workspace_root, self.log_dir, self.sandbox_temp_dir):
             path.mkdir(parents=True, exist_ok=True)
 
 

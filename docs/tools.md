@@ -21,7 +21,7 @@
 | `read_file` | L1 | 群开关 | `path: str, start_line?: int, end_line?: int, query?: str`（`query` 保留，传入即 `invalid_arguments`） | `{path,start_line,end_line,text,total_lines}` | 3s |
 | `write_file` | L2 | 群开关 | `path: str, content: str` | `{path,bytes,backup?: str}` | 5s |
 | `send_sticker` | L2 | 群开关 | `valence: float, arousal: float, tags?: [str]` | `{sent: bool, sticker_id: int}`；冷却中 `{sent: false, state: "cooldown", retry_after: N}` | 3s |
-| `run_code` | L3 | 群开关（默认关） | `code: str, timeout_s?: int=15` | `{exit_code,stdout,stderr,truncated}` | 30s |
+| `run_code` | L3 | 群开关（默认关） | `code: str, timeout_s?: int=15, workspace?: bool=false` | `{exit_code,stdout,stderr,truncated}` | 30s（ToolSpec 35s） |
 | `host_info` | L4 | 默认关 | `fields?: [str]` | `{cpu,memory,disk_free,python,uptime_s}` | 2s |
 
 ### calc
@@ -55,9 +55,13 @@
 
 ### run_code
 
-- 必须经 `app/sandbox/runner.py`；沙箱参数由程序固定（见 `docs/security.md` §4）。
+- 必须经 `app/sandbox/runner.py`；沙箱参数由程序固定（见 `docs/security.md` §4），模型看不到也改不了镜像、挂载与 runtime 参数。
+- 权限：等级 L3 + 群开关 `allow_code`（默认关）；`workspace=true` 还需要本群 `allow_write`，否则 `permission_denied`。模型不能自行授予权限。
+- 沙箱后端在**启动时探测一次**并固定（`SANDBOX_BACKEND=auto`：rootless Podman 优先、Docker 备选）；没有可用运行时就不执行。
+- Tier B（`workspace=true`）只在 rootless Podman（`--userns=keep-id`）下可用；其他后端一律 `sandbox_unavailable`。
 - 无容器运行时可用时一律 fail-closed 拒绝（`sandbox_unavailable`），不允许退化为宿主机执行。
-- 默认 `timeout_s=15`，上限 30；超时即 kill 并销毁容器。
+- 默认 `timeout_s=15`，上限 30；超时即 kill 并销毁容器并返回 `timeout`。
+- 错误映射：运行时不可用 / Tier B 未验证 → `sandbox_unavailable`；启动或执行失败 → `execution_failed`；workspace 越界 → `path_outside_workspace`。
 
 ### host_info
 

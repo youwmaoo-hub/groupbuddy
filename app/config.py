@@ -11,6 +11,8 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from app.domain.bot_instance import BotInstance, LLMCredentials
+
 REDACTED = "[redacted]"
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
@@ -21,7 +23,8 @@ class Settings(BaseSettings):
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    # --- 凭据（永不写入日志/DB/错误消息） ---
+    # --- 实例身份与凭据（凭据概念上归属 BotInstance，见 docs/domain.md §1、§4） ---
+    instance_id: str = Field(default="default", alias="BOT_INSTANCE_ID")
     bot_token: str = Field(alias="BOT_TOKEN")
     llm_api_key: str = Field(alias="LLM_API_KEY")
 
@@ -44,8 +47,9 @@ class Settings(BaseSettings):
     history_default: int = Field(default=20, alias="HISTORY_DEFAULT")
     history_complex: int = Field(default=50, alias="HISTORY_COMPLEX")
     history_chitchat: int = Field(default=10, alias="HISTORY_CHITCHAT")
+    allow_private_chat: bool = Field(default=False, alias="ALLOW_PRIVATE_CHAT")
 
-    # --- 系统人设（System1） ---
+    # --- 全局人格（System1，见 docs/persona.md） ---
     persona: str = Field(default="", alias="PERSONA")
 
     # --- 时区与时钟 ---
@@ -73,14 +77,30 @@ class Settings(BaseSettings):
         raw = self.bot_aliases.replace("，", ",")
         return tuple(part.strip() for part in raw.split(",") if part.strip())
 
+    def bot_instance(self) -> BotInstance:
+        """凭据的唯一出口；业务代码不直接读 bot_token/llm_api_key（docs/domain.md §4）。"""
+        return BotInstance(
+            instance_id=self.instance_id,
+            bot_token=self.bot_token,
+            llm=LLMCredentials(
+                base_url=self.llm_base_url,
+                api_key=self.llm_api_key,
+                timeout_seconds=self.llm_timeout_seconds,
+                model=self.llm_model,
+                temperature=self.llm_temperature,
+                max_output_tokens=self.llm_max_output_tokens,
+            ),
+        )
+
     @property
     def secrets(self) -> tuple[str, ...]:
         """必须脱敏的字符串；日志过滤器用它做替换。"""
-        return tuple(value for value in (self.bot_token, self.llm_api_key) if value)
+        return self.bot_instance().secret_values()
 
     def describe(self) -> str:
         """启动时打印配置摘要；凭据一律遮蔽。"""
         items = {
+            "BOT_INSTANCE_ID": self.instance_id,
             "LLM_BASE_URL": self.llm_base_url,
             "LLM_MODEL": self.llm_model,
             "LLM_TIMEOUT_SECONDS": self.llm_timeout_seconds,
@@ -92,6 +112,7 @@ class Settings(BaseSettings):
             "HISTORY_DEFAULT": self.history_default,
             "HISTORY_COMPLEX": self.history_complex,
             "HISTORY_CHITCHAT": self.history_chitchat,
+            "ALLOW_PRIVATE_CHAT": self.allow_private_chat,
             "TIMEZONE": self.timezone,
             "LOG_LEVEL": self.log_level,
             "BOT_TOKEN": REDACTED,

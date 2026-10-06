@@ -17,16 +17,22 @@ class ContextBuilder:
         self._settings = settings
 
     async def build(self, batch: Batch) -> list[dict[str, str]]:
-        """窗口按 chat_id 过滤，绝不跨群；本轮用户消息永不丢。"""
+        """窗口按 chat_id 过滤，绝不跨群；本轮用户消息永不丢。
+
+        本轮边界：只取"处理开始时已入库"的消息（docs/architecture.md §5），
+        模型调用期间新到的消息不会回填进本轮，留给下一轮。
+        """
         group = await chat_settings.get(self._connection, batch.chat_id)
         system_prompt = build_system_prompt(
             persona=self._settings.persona,
             mode=str(group.get("mode", "normal")),
         )
+        until_id = await messages.max_id(self._connection, chat_id=batch.chat_id)
         history = await messages.recent(
             self._connection,
             chat_id=batch.chat_id,
             limit=self._settings.history_default,
+            until_id=until_id,
         )
         latest = batch.items[-1] if batch.items else None
         if latest is not None and not any(item.message_id == latest.message_id for item in history):

@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import tempfile
 import unittest
+from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from app.config import Settings
@@ -43,17 +44,26 @@ class FakeSleep:
 class FakeLLMClient:
     """记录每次请求；按脚本返回文本，可模拟失败。"""
 
-    def __init__(self, *replies: str, fail: bool = False) -> None:
+    def __init__(
+        self,
+        *replies: str,
+        fail: bool = False,
+        on_complete: Callable[[], Awaitable[None]] | None = None,
+    ) -> None:
         self.calls: list[list[dict[str, str]]] = []
         self.models: list[str] = []
         self._replies = list(replies) or ["好的"]
         self._fail = fail
+        self._on_complete = on_complete
 
     async def complete(self, messages, *, model=None, temperature=None, max_tokens=None) -> LLMReply:
         self.calls.append(messages)
         self.models.append(model or "")
         if self._fail:
             raise LLMError("模拟失败")
+        if self._on_complete is not None:
+            # 模拟"模型正在调用时外部又发生了事"（例如群里新消息到达）
+            await self._on_complete()
         if len(self._replies) > 1:
             text = self._replies.pop(0)
         else:

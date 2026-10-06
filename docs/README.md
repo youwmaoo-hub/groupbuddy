@@ -20,6 +20,8 @@
 | 开发方式、任务边界、完成标准 | `AGENTS.md` | 其他文档 |
 | 分层、模块职责、数据流、并发、恢复、扩展预留 | `docs/architecture.md` | requirements |
 | 需求条目、行为规则、优先级、验收标准、未决问题 | `docs/requirements.md` | architecture |
+| 人格、语气、情绪、人设边界 | `docs/persona.md` | 其他文档（只引用） |
+| 对象、身份、租户键、凭据归属、控制面板边界 | `docs/domain.md` | 其他文档（只引用） |
 | 某个工具的输入/输出/等级/超时/错误码 | `docs/tools.md` | security（只引用） |
 | 权限、路径、沙箱、网络、密钥、日志、429 | `docs/security.md` | tools（只引用） |
 | 上下文窗口、摘要模板、FTS 检索 | `docs/memory.md` | database |
@@ -36,6 +38,8 @@
 | `docs/README.md` | 入口与路由（本文件） |
 | `docs/architecture.md` | 架构、模块边界、数据流、并发 |
 | `docs/requirements.md` | 需求与验收 |
+| `docs/persona.md` | 全局人格与三层人设分离 |
+| `docs/domain.md` | 领域对象、身份模型、租户键与面板边界 |
 | `docs/tools.md` | 工具契约 |
 | `docs/security.md` | 安全边界与权限 |
 | `docs/memory.md` | 记忆与检索策略 |
@@ -58,4 +62,7 @@
 - 规则只在归属文件里写完整内容；其他文件只允许一句话引用。
 - 术语以本目录为准：`chat_id`（群）、`thread_id`（论坛主题，预留）、
   `workspace`（每群工作区）、`Trigger`（发言闸门）、`Policy`（程序侧权限判定）、
-  `OutboundQueue`（出站队列）、L0–L4（工具等级）。
+  `OutboundQueue`（出站队列）、L0–L4（工具等级）、
+  `BotInstance`（实例，租户键第一段）、`Credential`（凭据，归属实例）、
+  `Principal`（运行期请求主体，Web 用户与 Telegram 用户不复用）、控制面（Control API，阶段 10）、
+  本轮（round，一次回复任务的边界：只处理开始时已入库的消息）、情绪（mood，动态段末条的可选语气状态）。

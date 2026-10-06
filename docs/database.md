@@ -127,6 +127,8 @@ CREATE VIRTUAL TABLE notes_fts     USING fts5(text, content='notes',     content
 - `(chat_id, message_id)` 唯一：同一条 Telegram 消息即使重复 ingest 也只落一行。
 - `update_id` 是主键：`INSERT OR IGNORE` 失败即视为重复，直接丢弃更新。
 - `chat_settings` 缺失时按默认值处理（不强制预建行）。
+- 私聊默认不处理：不写入 `messages`，只在 `updates` 留下 update_id/chat_id/received_at（见 `docs/requirements.md` §2.2）。
+- 租户键口径：本文所有表的 `chat_id` 都是"实例内的群"；完整租户键是 `(bot_instance_id, chat_id)`，阶段 1–9 只有一个实例（`default`），因此不新增列（见 `docs/domain.md` §2）。
 
 ## 4. 保留与清理（启动时执行，低优先级后台任务）
 
@@ -152,3 +154,17 @@ CREATE VIRTUAL TABLE notes_fts     USING fts5(text, content='notes',     content
 - 所有写入在事务中完成；同一事务内不做网络或工具调用。
 - 工具执行与 LLM 调用**不**持有数据库写锁（先算后写）。
 - 记账失败不得影响回复；`usage` 写入异常只记日志。
+
+## 7. 控制面预留（阶段 10，暂不建表）
+
+面板使用**单独的控制库文件**，不放进实例的 `bot.db`；本轮不建表、不加列、不改已发布迁移。
+
+| 候选表 | 唯一键 | 用途 |
+|---|---|---|
+| `bot_instances` | `instance_id` | 实例清单与状态（对应 `DATA_DIR`/`DB_PATH`/`WORKSPACE_ROOT`） |
+| `users` | `user_id` | Web 面板用户（与 Telegram 用户不是同一身份，见 `docs/domain.md` §3） |
+| `credentials` | `(bot_instance_id, kind)` | 凭据密文 + 掩码（只写不读，见 `docs/security.md` §6） |
+| `audit_log` | `id` | 谁在何时改了哪个设置/权限/凭据 |
+| `usage_rollup` | `(bot_instance_id, day)` | 实例级用量汇总（明细仍在实例库的 `usage`） |
+
+规则：迁移只追加；凭据列只存密文与掩码；控制库不含任何群消息原文。

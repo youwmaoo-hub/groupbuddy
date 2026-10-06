@@ -1,4 +1,4 @@
-"""每个 chat_id 串行、不同群可并行的 actor 队列。"""
+"""每个 chat_id 串行、不同群可并行的 actor 队列；运行期间的新消息合并为下一轮一批。"""
 
 from __future__ import annotations
 
@@ -10,15 +10,15 @@ from app.gate.debounce import Batch
 
 logger = logging.getLogger(__name__)
 
-MAX_PENDING_BATCHES = 8
+MAX_BATCH_MESSAGES = 5
 
 
 class ChatQueue:
-    """同一 chat_id 同时只有一个 Agent Loop；溢出时合并而不是丢弃。"""
+    """同一 chat_id 同时只有一个回复任务；运行期间到达的消息合并进唯一待处理批次。"""
 
-    def __init__(self, handler, *, max_pending: int = MAX_PENDING_BATCHES) -> None:
+    def __init__(self, handler, *, max_batch_messages: int = MAX_BATCH_MESSAGES) -> None:
         self._handler = handler
-        self._max_pending = max(1, max_pending)
+        self._max_batch_messages = max(1, max_batch_messages)
         self._pending: dict[int, deque[Batch]] = {}
         self._events: dict[int, asyncio.Event] = {}
         self._workers: dict[int, asyncio.Task[None]] = {}
@@ -26,12 +26,16 @@ class ChatQueue:
         self._inflight = 0  # 已出队但仍在处理的批次数（drain 必须等它归零）
 
     async def submit(self, batch: Batch) -> None:
+        """运行期间到达的消息不新开一轮：合并进该群唯一的待处理批次，只保留最新 N 条。"""
         pending = self._pending.setdefault(batch.chat_id, deque())
-        if len(pending) >= self._max_pending:
+        if pending:
             previous = pending[-1]
-            logger.warning("队列溢出，合并批次 chat_id=%s merged=%s", batch.chat_id, len(batch.items))
             previous.items.extend(batch.items)
             previous.last_at = batch.last_at
+            if len(previous.items) > self._max_batch_messages:
+                dropped = len(previous.items) - self._max_batch_messages
+                del previous.items[:dropped]
+                logger.debug("批次超出上限，丢弃最早 %s 条（仍留在窗口里作历史）chat_id=%s", dropped, batch.chat_id)
         else:
             pending.append(batch)
         self._event(batch.chat_id).set()

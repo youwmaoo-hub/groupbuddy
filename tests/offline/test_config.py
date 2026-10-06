@@ -33,6 +33,22 @@ class ConfigTests(unittest.TestCase):
         self.assertNotIn("test-token", text)
         self.assertNotIn("test-key", text)
 
+    def test_bot_instance_groups_credentials(self) -> None:
+        settings = make_settings(self.tmp)
+        instance = settings.bot_instance()
+        self.assertEqual(instance.instance_id, "default")
+        self.assertEqual(instance.bot_token, "test-token")
+        self.assertEqual(instance.llm.api_key, "test-key")
+        self.assertEqual(instance.llm.model, "deepseek-flash")
+        self.assertIn("test-token", instance.secret_values())
+        self.assertIn("test-key", instance.secret_values())
+        self.assertEqual(set(instance.secret_values()), set(settings.secrets))
+
+    def test_bot_instance_id_can_be_overridden(self) -> None:
+        settings = make_settings(self.tmp, BOT_INSTANCE_ID="alpha")
+        self.assertEqual(settings.bot_instance().instance_id, "alpha")
+        self.assertIn("BOT_INSTANCE_ID=alpha", settings.describe())
+
     def test_aliases_support_chinese_comma(self) -> None:
         settings = make_settings(self.tmp, BOT_ALIASES="小助手，helper , ,")
         self.assertEqual(settings.aliases, ("小助手", "helper"))

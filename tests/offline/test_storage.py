@@ -74,6 +74,35 @@ class MessageRepoTests(DbTestCase):
         self.assertEqual([row.text for row in await messages.recent(self.connection, chat_id=1, limit=10, include_noise=True)], ["m0", "m1", "m2"])
 
 
+    async def test_max_id_is_zero_without_messages(self) -> None:
+        self.assertEqual(await messages.max_id(self.connection, chat_id=1), 0)
+
+    async def test_recent_stops_at_round_snapshot(self) -> None:
+        for index in range(3):
+            await messages.insert(
+                self.connection,
+                chat_id=1,
+                message_id=100 + index,
+                user_id=42,
+                role="user",
+                text=f"m{index}",
+                created_at=1000 + index,
+            )
+        snapshot = await messages.max_id(self.connection, chat_id=1)
+        await messages.insert(
+            self.connection,
+            chat_id=1,
+            message_id=200,
+            user_id=42,
+            role="user",
+            text="后到的消息",
+            created_at=1010,
+        )
+        rows = await messages.recent(self.connection, chat_id=1, limit=10, until_id=snapshot)
+        self.assertEqual([row.text for row in rows], ["m0", "m1", "m2"])
+        self.assertGreater(await messages.max_id(self.connection, chat_id=1), snapshot)
+
+
 class ChatSettingsTests(DbTestCase):
     async def test_defaults_when_missing(self) -> None:
         group = await chat_settings.get(self.connection, 999)

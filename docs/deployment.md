@@ -26,6 +26,7 @@
 
 - 只有 `app/config.py` 读取环境变量；其余模块只接收 `Settings`（见 `docs/architecture.md` §2）。
 - 必须注入：`BOT_TOKEN`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`、`DB_PATH`、`WORKSPACE_ROOT`、`TIMEZONE`、`BACKUP_KEEP`。
+- 实例身份：`BOT_INSTANCE_ID`（默认 `default`）。多实例部署时每实例注入不同的 `DATA_DIR`/`DB_PATH`/`WORKSPACE_ROOT`，互不共享目录（见 `docs/domain.md` §2）。
 - `.env` 与 `.env.example` 键名一一对应，模块导入即校验，缺失启动失败。
 
 ## 4. 时间与 UTC
@@ -46,6 +47,7 @@
 - 单机单进程；同一 Bot Token 只允许一个 polling 进程。
 - 托管方式（阶段 9 交付）：systemd（`Restart=always`）或容器 `restart: unless-stopped`。
 - VPS 重启后自动拉起；SQLite 与 workspace 保留，直接恢复运行。
+- 实例生命周期由部署控制：创建/停用实例 = 写配置 + 启/停进程；阶段 1–9 不做进程内热加载（见 `docs/architecture.md` §10）。
 
 ## 7. 健康检查
 

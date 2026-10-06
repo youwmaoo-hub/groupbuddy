@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
+import asyncio
 import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
 
-from app.gate.debounce import Debouncer
+from app.gate.debounce import Batch, Debouncer
 from app.gate.dedupe import UpdateDeduplicator
-from app.gate.filters import DROP_BOT_AUTHOR, DROP_COMMAND, DROP_NO_TEXT, screen
+from app.gate.filters import DROP_BOT_AUTHOR, DROP_COMMAND, DROP_NO_TEXT, DROP_PRIVATE, screen
+from app.gate.queue import ChatQueue
 from app.gate.trigger import TriggerDetector
 from app.telegram.parse import parse_update
 from tests.offline.helpers import DbTestCase, FakeClock, make_incoming, make_settings
@@ -62,6 +64,82 @@ class FilterTests(unittest.TestCase):
             screen(make_incoming(update_id=1, chat_id=1, message_id=1, text=" /stats")).reason,
             DROP_COMMAND,
         )
+
+    def test_private_chat_is_dropped_by_default(self) -> None:
+        # 私聊里手打 @Bot 也必须被丢弃：0 token、不写库（docs/requirements.md §2.2）
+        result = screen(
+            make_incoming(update_id=1, chat_id=1, message_id=1, text="@bot 你好", chat_type="private")
+        )
+        self.assertFalse(result.allowed)
+        self.assertEqual(result.reason, DROP_PRIVATE)
+
+    def test_channel_post_is_dropped(self) -> None:
+        result = screen(
+            make_incoming(update_id=1, chat_id=1, message_id=1, text="公告", chat_type="channel")
+        )
+        self.assertEqual(result.reason, DROP_PRIVATE)
+
+    def test_private_chat_passes_when_switch_enabled(self) -> None:
+        result = screen(
+            make_incoming(update_id=1, chat_id=1, message_id=1, text="你好", chat_type="private"),
+            allow_private_chat=True,
+        )
+        self.assertTrue(result.allowed)
+
+
+def make_batch(chat_id: int, message_ids: list[int]) -> Batch:
+    items = [
+        make_incoming(update_id=1000 + message_id, chat_id=chat_id, message_id=message_id, text=f"m{message_id}")
+        for message_id in message_ids
+    ]
+    return Batch(chat_id=chat_id, items=items, last_at=0.0, full=False)
+
+
+class ChatQueueTests(unittest.IsolatedAsyncioTestCase):
+    """同群同一时间只有一个回复任务；运行期间的新消息合并为下一轮一批。"""
+
+    async def test_new_messages_wait_for_next_round(self) -> None:
+        first_started = asyncio.Event()
+        release = asyncio.Event()
+        seen: list[list[int]] = []
+
+        async def handler(batch: Batch) -> None:
+            seen.append([item.message_id for item in batch.items])
+            if len(seen) == 1:
+                first_started.set()
+                await release.wait()
+
+        queue = ChatQueue(handler, max_batch_messages=5)
+        await queue.submit(make_batch(1, [1, 2]))
+        await first_started.wait()
+        await queue.submit(make_batch(1, [3]))
+        await queue.submit(make_batch(1, [4]))
+        self.assertEqual(len(seen), 1)  # 正在处理时绝不开始下一轮
+        release.set()
+        await queue.drain(5.0)
+        await queue.stop()
+        self.assertEqual(seen, [[1, 2], [3, 4]])  # 结束后只补跑一轮
+
+    async def test_pending_batch_keeps_newest_only(self) -> None:
+        first_started = asyncio.Event()
+        release = asyncio.Event()
+        seen: list[list[int]] = []
+
+        async def handler(batch: Batch) -> None:
+            seen.append([item.message_id for item in batch.items])
+            if len(seen) == 1:
+                first_started.set()
+                await release.wait()
+
+        queue = ChatQueue(handler, max_batch_messages=3)
+        await queue.submit(make_batch(9, [1, 2]))
+        await first_started.wait()
+        for message_id in (3, 4, 5, 6):
+            await queue.submit(make_batch(9, [message_id]))
+        release.set()
+        await queue.drain(5.0)
+        await queue.stop()
+        self.assertEqual(seen, [[1, 2], [4, 5, 6]])
 
 
 class TriggerTests(unittest.TestCase):

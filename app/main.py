@@ -58,10 +58,11 @@ class Application:
         self._connection = connection
         await updates.purge_old(connection)
 
-        self._llm = DeepSeekClient(settings)
+        instance = settings.bot_instance()
+        self._llm = DeepSeekClient(instance.llm)
         responder = Responder(self._llm, settings)
 
-        bot = Bot(settings.bot_token)
+        bot = Bot(instance.bot_token)
         me = await bot.get_me()
         self._bot = bot
         logger.info(
@@ -93,7 +94,7 @@ class Application:
             responder=responder,
             outbound=outbound,
         )
-        chat_queue = ChatQueue(runner.handle_batch)
+        chat_queue = ChatQueue(runner.handle_batch, max_batch_messages=settings.debounce_max_messages)
         self._chat_queue = chat_queue
 
         dispatcher = Dispatcher()

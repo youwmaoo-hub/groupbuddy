@@ -54,7 +54,7 @@ class SessionRunner:
             logger.debug("重复 update 丢弃 chat_id=%s update_id=%s", incoming.chat_id, incoming.update_id)
             return
 
-        result = screen(incoming)
+        result = screen(incoming, allow_private_chat=self._settings.allow_private_chat)
         if not result.allowed:
             logger.debug("过滤丢弃 chat_id=%s 原因=%s", incoming.chat_id, result.reason)
             return

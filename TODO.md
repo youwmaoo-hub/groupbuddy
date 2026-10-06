@@ -7,8 +7,9 @@
 ## 当前状态
 
 阶段 0：**已完成**（文档骨架就绪，见 `docs/README.md`）。
-阶段 1：**未开始**。完成阶段 1 并通过验收后再进入阶段 2；不得跳阶段。
+阶段 1：**已完成**（最小可运行闭环，含私聊默认静默与本轮消息边界）。完成阶段 1 并通过验收后再进入阶段 2；不得跳阶段。
 阶段 0 含部署约束增补：Windows 开发 / Linux VPS 24/7 生产，同一份代码（见 `docs/deployment.md`）。
+阶段 10（Web 控制面板与多实例）：**仅完成架构预留**（`docs/domain.md`、`docs/architecture.md` §10），未开发面板，未建控制面表；阶段 2 仍未开始。
 
 ## 阶段表
 
@@ -18,7 +19,7 @@
   `app/gate/{dedupe,filters,trigger,debounce,queue}.py`、`app/llm/{client,loop,prompts}.py`、
   `app/session/{context,runner}.py`、`app/outbound/{queue,ratelimit}.py`、
   `app/telegram/{handlers,sender}.py`、`app/main.py`、`tests/offline/`
-- 覆盖需求：F1.1–F1.10、F2.1
+- 覆盖需求：F1.1–F1.11、F2.1、F2.6、F2.7
 - 验收：
   1. 群里 @Bot 能稳定得到一次回复；
   2. 连发 4 条消息只产生 1 次模型请求（debounce 生效）；
@@ -26,12 +27,15 @@
   4. Bot 自己的消息不触发回复；
   5. 超过 4096 字符的回复按 `docs/security.md` §10 规则分段且内容完整；
   6. `usage` 表有本次调用的 token 记录；
-  7. `tests/offline/` 全部通过（无网络、无真实凭据）。
+  7. `tests/offline/` 全部通过（无网络、无真实凭据）；
+  8. 私聊消息 0 次模型调用、0 token、不写入 `messages`（只留必要元数据）；
+  9. 模型调用期间到达的消息不出现在本轮请求里，且本轮结束后只产生 1 次新一轮调用。
 - 明确不做：任何工具、贴纸、摘要/FTS、workspace 文件操作、沙箱、群设置命令、模式、配额强制、webhook。
 
 ### 阶段 2 · 发言闸门
 
-- 交付：F2.2–F2.5（可解释内容、上下文追问、冷却与每窗上限、ignore）
+- 交付：F2.2–F2.5（可解释内容、上下文追问、冷却与每窗上限、ignore），
+  以及不要求 @ 的主动回复判定（`docs/requirements.md` §2.1 第 1 条）
 - 验收：未点名的追问会接话；纯捧场消息 0 成本；高频群里 Bot 不会连续插话。
 
 ### 阶段 3 · 工具主干
@@ -73,6 +77,17 @@
 - 前置：阶段 7 沙箱可用（需要容器运行时）。
 - 验收：容器/VPS 重建后数据仍在（`bot.db` 与 workspace 未丢）；程序重启后自动恢复运行；
   SIGTERM 能优雅退出；上一份备份能恢复出可用数据库；日志与错误消息中无 Secret。
+
+### 阶段 10 · Web 控制面板与多实例（暂不开发，仅预留）
+
+- 前置：阶段 8（设置与配额）、阶段 9（部署与持久化）。
+- 覆盖需求：F6.1–F6.5（语音 F6.6 属阶段 11+）。
+- 子步骤：10.1 抽服务层（`app/services/`，把现在散在 `session/` 与 `repo/` 的读写收成唯一入口）
+  → 10.2 控制库与凭据加密（`bot_instances`/`users`/`credentials`/`audit_log` + 主密钥托管，见 `docs/database.md` §7）
+  → 10.3 Control API（HTTP 适配器 `app/control/`；引入 Web 框架属新依赖，需单独批准）
+  → 10.4 前端（任意栈，只调 Control API）。
+- 验收：面板只能经服务层读写；凭据只写不读且掩码显示；越权请求由后端拒绝；两个实例的记忆/workspace/配额互不可见；Web 用户与 Telegram 用户身份不混用。
+- 明确不做：实例热加载、多实例共享运行态（队列/限速器/去重）、为面板引入 Redis / 微服务 / K8s。
 
 ## 推进规则
 

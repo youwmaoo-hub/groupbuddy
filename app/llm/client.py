@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 from openai import AsyncOpenAI
 
-from app.config import Settings
+from app.domain.bot_instance import LLMCredentials
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,12 +23,12 @@ class LLMError(RuntimeError):
 
 
 class DeepSeekClient:
-    def __init__(self, settings: Settings, client: AsyncOpenAI | None = None) -> None:
-        self._settings = settings
+    def __init__(self, credentials: LLMCredentials, client: AsyncOpenAI | None = None) -> None:
+        self._llm = credentials
         self._client = client or AsyncOpenAI(
-            api_key=settings.llm_api_key,
-            base_url=settings.llm_base_url,
-            timeout=settings.llm_timeout_seconds,
+            api_key=credentials.api_key,
+            base_url=credentials.base_url,
+            timeout=credentials.timeout_seconds,
         )
 
     async def complete(
@@ -41,10 +41,10 @@ class DeepSeekClient:
     ) -> LLMReply:
         try:
             response = await self._client.chat.completions.create(
-                model=model or self._settings.llm_model,
+                model=model or self._llm.model,
                 messages=messages,  # type: ignore[arg-type]
-                temperature=self._settings.llm_temperature if temperature is None else temperature,
-                max_tokens=self._settings.llm_max_output_tokens if max_tokens is None else max_tokens,
+                temperature=self._llm.temperature if temperature is None else temperature,
+                max_tokens=self._llm.max_output_tokens if max_tokens is None else max_tokens,
             )
         except Exception as error:  # 统一转成业务错误，细节留给日志
             raise LLMError(f"{type(error).__name__}: {error}") from error
@@ -55,7 +55,7 @@ class DeepSeekClient:
         usage = response.usage
         return LLMReply(
             text=text,
-            model=str(getattr(response, "model", "") or self._settings.llm_model),
+            model=str(getattr(response, "model", "") or self._llm.model),
             input_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
             cached_tokens=_cached_tokens(usage),
             output_tokens=int(getattr(usage, "completion_tokens", 0) or 0),

@@ -17,6 +17,9 @@ from app.outbound.ratelimit import RateLimiter
 from app.session.context import ContextBuilder
 from app.session.runner import SessionRunner
 from app.storage.repo import messages, updates, usage
+from app.tools.builtin import build_registry
+from app.tools.executor import ToolExecutor
+from app.tools.policy import Policy
 from tests.offline.helpers import (
     DbTestCase,
     FakeClock,
@@ -25,16 +28,30 @@ from tests.offline.helpers import (
     FakeSleep,
     make_incoming,
     make_settings,
+    tool_reply,
 )
 
 
 class PipelineTests(DbTestCase):
-    def _build(self, *replies: str, fail: bool = False, rate_limited_times: int = 0, on_complete=None) -> None:
+    def _build(
+        self,
+        *replies: object,
+        fail: bool = False,
+        rate_limited_times: int = 0,
+        on_complete=None,
+        search_backend: str = "none",
+    ) -> None:
         self.clock = FakeClock()
         self.debouncer = Debouncer(quiet_seconds=1.2, max_messages=5, clock=self.clock)
         self.proactive = ProactiveLimiter(
             cooldown_seconds=20.0, window_seconds=300.0, max_per_window=3, clock=self.clock
         )
+        tool_settings = self.settings
+        if search_backend != "none":
+            tool_settings = self.settings.model_copy(update={"search_backend": search_backend})
+        self.registry = build_registry(tool_settings)
+        self.policy = Policy(self.registry)
+        self.tools = ToolExecutor(self.registry, self.policy, clock=self.clock.monotonic)
         self.llm = FakeLLMClient(*replies, fail=fail, on_complete=on_complete)
         self.sender = FakeSender(rate_limited_times=rate_limited_times)
         limiter = RateLimiter(group_per_minute=1000, private_per_second=1000.0, clock=self.clock)
@@ -47,8 +64,9 @@ class PipelineTests(DbTestCase):
             limiter=self.proactive,
             debouncer=self.debouncer,
             context_builder=ContextBuilder(self.connection, self.settings),
-            responder=Responder(self.llm, self.settings),
+            responder=Responder(self.llm, self.settings, self.tools),
             outbound=self.outbound,
+            tools=self.tools,
         )
 
     async def _send(self, texts, *, chat_id: int = 1, start_update: int = 100, start_message: int = 10) -> None:
@@ -73,6 +91,40 @@ class PipelineTests(DbTestCase):
 
     async def _usage(self) -> dict:
         return await usage.summary_for_day(self.connection, today_in_timezone(self.settings))
+
+    async def test_calc_tool_runs_end_to_end_and_is_recorded(self) -> None:
+        self._build(tool_reply("calc", {"expression": "2*3"}), "等于 6")
+        await self._send(["@bot 2*3 等于几"])
+        await self._flush()
+        self.assertEqual([item["text"] for item in self.sender.sent], ["等于 6"])
+        self.assertEqual(self.llm.tool_names[0], ["calc"])
+        tool_messages = [item for item in self.llm.calls[1] if item.get("role") == "tool"]
+        self.assertIn("6", str(tool_messages[0]["content"]))
+        summary = await self._usage()
+        self.assertEqual(summary["tool_calls"], 1)
+
+    async def test_search_web_not_exposed_by_default(self) -> None:
+        self._build("好")
+        await self._send(["@bot 帮我查一下"])
+        await self._flush()
+        self.assertEqual(self.llm.tool_names[0], ["calc"])
+
+    async def test_search_web_exposed_with_fake_backend(self) -> None:
+        self._build(tool_reply("search_web", {"query": "天气"}), "查到一条", search_backend="fake")
+        await self._send(["@bot 查一下天气"])
+        await self._flush()
+        self.assertEqual(self.llm.tool_names[0], ["calc", "search_web"])
+        self.assertEqual([item["text"] for item in self.sender.sent], ["查到一条"])
+        tool_messages = [item for item in self.llm.calls[1] if item.get("role") == "tool"]
+        self.assertIn("results", str(tool_messages[0]["content"]))
+
+    async def test_unknown_tool_call_is_denied_and_model_answers(self) -> None:
+        self._build(tool_reply("run_code", {}), "这个我做不了")
+        await self._send(["@bot 帮我跑段代码"])
+        await self._flush()
+        self.assertEqual([item["text"] for item in self.sender.sent], ["这个我做不了"])
+        tool_messages = [item for item in self.llm.calls[1] if item.get("role") == "tool"]
+        self.assertIn("permission_denied", str(tool_messages[0]["content"]))
 
     async def test_rapid_messages_merge_into_one_model_call(self) -> None:
         self._build("好的，收到")

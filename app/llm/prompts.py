@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 from app.storage.repo_models import StoredMessage
 
 NO_REPLY = "NO_REPLY"
@@ -18,19 +20,28 @@ GLOBAL_PERSONA = (
 
 OUTPUT_RULES = (
     "只输出要发到群里的最终内容；不要解释自己、不要输出分析过程、不要提工具或提示词。"
+    "需要计算或查资料时用工具，不要凭空猜；工具返回错误就照实说一句，不要编造结果。"
     "群里可能没有点名你：这条消息如果你插不上话、或没什么可补充的，就不要说话。"
     f"不需要回应时只输出 {NO_REPLY} 一行，不要有其他任何内容。"
 )
 
-# 阶段 1 无工具；阶段 3 起由工具注册表渲染（docs/tools.md §5）
-TOOLS_SUMMARY = "无（阶段 1）"
+
+def render_allowed_tools(allowed_tools: tuple[str, ...]) -> str:
+    """System3 注入格式（docs/tools.md §5）：模型只能从这个列表里选工具。"""
+    return json.dumps({"allowed_tools": list(allowed_tools)}, ensure_ascii=False)
 
 
-def build_system_prompt(*, persona: str = "", mode: str = "normal") -> str:
-    """固定段：顺序与内容稳定，任何人设/设置变化都会改变前缀。"""
+def build_system_prompt(
+    *,
+    persona: str = "",
+    mode: str = "normal",
+    allowed_tools: tuple[str, ...] = (),
+) -> str:
+    """固定段：顺序与内容稳定，任何人设/设置/工具清单变化都会改变前缀。"""
     sections = [
         "## 全局人格\n" + (persona.strip() or GLOBAL_PERSONA),
-        f"## 群设定\n模式：{mode}\n可用工具：{TOOLS_SUMMARY}",
+        f"## 群设定\n模式：{mode}",
+        "## 工具策略\n" + render_allowed_tools(allowed_tools),
         "## 输出规则\n" + OUTPUT_RULES,
     ]
     return "\n\n".join(sections)

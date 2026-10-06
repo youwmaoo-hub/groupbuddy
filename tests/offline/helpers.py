@@ -3,13 +3,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import tempfile
 import unittest
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
 from app.config import Settings
-from app.llm.client import LLMError, LLMReply
+from app.llm.client import LLMError, LLMReply, ToolCall
 from app.outbound.queue import RateLimited, SendFailed
 from app.storage.db import apply_migrations, close_db, open_db
 from app.telegram.parse import IncomingMessage
@@ -46,29 +47,68 @@ class FakeLLMClient:
 
     def __init__(
         self,
-        *replies: str,
+        *replies: str | LLMReply,
         fail: bool = False,
         on_complete: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
-        self.calls: list[list[dict[str, str]]] = []
+        self.calls: list[list[dict[str, object]]] = []
         self.models: list[str] = []
+        self.tools: list[list[dict[str, object]] | None] = []
         self._replies = list(replies) or ["好的"]
         self._fail = fail
         self._on_complete = on_complete
 
-    async def complete(self, messages, *, model=None, temperature=None, max_tokens=None) -> LLMReply:
+    async def complete(
+        self,
+        messages,
+        *,
+        model=None,
+        temperature=None,
+        max_tokens=None,
+        tools=None,
+    ) -> LLMReply:
         self.calls.append(messages)
         self.models.append(model or "")
+        self.tools.append(tools)
         if self._fail:
             raise LLMError("模拟失败")
         if self._on_complete is not None:
             # 模拟"模型正在调用时外部又发生了事"（例如群里新消息到达）
             await self._on_complete()
         if len(self._replies) > 1:
-            text = self._replies.pop(0)
+            item = self._replies.pop(0)
         else:
-            text = self._replies[0]
-        return LLMReply(text=text, model=model or "fake", input_tokens=10, cached_tokens=8, output_tokens=5)
+            item = self._replies[0]
+        if isinstance(item, LLMReply):
+            return item
+        return LLMReply(text=item, model=model or "fake", input_tokens=10, cached_tokens=8, output_tokens=5)
+
+    @property
+    def tool_names(self) -> list[list[str] | None]:
+        """每次调用下发的工具名，便于断言 System3 裁剪清单。"""
+        return [
+            None if item is None else [entry["function"]["name"] for entry in item]  # type: ignore[index]
+            for item in self.tools
+        ]
+
+
+def tool_reply(
+    name: str,
+    arguments: dict[str, object] | str,
+    *,
+    call_id: str = "call-1",
+    text: str = "",
+) -> LLMReply:
+    """构造一次工具调用回复；arguments 可以是 dict 或原始 JSON 字符串。"""
+    raw = arguments if isinstance(arguments, str) else json.dumps(arguments, ensure_ascii=False)
+    return LLMReply(
+        text=text,
+        model="fake",
+        input_tokens=10,
+        cached_tokens=0,
+        output_tokens=5,
+        tool_calls=(ToolCall(id=call_id, name=name, arguments=raw),),
+    )
 
 
 class FakeSender:

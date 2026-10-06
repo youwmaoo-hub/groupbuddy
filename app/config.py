@@ -54,6 +54,11 @@ class Settings(BaseSettings):
     proactive_window_seconds: float = Field(default=300.0, alias="PROACTIVE_WINDOW_SECONDS")
     proactive_max_per_window: int = Field(default=3, alias="PROACTIVE_MAX_PER_WINDOW")
 
+    # --- 工具（阶段 3） ---
+    tool_max_rounds: int = Field(default=2, ge=0, le=4, alias="TOOL_MAX_ROUNDS")
+    # search_web 后端未定（docs/requirements.md §4 #1）：none = 不注册该工具
+    search_backend: Literal["none", "fake"] = Field(default="none", alias="SEARCH_BACKEND")
+
     # --- 全局人格（System1，见 docs/persona.md） ---
     persona: str = Field(default="", alias="PERSONA")
 
@@ -122,6 +127,8 @@ class Settings(BaseSettings):
             "PROACTIVE_COOLDOWN_SECONDS": self.proactive_cooldown_seconds,
             "PROACTIVE_WINDOW_SECONDS": self.proactive_window_seconds,
             "PROACTIVE_MAX_PER_WINDOW": self.proactive_max_per_window,
+            "TOOL_MAX_ROUNDS": self.tool_max_rounds,
+            "SEARCH_BACKEND": self.search_backend,
             "TIMEZONE": self.timezone,
             "LOG_LEVEL": self.log_level,
             "BOT_TOKEN": REDACTED,

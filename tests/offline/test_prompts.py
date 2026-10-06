@@ -39,6 +39,16 @@ class SystemPromptTests(unittest.TestCase):
     def test_mode_is_rendered_in_group_section(self) -> None:
         self.assertIn("模式：smart", build_system_prompt(mode="smart"))
 
+    def test_tool_policy_section_renders_allowed_tools(self) -> None:
+        prompt = build_system_prompt(allowed_tools=("calc", "search_web"))
+        self.assertIn("## 工具策略", prompt)
+        self.assertIn('{"allowed_tools": ["calc", "search_web"]}', prompt)
+        self.assertLess(prompt.index("## 群设定"), prompt.index("## 工具策略"))
+        self.assertLess(prompt.index("## 工具策略"), prompt.index("## 输出规则"))
+
+    def test_empty_tool_list_is_rendered(self) -> None:
+        self.assertIn('{"allowed_tools": []}', build_system_prompt())
+
 
 class MoodTests(unittest.TestCase):
     def test_no_mood_by_default(self) -> None:

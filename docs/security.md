@@ -29,6 +29,14 @@
 4. 参数是否通过 schema 校验；
 5. 进入执行（必要时含沙箱）。
 
+等级 → 群开关（`chat_settings` 列；`calc` 无开关，始终可用）：
+
+| 工具 | `calc` | `search_web` | `read_file` | `write_file` | `send_sticker` | `run_code` | `host_info` |
+|---|---|---|---|---|---|---|---|
+| 开关列 | — | `allow_search` | `allow_read` | `allow_write` | `allow_sticker` | `allow_code` | `allow_host_info` |
+
+工具可用 = 已注册 ∩ 本群开关；未注册、或注册但未登记等级的工单一律拒绝（fail-closed）。第 3 步身份判定随阶段 8 的群主命令落地：阶段 3 只有 L0 工具。
+
 系统提示（System3）只能注入**已裁剪**的工具清单；模型永远不能提升自己的权限。
 - **授权只由后端判定**：前端隐藏按钮、前端参数、面板传入的身份都不构成授权；面板改设置走同一条判定（`docs/domain.md` §3）。
 
@@ -109,7 +117,7 @@
 
 - 同一工具在一轮内失败 2 次 → 本轮从可用清单移除。
 - 5 分钟内失败 8 次 → 临时熔断 30 秒，期间调用返回 `cooldown`。
-- 熔断与失败计数写入 `tool_failures`，供 `/stats` 查看。
+- 阶段 3 的失败计数与熔断状态在进程内存（重启归零）；写入 `tool_failures` 表供 `/stats` 查看属阶段 8。
 
 ## 10. 长消息与特殊内容
 

@@ -8,7 +8,8 @@
 
 阶段 0：**已完成**（文档骨架就绪，见 `docs/README.md`）。
 阶段 1：**已完成**（最小可运行闭环，含私聊默认静默与本轮消息边界），已通过真实 Telegram + DeepSeek 端到端验收。
-阶段 2：**已完成**（发言闸门：不要求 @ 的主动回复判定 + 冷却与每窗口上限）。一次只推进一个阶段；不得跳阶段。
+阶段 2：**已完成**（发言闸门：不要求 @ 的主动回复判定 + 冷却与每窗口上限）。
+阶段 3：**已完成**（工具主干：注册表 / 权限判定 / 执行器 + `calc` + `search_web` 接口）。一次只推进一个阶段；不得跳阶段。
 阶段 0 含部署约束增补：Windows 开发 / Linux VPS 24/7 生产，同一份代码（见 `docs/deployment.md`）。
 阶段 10（Web 控制面板与多实例）：**仅完成架构预留**（`docs/domain.md`、`docs/architecture.md` §10），未开发面板，未建控制面表。
 
@@ -45,7 +46,11 @@
 ### 阶段 3 · 工具主干
 
 - 交付：`tools/registry.py`、`tools/policy.py`、`tools/executor.py`、`calc`、`search_web`（F4.1–F4.3、F4.8）
+  实现位置：`app/tools/{registry,policy,executor}.py`、`app/tools/builtin/{calc,search_web}.py`、
+  `app/llm/loop.py`（工具循环）、`app/llm/client.py`（tool_calls）、`app/session/runner.py`（装配）、`app/config.py`。
 - 验收：模型能算数、能查资料；越权调用被拒且只回一句话；非法参数返回 `invalid_arguments`。
+  离线覆盖：`tests/offline/{test_calc,test_search,test_policy,test_executor,test_loop,test_pipeline}.py`。
+  注：`search_web` 真实后端未定（`docs/requirements.md` §4 #1），默认 `SEARCH_BACKEND=none` 时不下发该工具。
 
 ### 阶段 4 · 工作区与文件
 

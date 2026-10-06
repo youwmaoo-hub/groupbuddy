@@ -8,16 +8,16 @@
 
 - 工具清单由程序生成并按权限裁剪后注入 System3（见 `docs/security.md` §2）。
 - 模型返回的 `arguments` 不保证是合法 JSON、也可能是未定义参数：一律经 Pydantic 校验，失败即拒绝。
-- 执行顺序固定：**校验 → 权限 → 执行 → 结构化结果**，任何一步失败都返回 §3 的错误码。
+- 执行顺序固定（判定顺序以 `docs/security.md` §2 为准）：**注册表 → 本群开关/身份 → 参数 schema → 执行 → 结构化结果**，任何一步失败都返回 §3 的错误码。
 - 输出必须是短的结构化 JSON；超限即截断并标注（见 §4）。
-- 同一工具在一轮内失败 2 次 → 本轮禁用；5 分钟内失败 8 次 → 临时熔断 30 秒（见 `docs/security.md` §2）。
+- 同一工具在一轮内失败 2 次 → 本轮禁用；5 分钟内失败 8 次 → 临时熔断 30 秒（见 `docs/security.md` §9；阶段 3 熔断状态在进程内存）。
 
 ## 2. 冻结表
 
 | 工具 | 等级 | 默认开关 | 输入 | 输出 | 超时 |
 |---|---|---|---|---|---|
 | `calc` | L0 | 开 | `expression: str` | `{value: str}` | 2s |
-| `search_web` | L0 | 群开关 | `query: str, top_k?: int=3` | `{results:[{title,url,snippet}]}` | 10s |
+| `search_web` | L0 | 群开关（需配置后端，见下） | `query: str, top_k?: int=3` | `{results:[{title,url,snippet}]}` | 10s |
 | `read_file` | L1 | 群开关 | `path: str, start_line?: int, end_line?: int, query?: str` | `{path,start_line,end_line,text,total_lines}` | 3s |
 | `write_file` | L2 | 群开关 | `path: str, content: str` | `{path,bytes,backup?: str}` | 5s |
 | `send_sticker` | L2 | 群开关 | `valence: float, arousal: float, tags?: [str]` | `{sent: bool, sticker_id: int}` | 3s |
@@ -28,13 +28,14 @@
 
 - 只接受 `+ - * / % ** ( )`、数字、空白；通过 AST 解析求值。
 - 禁止 `eval`/`exec`；出现名称、属性、调用、下标、推导式等一律拒绝（`invalid_expression`）。
+- 表达式 ≤200 字符；指数绝对值 ≤100；结果绝对值 ≤10^100；除零同样返回 `invalid_expression`。
 - 零文件、零网络、零 shell。
 
 ### search_web
 
-- 后端未定（见 `docs/requirements.md` §4）；阶段 3 前用假实现占位。
-- 只允许查询串上行；不得携带 workspace 内容、环境变量、密钥、完整文件文本。
-- 默认 `top_k=3`，上限 5；`snippet` 截断到 500 字符；记录来源 URL 以便引用。
+- 后端未定（见 `docs/requirements.md` §4 #1）：接口已冻结。`SEARCH_BACKEND=none`（默认）时该工具不注册、不下发；`fake` 只用于离线测试与演示（结果标注为示例）；接真实后端只需实现 `SearchBackend`。
+- 只允许查询串与 `top_k` 上行；不得携带 workspace 内容、环境变量、密钥、完整文件文本。
+- 默认 `top_k=3`，上限 5；结果最多 5 条；`snippet` 截断到 500 字符、`title` 120、`url` 300；保留来源 URL 以便引用。
 
 ### read_file / write_file
 

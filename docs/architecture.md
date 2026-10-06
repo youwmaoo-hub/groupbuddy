@@ -47,10 +47,10 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | 模型 | `app/llm/client.py` | OpenAI 兼容客户端（base_url 可换厂商） |
 | | `app/llm/loop.py` | 工具循环；轮次/时长/成本上限 |
 | | `app/llm/prompts.py` | 固定段：全局人格（`docs/persona.md`）→ 群设定 → 工具策略 → 输出规则；动态段末条可注入当前情绪 |
-| 工具 | `app/tools/registry.py` | name → Tool 实例；按等级裁剪可暴露清单 |
-| | `app/tools/policy.py` | 权限判定唯一出口 |
-| | `app/tools/executor.py` | 校验 → 权限 → 执行 → 结构化结果；失败计数与熔断 |
-| | `app/tools/builtin/*.py` | calc / search_web / read_file / write_file / send_sticker / host_info / run_code |
+| 工具（阶段 3） | `app/tools/registry.py` | name → Tool 实例；按等级裁剪可暴露清单 |
+| | `app/tools/policy.py` | 权限判定唯一出口（等级 → 本群开关，见 `docs/security.md` §2） |
+| | `app/tools/executor.py` | 注册表 → 权限 → schema → 执行 → 结构化结果；失败计数与熔断 |
+| | `app/tools/builtin/*.py` | 已实现 `calc`、`search_web`（接口）；`read_file`/`write_file`/`send_sticker`/`host_info`/`run_code` 属后续阶段 |
 | 沙箱 | `app/sandbox/runner.py` | 容器调用的唯一实现（阶段 7） |
 | 存储 | `app/storage/db.py` | aiosqlite 连接、WAL、`user_version` 迁移 |
 | | `app/storage/repo/*.py` | messages / settings / usage / stickers / notes 读写 |

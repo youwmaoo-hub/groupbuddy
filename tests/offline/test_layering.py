@@ -89,6 +89,20 @@ class LayeringTests(unittest.TestCase):
                 offenders.append(f"{path.relative_to(APP.parent)} -> {sorted(foreign | cross)}")
         self.assertEqual([], offenders, "app/domain/ 只依赖标准库与自身")
 
+    def test_tools_layer_has_no_upper_layer_dependencies(self) -> None:
+        offenders: list[str] = []
+        for path in sorted((APP / "tools").rglob("*.py")):
+            tree = _tree(path)
+            foreign = _imported_roots(tree) & DOMAIN_FORBIDDEN_ROOTS
+            cross = {
+                name
+                for name in _app_imports(tree)
+                if name.startswith(("app.llm", "app.session", "app.telegram", "app.gate", "app.outbound"))
+            }
+            if foreign or cross:
+                offenders.append(f"{path.relative_to(APP.parent)} -> {sorted(foreign | cross)}")
+        self.assertEqual([], offenders, "app/tools/ 只能依赖 config/storage/domain 与自身")
+
 
 if __name__ == "__main__":
     unittest.main()

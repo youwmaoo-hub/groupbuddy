@@ -28,6 +28,9 @@ from app.storage.db import apply_migrations, close_db, open_db
 from app.storage.repo import updates
 from app.telegram.handlers import build_router
 from app.telegram.sender import AiogramSender
+from app.tools.builtin import build_registry
+from app.tools.executor import ToolExecutor
+from app.tools.policy import Policy
 
 logger = logging.getLogger("app.main")
 
@@ -61,7 +64,10 @@ class Application:
 
         instance = settings.bot_instance()
         self._llm = DeepSeekClient(instance.llm)
-        responder = Responder(self._llm, settings)
+        registry = build_registry(settings)
+        policy = Policy(registry)
+        tools = ToolExecutor(registry, policy)
+        responder = Responder(self._llm, settings, tools)
 
         bot = Bot(instance.bot_token)
         me = await bot.get_me()
@@ -100,6 +106,7 @@ class Application:
             context_builder=ContextBuilder(connection, settings),
             responder=responder,
             outbound=outbound,
+            tools=tools,
         )
         chat_queue = ChatQueue(runner.handle_batch, max_batch_messages=settings.debounce_max_messages)
         self._chat_queue = chat_queue

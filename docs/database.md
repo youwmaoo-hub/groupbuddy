@@ -106,7 +106,7 @@ usage (
 );
 CREATE INDEX idx_usage_chat_day ON usage (chat_id, day);
 
--- 工具失败与熔断依据
+-- 工具失败与熔断依据（阶段 8 建表：阶段 3 的失败计数与熔断在进程内存，见 docs/security.md §9）
 tool_failures (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   tool       TEXT NOT NULL,

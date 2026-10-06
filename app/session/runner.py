@@ -16,8 +16,10 @@ from app.gate.trigger import TriggerDetector
 from app.llm.loop import Outcome, Responder
 from app.outbound.queue import OutboundQueue
 from app.session.context import ContextBuilder
-from app.storage.repo import messages, usage
+from app.storage.repo import chat_settings, messages, usage
 from app.telegram.parse import IncomingMessage
+from app.tools.executor import ToolExecutor
+from app.tools.registry import ToolContext
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +42,7 @@ class SessionRunner:
         context_builder: ContextBuilder,
         responder: Responder,
         outbound: OutboundQueue,
+        tools: ToolExecutor | None = None,
     ) -> None:
         self._settings = settings
         self._connection = connection
@@ -50,6 +53,7 @@ class SessionRunner:
         self._context = context_builder
         self._responder = responder
         self._outbound = outbound
+        self._tools = tools
 
     async def handle(self, incoming: IncomingMessage) -> None:
         """接收路径：必须立刻返回，绝不等待模型。"""
@@ -86,9 +90,12 @@ class SessionRunner:
         )
 
     async def handle_batch(self, batch: Batch) -> None:
-        """Agent Loop：一次模型调用；工具循环属阶段 3。"""
-        payload = await self._context.build(batch)
-        outcome = await self._responder.reply(payload)
+        """Agent Loop：上下文 → 模型（可含工具循环）→ 出站 → 记账。"""
+        group = await chat_settings.get(self._connection, batch.chat_id)
+        context = ToolContext(chat_id=batch.chat_id, user_id=batch.items[-1].user_id, group=group)
+        allowed = self._tools.allowed_names(context) if self._tools is not None else ()
+        payload = await self._context.build(batch, group=group, allowed_tools=allowed)
+        outcome = await self._responder.reply(payload, context=context)
         await self._record_usage(batch, outcome)  # 只要调用了模型就记账，哪怕本轮不说话
         if outcome.text is None:
             logger.info("本轮不说话 chat_id=%s", batch.chat_id)
@@ -137,6 +144,8 @@ class SessionRunner:
                 input_tokens=reply.input_tokens,
                 cached_tokens=reply.cached_tokens,
                 output_tokens=reply.output_tokens,
+                tool_calls=outcome.tool_calls,
+                tool_ms=outcome.tool_ms,
             )
         except Exception:
             logger.exception("记账失败 chat_id=%s", batch.chat_id)

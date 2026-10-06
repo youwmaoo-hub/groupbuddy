@@ -11,6 +11,7 @@ from types import SimpleNamespace
 from app.gate.debounce import Batch, Debouncer
 from app.gate.dedupe import UpdateDeduplicator
 from app.gate.filters import DROP_BOT_AUTHOR, DROP_COMMAND, DROP_NO_TEXT, DROP_PRIVATE, screen
+from app.gate.limits import ProactiveLimiter
 from app.gate.queue import ChatQueue
 from app.gate.trigger import TriggerDetector
 from app.telegram.parse import parse_update
@@ -146,12 +147,17 @@ class TriggerTests(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.settings = make_settings(Path(self._tmp.name), BOT_ALIASES="小助手")
+        self.clock = FakeClock()
+        self.limiter = ProactiveLimiter(
+            cooldown_seconds=20.0, window_seconds=300.0, max_per_window=3, clock=self.clock
+        )
+        self.detector = TriggerDetector(self.settings, self.limiter)
 
     def tearDown(self) -> None:
         self._tmp.cleanup()
 
     def test_strong_triggers(self) -> None:
-        detector = TriggerDetector(self.settings)
+        detector = self.detector
         cases = [
             (make_incoming(update_id=1, chat_id=1, message_id=1, text="问题"), "mention"),
             (
@@ -172,12 +178,77 @@ class TriggerTests(unittest.TestCase):
                 self.assertEqual(decision.reason, expected)
 
     def test_plain_chatter_is_ignored(self) -> None:
-        detector = TriggerDetector(self.settings)
-        decision = detector.decide(
+        decision = self.detector.decide(
             make_incoming(update_id=9, chat_id=1, message_id=9, text="哈哈哈哈", mentions_bot=False)
         )
         self.assertFalse(decision.should_respond)
         self.assertEqual(decision.reason, "not_addressed")
+
+    def test_unaddressed_question_is_a_proactive_candidate(self) -> None:
+        decision = self.detector.decide(
+            make_incoming(update_id=11, chat_id=1, message_id=11, text="这个怎么解决", mentions_bot=False)
+        )
+        self.assertEqual(decision.verdict, "respond")
+        self.assertEqual(decision.reason, "question")
+        self.assertTrue(decision.proactive)
+
+    def test_troubleshoot_and_resource_words_trigger(self) -> None:
+        cases = (("导入的时候报错了", "troubleshoot"), ("看看 https://example.com/a", "resource"))
+        for index, (text, reason) in enumerate(cases):
+            with self.subTest(reason=reason):
+                decision = self.detector.decide(
+                    make_incoming(
+                        update_id=20 + index,
+                        chat_id=5,
+                        message_id=20 + index,
+                        text=text,
+                        mentions_bot=False,
+                    )
+                )
+                self.assertEqual((decision.verdict, decision.reason), ("respond", reason))
+
+    def test_followup_near_bot_reply(self) -> None:
+        decision = self.detector.decide(
+            make_incoming(update_id=31, chat_id=1, message_id=31, text="然后继续讲讲", mentions_bot=False),
+            since_bot_reply=2,
+        )
+        self.assertEqual((decision.verdict, decision.reason), ("respond", "followup"))
+
+    def test_followup_outside_window_is_ignored(self) -> None:
+        for gap in (None, 0, 6):
+            with self.subTest(gap=gap):
+                decision = self.detector.decide(
+                    make_incoming(
+                        update_id=32, chat_id=1, message_id=32, text="然后继续讲讲", mentions_bot=False
+                    ),
+                    since_bot_reply=gap,
+                )
+                self.assertEqual(decision.verdict, "ignore")
+
+    def test_cooldown_suppresses_proactive_reply(self) -> None:
+        self.limiter.record(1)
+        decision = self.detector.decide(
+            make_incoming(update_id=41, chat_id=1, message_id=41, text="这个怎么弄", mentions_bot=False)
+        )
+        self.assertEqual((decision.verdict, decision.reason), ("wait", "cooldown"))
+        self.assertFalse(decision.should_respond)
+
+    def test_window_quota_suppresses_proactive_reply(self) -> None:
+        for _ in range(3):
+            self.limiter.record(1)
+            self.clock.advance(21.0)
+        decision = self.detector.decide(
+            make_incoming(update_id=42, chat_id=1, message_id=42, text="这个怎么弄", mentions_bot=False)
+        )
+        self.assertEqual((decision.verdict, decision.reason), ("wait", "quota"))
+
+    def test_strong_trigger_ignores_cooldown(self) -> None:
+        self.limiter.record(1)
+        decision = self.detector.decide(
+            make_incoming(update_id=43, chat_id=1, message_id=43, text="@bot 在吗")
+        )
+        self.assertEqual((decision.verdict, decision.reason), ("respond", "mention"))
+        self.assertFalse(decision.proactive)
 
 
 class DebounceTests(unittest.TestCase):
@@ -212,6 +283,16 @@ class DebounceTests(unittest.TestCase):
         debouncer.add(2, make_incoming(update_id=2, chat_id=2, message_id=2, text="b"))
         batches = debouncer.due()
         self.assertEqual([batch.chat_id for batch in batches], [1])
+
+    def test_strong_message_clears_proactive_flag(self) -> None:
+        clock = FakeClock()
+        debouncer = Debouncer(quiet_seconds=1.2, max_messages=5, clock=clock)
+        first = debouncer.add(
+            1, make_incoming(update_id=1, chat_id=1, message_id=1, text="这个怎么弄"), proactive=True
+        )
+        self.assertTrue(first.proactive)
+        batch = debouncer.add(1, make_incoming(update_id=2, chat_id=1, message_id=2, text="@bot 在吗"))
+        self.assertFalse(batch.proactive)
 
 
 class DedupeGateTests(DbTestCase):

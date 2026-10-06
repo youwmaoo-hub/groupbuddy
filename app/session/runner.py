@@ -1,4 +1,4 @@
-"""会话编排：去重 → 硬过滤 → 触发判定 → 存储 → debounce → 一次模型调用 → 出站。"""
+"""会话编排：去重 → 硬过滤 → 触发判定（含冷却闸门）→ 存储 → debounce → 一次模型调用 → 出站。"""
 
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from app.config import Settings, today_in_timezone
 from app.gate.debounce import Batch, Debouncer
 from app.gate.dedupe import UpdateDeduplicator
 from app.gate.filters import screen
+from app.gate.limits import ProactiveLimiter
 from app.gate.trigger import TriggerDetector
 from app.llm.loop import Outcome, Responder
 from app.outbound.queue import OutboundQueue
@@ -34,6 +35,7 @@ class SessionRunner:
         connection: aiosqlite.Connection,
         deduplicator: UpdateDeduplicator,
         detector: TriggerDetector,
+        limiter: ProactiveLimiter,
         debouncer: Debouncer,
         context_builder: ContextBuilder,
         responder: Responder,
@@ -43,6 +45,7 @@ class SessionRunner:
         self._connection = connection
         self._dedup = deduplicator
         self._detector = detector
+        self._limiter = limiter
         self._debouncer = debouncer
         self._context = context_builder
         self._responder = responder
@@ -70,10 +73,17 @@ class SessionRunner:
             reply_to_message_id=None,
         )
 
-        decision = self._detector.decide(incoming)
+        since_bot_reply = await messages.since_last_assistant(self._connection, chat_id=incoming.chat_id)
+        decision = self._detector.decide(incoming, since_bot_reply=since_bot_reply)
         if decision.should_respond:
-            self._debouncer.add(incoming.chat_id, incoming)
-        logger.debug("触发判定 chat_id=%s 结果=%s 原因=%s", incoming.chat_id, decision.verdict, decision.reason)
+            self._debouncer.add(incoming.chat_id, incoming, proactive=decision.proactive)
+        logger.debug(
+            "触发判定 chat_id=%s 结果=%s 原因=%s 主动=%s",
+            incoming.chat_id,
+            decision.verdict,
+            decision.reason,
+            decision.proactive,
+        )
 
     async def handle_batch(self, batch: Batch) -> None:
         """Agent Loop：一次模型调用；工具循环属阶段 3。"""
@@ -92,6 +102,8 @@ class SessionRunner:
             reply_to_message_id=latest.message_id,
         )
         await self._store_assistant(batch, outcome.text)
+        if batch.proactive:
+            self._limiter.record(batch.chat_id)  # 只有真的说出口才占冷却与窗口额度
 
     async def _store_assistant(self, batch: Batch, text: str) -> None:
         """Bot 自己的发言也要入库（否则下一轮看不到自己说过什么）。"""

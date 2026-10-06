@@ -32,6 +32,7 @@ class ChatQueue:
             previous = pending[-1]
             previous.items.extend(batch.items)
             previous.last_at = batch.last_at
+            previous.proactive = previous.proactive and batch.proactive
             if len(previous.items) > self._max_batch_messages:
                 dropped = len(previous.items) - self._max_batch_messages
                 del previous.items[:dropped]

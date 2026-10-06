@@ -20,6 +20,7 @@
 | 开发方式、任务边界、完成标准 | `AGENTS.md` | 其他文档 |
 | 分层、模块职责、数据流、并发、恢复、扩展预留 | `docs/architecture.md` | requirements |
 | 需求条目、行为规则、优先级、验收标准、未决问题 | `docs/requirements.md` | architecture |
+| 什么时候说话、判定顺序、原因码、冷却与窗口上限 | `docs/requirements.md` §2.1 | 其他文档（只引用） |
 | 人格、语气、情绪、人设边界 | `docs/persona.md` | 其他文档（只引用） |
 | 对象、身份、租户键、凭据归属、控制面板边界 | `docs/domain.md` | 其他文档（只引用） |
 | 某个工具的输入/输出/等级/超时/错误码 | `docs/tools.md` | security（只引用） |

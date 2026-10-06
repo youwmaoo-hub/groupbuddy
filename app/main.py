@@ -14,6 +14,7 @@ from pydantic import ValidationError
 from app.config import Settings, load_settings
 from app.gate.debounce import Debouncer, run_debounce_loop
 from app.gate.dedupe import UpdateDeduplicator
+from app.gate.limits import ProactiveLimiter
 from app.gate.queue import ChatQueue
 from app.gate.trigger import TriggerDetector
 from app.llm.client import DeepSeekClient
@@ -84,11 +85,17 @@ class Application:
             quiet_seconds=settings.debounce_seconds,
             max_messages=settings.debounce_max_messages,
         )
+        proactive = ProactiveLimiter(
+            cooldown_seconds=settings.proactive_cooldown_seconds,
+            window_seconds=settings.proactive_window_seconds,
+            max_per_window=settings.proactive_max_per_window,
+        )
         runner = SessionRunner(
             settings=settings,
             connection=connection,
             deduplicator=UpdateDeduplicator(connection),
-            detector=TriggerDetector(settings),
+            detector=TriggerDetector(settings, proactive),
+            limiter=proactive,
             debouncer=debouncer,
             context_builder=ContextBuilder(connection, settings),
             responder=responder,

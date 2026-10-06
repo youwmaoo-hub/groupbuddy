@@ -8,6 +8,7 @@ import unittest
 from app.config import today_in_timezone
 from app.gate.debounce import Debouncer
 from app.gate.dedupe import UpdateDeduplicator
+from app.gate.limits import ProactiveLimiter
 from app.gate.queue import ChatQueue
 from app.gate.trigger import TriggerDetector
 from app.llm.loop import Responder
@@ -31,6 +32,9 @@ class PipelineTests(DbTestCase):
     def _build(self, *replies: str, fail: bool = False, rate_limited_times: int = 0, on_complete=None) -> None:
         self.clock = FakeClock()
         self.debouncer = Debouncer(quiet_seconds=1.2, max_messages=5, clock=self.clock)
+        self.proactive = ProactiveLimiter(
+            cooldown_seconds=20.0, window_seconds=300.0, max_per_window=3, clock=self.clock
+        )
         self.llm = FakeLLMClient(*replies, fail=fail, on_complete=on_complete)
         self.sender = FakeSender(rate_limited_times=rate_limited_times)
         limiter = RateLimiter(group_per_minute=1000, private_per_second=1000.0, clock=self.clock)
@@ -39,7 +43,8 @@ class PipelineTests(DbTestCase):
             settings=self.settings,
             connection=self.connection,
             deduplicator=UpdateDeduplicator(self.connection),
-            detector=TriggerDetector(self.settings),
+            detector=TriggerDetector(self.settings, self.proactive),
+            limiter=self.proactive,
             debouncer=self.debouncer,
             context_builder=ContextBuilder(self.connection, self.settings),
             responder=Responder(self.llm, self.settings),
@@ -205,6 +210,63 @@ class PipelineTests(DbTestCase):
         self.assertEqual(len(self.llm.calls), 2)
         self.assertIn("我又来一条", [item["content"] for item in self.llm.calls[1]])
         self.assertEqual((await self._usage())["calls"], 2)
+
+    async def test_unaddressed_question_gets_a_proactive_reply(self) -> None:
+        # F2.2/F2.3：不需要 @ 也能接话
+        self._build("我看到啦")
+        await self.runner.handle(
+            make_incoming(update_id=700, chat_id=1, message_id=70, text="这个怎么弄", mentions_bot=False)
+        )
+        batches = await self._flush()
+        self.assertTrue(batches[0].proactive)
+        self.assertEqual(len(self.llm.calls), 1)
+        self.assertEqual([item["text"] for item in self.sender.sent], ["我看到啦"])
+
+    async def test_proactive_cooldown_keeps_following_questions_silent(self) -> None:
+        # F2.4：主动说过话之后的冷却期内，未点名的问题不再回应（0 token）
+        self._build("先回一句", "不该被调用")
+        await self.runner.handle(
+            make_incoming(update_id=710, chat_id=1, message_id=71, text="这个怎么弄", mentions_bot=False)
+        )
+        await self._flush()
+        self.assertEqual(len(self.llm.calls), 1)
+        for index, text in enumerate(("那这个呢", "另一个问题怎么解决")):
+            await self.runner.handle(
+                make_incoming(
+                    update_id=711 + index,
+                    chat_id=1,
+                    message_id=72 + index,
+                    text=text,
+                    mentions_bot=False,
+                )
+            )
+        self.clock.advance(2.0)
+        self.assertEqual(self.debouncer.due(), [])
+        self.assertEqual(len(self.llm.calls), 1)
+        self.assertEqual(len(self.sender.sent), 1)
+
+    async def test_followup_after_bot_reply_is_answered(self) -> None:
+        # F2.3：点名回复不占冷却，紧接着的续问（未点名）仍会接话
+        self._build("第一句", "第二句")
+        await self.runner.handle(
+            make_incoming(update_id=720, chat_id=1, message_id=81, text="@bot 在吗")
+        )
+        self.clock.advance(2.0)
+        for batch in self.debouncer.due():
+            await self.runner.handle_batch(batch)
+        await self.runner.handle(
+            make_incoming(update_id=721, chat_id=1, message_id=82, text="然后继续讲讲", mentions_bot=False)
+        )
+        self.clock.advance(2.0)
+        batches = self.debouncer.due()
+        self.assertEqual(len(batches), 1)
+        self.assertTrue(batches[0].proactive)
+        for batch in batches:
+            await self.runner.handle_batch(batch)
+        await self.outbound.drain(5.0)
+        await self.outbound.stop()
+        self.assertEqual(len(self.llm.calls), 2)
+        self.assertEqual([item["text"] for item in self.sender.sent], ["第一句", "第二句"])
 
     async def test_bot_author_message_is_dropped_before_storage(self) -> None:
         self._build("不该被调用")

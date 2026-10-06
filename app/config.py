@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     history_complex: int = Field(default=50, alias="HISTORY_COMPLEX")
     history_chitchat: int = Field(default=10, alias="HISTORY_CHITCHAT")
     allow_private_chat: bool = Field(default=False, alias="ALLOW_PRIVATE_CHAT")
+    # 主动回复（弱触发）闸门：F2.3 追问窗口、F2.4 冷却与每窗口上限
+    followup_max_messages: int = Field(default=5, alias="FOLLOWUP_MAX_MESSAGES")
+    proactive_cooldown_seconds: float = Field(default=20.0, alias="PROACTIVE_COOLDOWN_SECONDS")
+    proactive_window_seconds: float = Field(default=300.0, alias="PROACTIVE_WINDOW_SECONDS")
+    proactive_max_per_window: int = Field(default=3, alias="PROACTIVE_MAX_PER_WINDOW")
 
     # --- 全局人格（System1，见 docs/persona.md） ---
     persona: str = Field(default="", alias="PERSONA")
@@ -113,6 +118,10 @@ class Settings(BaseSettings):
             "HISTORY_COMPLEX": self.history_complex,
             "HISTORY_CHITCHAT": self.history_chitchat,
             "ALLOW_PRIVATE_CHAT": self.allow_private_chat,
+            "FOLLOWUP_MAX_MESSAGES": self.followup_max_messages,
+            "PROACTIVE_COOLDOWN_SECONDS": self.proactive_cooldown_seconds,
+            "PROACTIVE_WINDOW_SECONDS": self.proactive_window_seconds,
+            "PROACTIVE_MAX_PER_WINDOW": self.proactive_max_per_window,
             "TIMEZONE": self.timezone,
             "LOG_LEVEL": self.log_level,
             "BOT_TOKEN": REDACTED,

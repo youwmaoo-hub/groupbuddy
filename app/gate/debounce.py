@@ -18,6 +18,8 @@ class Batch:
     items: list[IncomingMessage] = field(default_factory=list)
     last_at: float = 0.0
     full: bool = False
+    # 整批都是弱触发（未点名）才是 True；并入任何强触发消息后变 False
+    proactive: bool = False
 
 
 class Clock(Protocol):
@@ -38,16 +40,19 @@ class Debouncer:
         self._clock = clock or MonotonicClock()
         self._pending: dict[int, Batch] = {}
 
-    def add(self, chat_id: int, item: IncomingMessage) -> None:
+    def add(self, chat_id: int, item: IncomingMessage, *, proactive: bool = False) -> Batch:
         now = self._clock.monotonic()
         batch = self._pending.get(chat_id)
         if batch is None:
-            batch = Batch(chat_id=chat_id, last_at=now)
+            batch = Batch(chat_id=chat_id, last_at=now, proactive=proactive)
             self._pending[chat_id] = batch
+        else:
+            batch.proactive = batch.proactive and proactive
         batch.items.append(item)
         batch.last_at = now
         if len(batch.items) >= self._max:
             batch.full = True
+        return batch
 
     def due(self) -> list[Batch]:
         """取出静默期已到（或已满）的批次。"""

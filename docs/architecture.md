@@ -38,8 +38,9 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | | `app/telegram/sender.py` | send/edit/typing；4096 字符安全分段 |
 | 闸门 | `app/gate/dedupe.py` | `update_id` 幂等 |
 | | `app/gate/filters.py` | 入口硬过滤：自身/其他 Bot、无文本、命令；私聊默认丢弃（§2.2） |
-| | `app/gate/trigger.py` | 发言判定：阶段 1 RESPOND / IGNORE，阶段 2 增加 WAIT |
-| | `app/gate/debounce.py` | 静默窗合并多条消息 |
+| | `app/gate/trigger.py` | 发言判定：强触发 → 可解释内容 → 上下文追问 → 冷却/窗口闸门；输出 RESPOND / WAIT / IGNORE |
+| | `app/gate/limits.py` | 主动发言的冷却与每窗口上限（进程内状态，按 `chat_id` 隔离） |
+| | `app/gate/debounce.py` | 静默窗合并多条消息；批次带"是否全部未点名"标记（`proactive`） |
 | | `app/gate/queue.py` | per-chat 串行 actor；运行期间新消息合并为下一轮一批 |
 | 会话 | `app/session/runner.py` | 一轮编排：context → llm → tools → outbound |
 | | `app/session/context.py` | ContextBuilder：预算式历史 + 噪声过滤；窗口按本轮边界（`id` 快照）截断 |
@@ -68,7 +69,7 @@ Telegram Update
   → dedupe（update_id 幂等；重复直接丢弃）
   → filters（自身消息 / 服务消息 / 无文本 / 私聊默认 → 丢弃）
   → 落库 messages
-  → trigger（RESPOND | IGNORE | WAIT）
+  → trigger（RESPOND | WAIT | IGNORE；冷却/窗口闸门是程序侧判定）
   → debounce（静默窗合并，上限条数）
   → per-chat 队列（同群串行；运行期间新消息合并为下一轮一批）
   → ContextBuilder（本轮边界快照 + 全局人格 + 群设定 + 工具策略 + 动态历史 + 摘要/检索）
@@ -86,6 +87,7 @@ Telegram Update
 - **本轮（round）边界**：一轮只以"开始处理时已入库"的消息为输入（`messages.max_id` 快照）；模型调用期间新到的消息只落库，不并入本轮。
 - **运行期间合并**：每个 `chat_id` 最多只有一个待处理批次，新消息并入其中并只保留最新 N 条（`debounce_max_messages`，默认 5），因此"Bot 正在思考"不会持续产生新的模型调用。
 - **每轮一次**：同一群同时只有一个回复任务，一轮最多一次模型调用（阶段 3 起为一次工具循环内不超过轮次上限）与一次回复。
+- **主动发言闸门**：未点名的候选消息（`question`/`troubleshoot`/`resource`/`followup`）先过冷却与每窗口上限，被压住即 `wait`（0 token、只入库）；被点名不受限制（`docs/requirements.md` §2.1）。
 - 每群邮箱有容量上限，溢出策略：合并待处理批次并保留最新若干条，不无限堆积。
 - `update_id` 落库是幂等来源；同一条更新重复到达不会被处理两次。
 - 单个 LLM 调用、单个工具调用都有超时；超时按失败处理，不阻塞队列后续任务。

@@ -9,7 +9,8 @@
 阶段 0：**已完成**（文档骨架就绪，见 `docs/README.md`）。
 阶段 1：**已完成**（最小可运行闭环，含私聊默认静默与本轮消息边界），已通过真实 Telegram + DeepSeek 端到端验收。
 阶段 2：**已完成**（发言闸门：不要求 @ 的主动回复判定 + 冷却与每窗口上限）。
-阶段 3：**已完成**（工具主干：注册表 / 权限判定 / 执行器 + `calc` + `search_web` 接口）。一次只推进一个阶段；不得跳阶段。
+阶段 3：**已完成**（工具主干：注册表 / 权限判定 / 执行器 + `calc` + `search_web` 接口）。
+阶段 4：**已完成**（工作区与文件：`read_file` / `write_file` + 共享路径安全）。一次只推进一个阶段；不得跳阶段。
 阶段 0 含部署约束增补：Windows 开发 / Linux VPS 24/7 生产，同一份代码（见 `docs/deployment.md`）。
 阶段 10（Web 控制面板与多实例）：**仅完成架构预留**（`docs/domain.md`、`docs/architecture.md` §10），未开发面板，未建控制面表。
 
@@ -55,7 +56,12 @@
 ### 阶段 4 · 工作区与文件
 
 - 交付：F4.4（`read_file`、`write_file`、路径安全、原子写 + `.bak`）
+  实现位置：`app/tools/workspace.py`（共享路径与文件安全）、`app/tools/builtin/{read_file,write_file}.py`、
+  `app/tools/builtin/__init__.py`（注册，走 `allow_read`/`allow_write` 群开关）。
 - 验收：`docs/security.md` §11 的路径逃逸用例全部被拒；覆盖写有备份。
+  离线覆盖：`tests/offline/test_files.py`（路径逃逸/符号与硬链接/跨群隔离/行区间/UTF-8/1 MB/单层 `.bak`/原子写）与 `test_pipeline.py` 的两个端到端用例。
+- 明确不做：阶段 5 及之后（`send_sticker`、记忆与 FTS、`run_code` 沙箱、`host_info`/权限/配额/群主命令）；
+  不判断 Telegram 用户身份（`allow_write` 默认关闭，谁能开属阶段 8）；不做目录列举/通配符/删除/重命名；不做版本链与自动清理。
 
 ### 阶段 5 · 贴纸
 

@@ -51,9 +51,10 @@
   target = (base / user_path).resolve()
   if not target.is_relative_to(base): reject("path_outside_workspace")
   ```
-- 拒绝符号链接与非常规文件（`is_symlink()`、非普通文件）；拒绝绝对路径与盘符。
+- 拒绝符号链接与非常规文件（`is_symlink()`、非普通文件）；拒绝绝对路径、盘符、反斜杠与 `..`；硬链接（`st_nlink > 1`）一律拒绝。
 - 模型只看得到 workspace 相对路径；日志、错误消息、上下文里都不出现宿主机绝对路径。
-- 写入：存在则先复制为 `<name>.bak`；写临时文件 → `flush`+`fsync` → `os.replace` 原子替换；单文件大小上限（默认 1 MB）。
+- 写入：存在则先复制为 `<name>.bak`（只保留一层，再次覆盖时更新它，不做历史版本链）；写临时文件 → `flush`+`fsync` → `os.replace` 原子替换；读、写单文件上限各 1 MB。
+- 只处理 UTF-8 文本文件；解码失败按 `invalid_arguments` 拒绝，不处理二进制。
 - 隔离要求：任何查询/写入都必须带 `chat_id` 条件或本群路径；跨群读取一律拒绝。
 
 ## 4. 沙箱（`run_code`）

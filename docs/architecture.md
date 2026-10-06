@@ -50,7 +50,8 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | 工具（阶段 3） | `app/tools/registry.py` | name → Tool 实例；按等级裁剪可暴露清单 |
 | | `app/tools/policy.py` | 权限判定唯一出口（等级 → 本群开关，见 `docs/security.md` §2） |
 | | `app/tools/executor.py` | 注册表 → 权限 → schema → 执行 → 结构化结果；失败计数与熔断 |
-| | `app/tools/builtin/*.py` | 已实现 `calc`、`search_web`（接口）；`read_file`/`write_file`/`send_sticker`/`host_info`/`run_code` 属后续阶段 |
+| | `app/tools/workspace.py` | 路径解析与文件安全（workspace 越界、符号/硬链接、UTF-8、1 MB、原子写 + 单层 `.bak`）——`read_file`/`write_file` 共用的唯一实现 |
+| | `app/tools/builtin/*.py` | 已实现 `calc`、`search_web`（接口）、`read_file`、`write_file`；`send_sticker`/`host_info`/`run_code` 属后续阶段 |
 | 沙箱 | `app/sandbox/runner.py` | 容器调用的唯一实现（阶段 7） |
 | 存储 | `app/storage/db.py` | aiosqlite 连接、WAL、`user_version` 迁移 |
 | | `app/storage/repo/*.py` | messages / settings / usage / stickers / notes 读写 |

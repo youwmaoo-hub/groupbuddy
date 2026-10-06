@@ -16,7 +16,7 @@ from app.outbound.queue import OutboundQueue
 from app.outbound.ratelimit import RateLimiter
 from app.session.context import ContextBuilder
 from app.session.runner import SessionRunner
-from app.storage.repo import messages, updates, usage
+from app.storage.repo import chat_settings, messages, updates, usage
 from app.tools.builtin import build_registry
 from app.tools.executor import ToolExecutor
 from app.tools.policy import Policy
@@ -97,7 +97,7 @@ class PipelineTests(DbTestCase):
         await self._send(["@bot 2*3 等于几"])
         await self._flush()
         self.assertEqual([item["text"] for item in self.sender.sent], ["等于 6"])
-        self.assertEqual(self.llm.tool_names[0], ["calc"])
+        self.assertEqual(self.llm.tool_names[0], ["calc", "read_file"])
         tool_messages = [item for item in self.llm.calls[1] if item.get("role") == "tool"]
         self.assertIn("6", str(tool_messages[0]["content"]))
         summary = await self._usage()
@@ -107,13 +107,13 @@ class PipelineTests(DbTestCase):
         self._build("好")
         await self._send(["@bot 帮我查一下"])
         await self._flush()
-        self.assertEqual(self.llm.tool_names[0], ["calc"])
+        self.assertEqual(self.llm.tool_names[0], ["calc", "read_file"])
 
     async def test_search_web_exposed_with_fake_backend(self) -> None:
         self._build(tool_reply("search_web", {"query": "天气"}), "查到一条", search_backend="fake")
         await self._send(["@bot 查一下天气"])
         await self._flush()
-        self.assertEqual(self.llm.tool_names[0], ["calc", "search_web"])
+        self.assertEqual(self.llm.tool_names[0], ["calc", "read_file", "search_web"])
         self.assertEqual([item["text"] for item in self.sender.sent], ["查到一条"])
         tool_messages = [item for item in self.llm.calls[1] if item.get("role") == "tool"]
         self.assertIn("results", str(tool_messages[0]["content"]))
@@ -125,6 +125,46 @@ class PipelineTests(DbTestCase):
         self.assertEqual([item["text"] for item in self.sender.sent], ["这个我做不了"])
         tool_messages = [item for item in self.llm.calls[1] if item.get("role") == "tool"]
         self.assertIn("permission_denied", str(tool_messages[0]["content"]))
+
+    async def test_read_file_tool_runs_end_to_end(self) -> None:
+        workspace = self.settings.workspace_root / "1"
+        workspace.mkdir(parents=True, exist_ok=True)
+        (workspace / "note.txt").write_text("群里的笔记", encoding="utf-8")
+        self._build(tool_reply("read_file", {"path": "note.txt"}), "读到了")
+        await self._send(["@bot 看一下 note.txt"])
+        await self._flush()
+        self.assertEqual([item["text"] for item in self.sender.sent], ["读到了"])
+        self.assertIn("read_file", self.llm.tool_names[0])
+        tool_messages = [item for item in self.llm.calls[1] if item.get("role") == "tool"]
+        self.assertIn("群里的笔记", str(tool_messages[0]["content"]))
+
+    async def test_write_file_needs_group_switch(self) -> None:
+        write_call = tool_reply("write_file", {"path": "out.txt", "content": "hi"})
+        self._build(
+            write_call,
+            "可能不行",
+            tool_reply("write_file", {"path": "out.txt", "content": "hi"}, call_id="call-2"),
+            "记好了",
+        )
+        await self._send(["@bot 帮我记下来"])
+        self.clock.advance(2.0)
+        for batch in self.debouncer.due():
+            await self.runner.handle_batch(batch)
+        await self.outbound.drain(5.0)
+        self.assertNotIn("write_file", self.llm.tool_names[0])
+        self.assertFalse((self.settings.workspace_root / "1" / "out.txt").exists())
+        tool_messages = [item for item in self.llm.calls[1] if item.get("role") == "tool"]
+        self.assertIn("permission_denied", str(tool_messages[0]["content"]))
+
+        await chat_settings.upsert(self.connection, 1, allow_write=1)
+        await self.runner.handle(make_incoming(update_id=800, chat_id=1, message_id=90, text="@bot 再记一次"))
+        self.clock.advance(2.0)
+        for batch in self.debouncer.due():
+            await self.runner.handle_batch(batch)
+        await self.outbound.drain(5.0)
+        await self.outbound.stop()
+        self.assertIn("write_file", self.llm.tool_names[2])
+        self.assertEqual((self.settings.workspace_root / "1" / "out.txt").read_text(encoding="utf-8"), "hi")
 
     async def test_rapid_messages_merge_into_one_model_call(self) -> None:
         self._build("好的，收到")

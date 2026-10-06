@@ -99,7 +99,7 @@ class ToolExecutor:
             self._note_failure(context, name)
             return _error(name, "internal_error", "执行失败")
 
-        return self._fit_payload(name, payload)
+        return self._fit_payload(name, payload, tool.spec.max_payload_bytes)
 
     def _blocked_reason(self, context: ToolContext, name: str) -> str | None:
         now = self._clock()
@@ -124,9 +124,10 @@ class ToolExecutor:
             self._breaker_until[(context.chat_id, name)] = now + self._config.breaker_seconds
             logger.warning("工具熔断 tool=%s chat_id=%s", name, context.chat_id)
 
-    def _fit_payload(self, name: str, payload: dict[str, object]) -> dict[str, object]:
+    def _fit_payload(self, name: str, payload: dict[str, object], limit: int | None = None) -> dict[str, object]:
+        budget = self._max_payload_bytes if limit is None else limit
         encoded = json.dumps(payload, ensure_ascii=False)
-        if len(encoded.encode("utf-8")) <= self._max_payload_bytes:
+        if len(encoded.encode("utf-8")) <= budget:
             return payload
         logger.warning("工具输出超过上限 tool=%s bytes=%s", name, len(encoded.encode("utf-8")))
         return {

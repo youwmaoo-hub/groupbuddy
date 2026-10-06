@@ -62,6 +62,8 @@ class ToolSpec:
     description: str
     args_model: type[BaseModel]
     timeout_seconds: float
+    # 单次返回的 JSON 字节上限；默认 4 KB（docs/tools.md §4），read_file 用更大的行窗口
+    max_payload_bytes: int = 4096
 
     @property
     def parameters(self) -> dict[str, object]:

@@ -59,7 +59,7 @@ F2.1 只覆盖强触发；"不需要 @ 也能主动回复"（§2.1 第 1 条）�
 | F4.1 | 工具注册表 + 程序侧权限判定 + schema 校验 | P0 | 未定义参数/工具被拒并返回结构化错误 |
 | F4.2 | `calc`（AST 白名单，零文件零网络） | P0 | `__import__("os")` 被拒 |
 | F4.3 | `search_web`（top 3–5、snippet ≤500 字符、无上行的隐私数据） | P1 | 结果短且结构化；未配置 `SEARCH_BACKEND` 时该工具不下发（fail-closed） |
-| F4.4 | `read_file` / `write_file`（限 workspace；行区间；原子写 + .bak） | P1 | 路径逃逸用例全部被拒 |
+| F4.4 | `read_file` / `write_file`（限 workspace；行区间；原子写 + .bak） | P1 | 路径逃逸用例全部被拒；覆盖写有单层 `.bak`；非 UTF-8 与超过 1 MB 被拒 |
 | F4.5 | `send_sticker`（模型只给情绪值，不接触 file_id） | P2 | 情绪匹配且受冷却限制 |
 | F4.6 | `run_code`（沙箱） | P2 | 无网络、越界失败、超时被 kill |
 | F4.7 | `host_info`（最小字段集） | P2 | 不含环境变量、进程、网络接口 |

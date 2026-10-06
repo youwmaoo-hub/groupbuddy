@@ -18,7 +18,7 @@
 |---|---|---|---|---|---|
 | `calc` | L0 | 开 | `expression: str` | `{value: str}` | 2s |
 | `search_web` | L0 | 群开关（需配置后端，见下） | `query: str, top_k?: int=3` | `{results:[{title,url,snippet}]}` | 10s |
-| `read_file` | L1 | 群开关 | `path: str, start_line?: int, end_line?: int, query?: str` | `{path,start_line,end_line,text,total_lines}` | 3s |
+| `read_file` | L1 | 群开关 | `path: str, start_line?: int, end_line?: int, query?: str`（`query` 保留，传入即 `invalid_arguments`） | `{path,start_line,end_line,text,total_lines}` | 3s |
 | `write_file` | L2 | 群开关 | `path: str, content: str` | `{path,bytes,backup?: str}` | 5s |
 | `send_sticker` | L2 | 群开关 | `valence: float, arousal: float, tags?: [str]` | `{sent: bool, sticker_id: int}` | 3s |
 | `run_code` | L3 | 群开关（默认关） | `code: str, timeout_s?: int=15` | `{exit_code,stdout,stderr,truncated}` | 30s |
@@ -39,9 +39,11 @@
 
 ### read_file / write_file
 
-- `path` 只能是 workspace 相对路径；解析与越界拒绝规则见 `docs/security.md` §3。
-- `read_file` 默认最多 200 行；超出必须分批请求，不整文件投喂。
-- `write_file` 覆盖已存在文件前先写 `.bak`，采用临时文件 + `fsync` + 原子替换。
+- `path` 只能是 workspace 内 `/` 分隔的相对路径；解析与越界拒绝规则见 `docs/security.md` §3。
+- `read_file` 只读 UTF-8 文本：无法按 UTF-8 解码返回 `invalid_arguments`；单文件超过 1 MB 直接 `too_large`，不能靠多次读取绕过。
+- 行区间 1-based 且包含两端；省略 `start_line` 从第 1 行开始，省略 `end_line` 读到文件末尾；越界截断到实际范围，最终区间为空返回 `invalid_arguments`；单次最多 200 行。
+- `query` 子串检索本阶段不实现：参数保留，传入即 `invalid_arguments`，将来由独立的文件检索/FTS 功能定义。
+- `write_file` 单次写入 ≤1 MB；覆盖已存在文件前把旧内容复制为 `<name>.bak`（只保留一层，再次覆盖时更新它），用临时文件 + `fsync` + 原子替换；上级目录不存在返回 `not_found`。
 
 ### send_sticker
 
@@ -87,7 +89,7 @@
 |---|---|---|
 | `run_code` stdout / stderr | 各 8 KB | 末尾追加 `[output truncated: N bytes]` |
 | `search_web` | 结果 ≤5 条，snippet ≤500 字符 | 多余结果丢弃并计入 `truncated` |
-| `read_file` | 默认 200 行 | 返回 `total_lines` 供模型分批读取 |
+| `read_file` | 单次 ≤200 行且 ≤16 KB | 返回 `total_lines` 与 `end_line` 供模型续读 |
 | 其他工具 | 4 KB JSON | 截断并标注 |
 
 ## 5. System3 注入格式

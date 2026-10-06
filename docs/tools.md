@@ -1,0 +1,100 @@
+# 工具契约
+
+负责：工具的名称、等级、输入输出、超时、错误码、输出上限、熔断规则。
+上游：`docs/requirements.md` F4；`docs/security.md`（等级与权限来源）。
+改动影响：任一字段变更都属契约变更（见 `AGENTS.md` §5）。
+
+## 1. 通用规则
+
+- 工具清单由程序生成并按权限裁剪后注入 System3（见 `docs/security.md` §2）。
+- 模型返回的 `arguments` 不保证是合法 JSON、也可能是未定义参数：一律经 Pydantic 校验，失败即拒绝。
+- 执行顺序固定：**校验 → 权限 → 执行 → 结构化结果**，任何一步失败都返回 §3 的错误码。
+- 输出必须是短的结构化 JSON；超限即截断并标注（见 §4）。
+- 同一工具在一轮内失败 2 次 → 本轮禁用；5 分钟内失败 8 次 → 临时熔断 30 秒（见 `docs/security.md` §2）。
+
+## 2. 冻结表
+
+| 工具 | 等级 | 默认开关 | 输入 | 输出 | 超时 |
+|---|---|---|---|---|---|
+| `calc` | L0 | 开 | `expression: str` | `{value: str}` | 2s |
+| `search_web` | L0 | 群开关 | `query: str, top_k?: int=3` | `{results:[{title,url,snippet}]}` | 10s |
+| `read_file` | L1 | 群开关 | `path: str, start_line?: int, end_line?: int, query?: str` | `{path,start_line,end_line,text,total_lines}` | 3s |
+| `write_file` | L2 | 群开关 | `path: str, content: str` | `{path,bytes,backup?: str}` | 5s |
+| `send_sticker` | L2 | 群开关 | `valence: float, arousal: float, tags?: [str]` | `{sent: bool, sticker_id: int}` | 3s |
+| `run_code` | L3 | 群开关（默认关） | `code: str, timeout_s?: int=15` | `{exit_code,stdout,stderr,truncated}` | 30s |
+| `host_info` | L4 | 默认关 | `fields?: [str]` | `{cpu,memory,disk_free,python,uptime_s}` | 2s |
+
+### calc
+
+- 只接受 `+ - * / % ** ( )`、数字、空白；通过 AST 解析求值。
+- 禁止 `eval`/`exec`；出现名称、属性、调用、下标、推导式等一律拒绝（`invalid_expression`）。
+- 零文件、零网络、零 shell。
+
+### search_web
+
+- 后端未定（见 `docs/requirements.md` §4）；阶段 3 前用假实现占位。
+- 只允许查询串上行；不得携带 workspace 内容、环境变量、密钥、完整文件文本。
+- 默认 `top_k=3`，上限 5；`snippet` 截断到 500 字符；记录来源 URL 以便引用。
+
+### read_file / write_file
+
+- `path` 只能是 workspace 相对路径；解析与越界拒绝规则见 `docs/security.md` §3。
+- `read_file` 默认最多 200 行；超出必须分批请求，不整文件投喂。
+- `write_file` 覆盖已存在文件前先写 `.bak`，采用临时文件 + `fsync` + 原子替换。
+
+### send_sticker
+
+- 模型只给情绪与标签；`file_id` 永不进入模型上下文。
+- 受群设置冷却时间与出站限速约束；冷却中返回 `cooldown` 状态而不是报错。
+
+### run_code
+
+- 必须经 `app/sandbox/runner.py`；沙箱参数由程序固定（见 `docs/security.md` §4）。
+- 无容器运行时可用时一律 fail-closed 拒绝（`sandbox_unavailable`），不允许退化为宿主机执行。
+- 默认 `timeout_s=15`，上限 30；超时即 kill 并销毁容器。
+
+### host_info
+
+- 只允许 `cpu`、`memory`、`disk_free`、`python`、`uptime_s` 五个字段。
+- 禁止环境变量、进程命令行、网络接口、主机名、用户目录、IP。
+
+## 3. 错误码（统一格式）
+
+```json
+{"error": "<code>", "tool": "<name>", "message": "<短句，≤200 字符>"}
+```
+
+| code | 含义 |
+|---|---|
+| `permission_denied` | 权限/等级/群开关不允许 |
+| `invalid_arguments` | schema 校验失败（含非法 JSON、未定义参数） |
+| `invalid_expression` | `calc` 表达式含不允许的构造 |
+| `not_found` | 路径不存在 |
+| `path_outside_workspace` | 路径解析后不在本群 workspace 内 |
+| `too_large` | 输入或输出超过上限 |
+| `timeout` | 超时 |
+| `sandbox_unavailable` | 容器运行时不可用（`run_code` 专用） |
+| `execution_failed` | 目标程序非零退出且有 stderr |
+| `cooldown` | 工具处于冷却/熔断 |
+| `internal_error` | 未分类错误（消息只回一句，不泄露细节） |
+
+错误对象直接返回给模型，由模型用一句话向用户解释；不把堆栈、路径、环境信息放进 message。
+
+## 4. 输出上限与截断
+
+| 位置 | 上限 | 超出表现 |
+|---|---|---|
+| `run_code` stdout / stderr | 各 8 KB | 末尾追加 `[output truncated: N bytes]` |
+| `search_web` | 结果 ≤5 条，snippet ≤500 字符 | 多余结果丢弃并计入 `truncated` |
+| `read_file` | 默认 200 行 | 返回 `total_lines` 供模型分批读取 |
+| 其他工具 | 4 KB JSON | 截断并标注 |
+
+## 5. System3 注入格式
+
+程序按当前群设置与用户身份生成，模型只能从这个列表里选：
+
+```json
+{"allowed_tools": ["calc", "search_web", "read_file"]}
+```
+
+未列出的工具不进入 `tools` 参数；模型若强行请求，由 `app/tools/policy.py` 二次拒绝。

@@ -1,0 +1,2087 @@
+整体上，你这套方案**方向是对的，而且已经不是“玩具 Bot”设计了**。真正需要改的，不是再堆功能，而是把“谁能让 Bot 做什么”这一层做硬。
+
+有几个地方我会直接改：
+
+1. **“规则拿不准就放行给模型”不要这么做。**
+   模型只能决定“要不要调用哪个工具”，不能决定“这个工具有没有权限执行”。尤其是 `write_file / run_code / host_info / 出网`，必须由程序自己的权限策略判断，失败就拒绝。
+
+2. **`run_code` 前扫描 `os.system / subprocess / eval` 远远不够。**
+   这些只能算第一层提示检查。真正安全边界必须是容器/VM 本身：非 root、只读根文件系统、独立 workspace、CPU/内存/PID/文件大小限制、默认无网络、禁止访问 Docker socket、禁止宿主机目录挂载。否则有人一句话就可能让模型执行危险代码。
+
+3. **“Bot 收不到其他 Bot 消息”现在不能再当成绝对规则。**
+   Telegram 现在已经有 Bot-to-Bot Communication Mode；满足相应条件时，Bot 可以收到其他 Bot 消息。你的程序仍然可以主动 `from_user.is_bot` 过滤掉，但这是**你的产品规则**，不是平台绝对限制。([Telegram][1])
+
+4. **限速不要写死成“整个 Bot 一旦 429 全停”。**
+   Telegram 的确有单聊天约 1 条/秒、群约 20 条/分钟、批量广播约 30 条/秒等限制，但实际应该让出站队列根据 `retry_after` 做退避，而不是整个程序一起睡眠。([Telegram][2])
+
+5. **记忆建议按“群 + Topic”考虑。**
+   如果以后用了论坛主题，一个 `chat_id` 里可能存在多个完全不同的话题。最简单可以第一版只用 `chat_id`，但数据库结构预留 `thread_id`。
+
+6. **工具最好分权限等级。**
+   我会这样分：
+   `L0 calc/search` → `L1 read_file` → `L2 write_file/send_sticker` → `L3 run_code` → `L4 host_info/联网高权限`。
+   群主可以关闭某一级，模型永远不能自己提升权限。
+
+---
+
+# 你实际操作时，建议这样一步一步做
+
+不要一上来把所有东西写完。
+
+你真正要做的是：
+
+```text
+第 1 阶段：让 Bot 能稳定进群、收消息、回复
+第 2 阶段：接模型
+第 3 阶段：做群记忆
+第 4 阶段：做 Tool Calling
+第 5 阶段：做工作区
+第 6 阶段：做贴纸
+第 7 阶段：做代码沙箱
+第 8 阶段：做长期记忆
+第 9 阶段：做限速、监控、部署
+```
+
+这样你每一步都能跑起来，不会最后得到一个 5000 行、哪里坏了都不知道的项目。
+
+---
+
+# 第一阶段：先把 Telegram Bot 跑起来
+
+## ① 创建 Bot
+
+去 Telegram 找：
+
+```text
+@BotFather
+```
+
+执行：
+
+```text
+/newbot
+```
+
+得到：
+
+```text
+BOT_TOKEN=xxxxxxxx:xxxxxxxx
+```
+
+这个 Token **绝对不要写进代码、GitHub、日志**。
+
+---
+
+## ② 关闭群隐私模式
+
+你这个 Bot 想“没点名也能接话”，就必须拿到群里的普通消息。
+
+在：
+
+```text
+@BotFather
+/setprivacy
+```
+
+选择你的 Bot：
+
+```text
+Disable
+```
+
+之后把 Bot 从已经存在的群里**移除，再重新拉进去**。Telegram 官方明确说明，关闭 Privacy Mode 后，已有群需要重新加入才能生效；另一种方式是直接把 Bot 设为管理员。([Telegram][1])
+
+你最终希望 Telegram 给你：
+
+```text
+普通文字
+回复 Bot 的消息
+@Bot 的消息
+服务消息
+```
+
+然后你自己的程序再过滤。
+
+---
+
+# 第二阶段：建立最小项目
+
+你的目录可以直接这样：
+
+```text
+telegram_ai_bot/
+│
+├─ app.py
+├─ config.py
+├─ db.py
+├─ models.py
+│
+├─ handlers/
+│  └─ telegram.py
+│
+├─ llm/
+│  ├─ client.py
+│  └─ agent.py
+│
+├─ memory/
+│  ├─ short_term.py
+│  ├─ summary.py
+│  └─ search.py
+│
+├─ tools/
+│  ├─ registry.py
+│  ├─ search_web.py
+│  ├─ calc.py
+│  ├─ read_file.py
+│  ├─ write_file.py
+│  ├─ send_sticker.py
+│  ├─ host_info.py
+│  └─ run_code.py
+│
+├─ sticker/
+│  ├─ collector.py
+│  └─ matcher.py
+│
+├─ sandbox/
+│  └─ runner.py
+│
+├─ outbound/
+│  └─ queue.py
+│
+├─ workspaces/
+│
+├─ data/
+│  └─ bot.db
+│
+├─ .env
+├─ .gitignore
+└─ requirements.txt
+```
+
+---
+
+# 第三阶段：装环境
+
+Python：
+
+```text
+Python 3.11+
+```
+
+创建虚拟环境：
+
+```bash
+python -m venv .venv
+```
+
+Windows：
+
+```bash
+.venv\Scripts\activate
+```
+
+Linux/macOS：
+
+```bash
+source .venv/bin/activate
+```
+
+安装：
+
+```bash
+pip install aiogram openai httpx aiosqlite pydantic-settings python-dotenv
+```
+
+你列的依赖基本合理。
+
+---
+
+# 第四阶段：先只做“收消息”
+
+这一阶段**不要接大模型**。
+
+目标只有一个：
+
+> 群里发一句话，程序能够正确判断这条消息要不要交给 Bot。
+
+aiogram 3 本身就是基于 `Dispatcher + Router` 做更新分发，并支持 long polling 和 webhook。第一版用 long polling 很合适。([Aiogram 文档][3])
+
+你的第一层处理器大概应该变成：
+
+```text
+Telegram Update
+        ↓
+update_id 去重
+        ↓
+是不是 Bot 自己发的？
+        ↓
+是不是 service message？
+        ↓
+是不是纯 sticker？
+        ↓
+是不是已经处理过？
+        ↓
+保存消息
+        ↓
+进入 debounce
+```
+
+数据库先有这么一张：
+
+```sql
+updates (
+    update_id INTEGER PRIMARY KEY,
+    received_at INTEGER
+)
+```
+
+收到：
+
+```text
+update_id = 123456
+```
+
+先：
+
+```sql
+INSERT OR IGNORE
+```
+
+如果已经存在：
+
+```text
+直接 return
+```
+
+这样就解决重复 Update。
+
+---
+
+# 第五阶段：实现“什么时候说话”
+
+这是整个 Bot **最重要的产品逻辑之一**。
+
+千万不要直接：
+
+```python
+if message:
+    call_llm()
+```
+
+你应该先做：
+
+```text
+message
+   ↓
+TriggerDetector
+   ↓
+RESPOND
+IGNORE
+WAIT
+```
+
+我会给它四种情况。
+
+### A. 强触发
+
+直接说。
+
+```text
+@Bot
+回复 Bot
+Bot 名字
+Bot 昵称
+```
+
+---
+
+### B. 可解释内容
+
+直接说。
+
+比如：
+
+```text
+这是什么？
+为什么？
+怎么做？
+报错：
+命令：
+配置：
+账单：
+文件：
+链接：
+```
+
+你这个想法是对的。
+
+---
+
+### C. 上下文追问
+
+例如：
+
+```text
+用户A：DeepSeek 为什么这么贵？
+
+Bot：因为……
+
+用户B：那 V4.1 Flash 呢？
+```
+
+即使 B 没有点名，也应该继续回答。
+
+这个时候不能只看当前消息。
+
+应该检查：
+
+```text
+最近消息
+        ↓
+Bot 最近一次发言
+        ↓
+当前消息是否是它的语义延续
+```
+
+第一版甚至不需要 AI 分类。
+
+简单规则就能解决 70%：
+
+```text
+当前消息距离 Bot 上一次回复 < N 条
+且用户发言具有疑问/承接词
+→ 放行
+```
+
+后面再让模型做语义判断。
+
+---
+
+# 第六阶段：去抖
+
+你写的：
+
+```text
+1–2 秒
+最多 5 条
+```
+
+我赞成。
+
+例如群里：
+
+```text
+A：你
+A：知道
+A：DeepSeek
+A：这个吗？
+```
+
+不要产生 4 次 API 请求。
+
+而是：
+
+```text
+等待 1.5 秒
+
+[A：你]
+[A：知道]
+[A：DeepSeek]
+[A：这个吗？]
+
+↓ 合并
+
+一次模型请求
+```
+
+但是这里还有一个你没写出来的重要东西：
+
+## 同一个群最好只能同时处理一个 Agent Loop
+
+否则：
+
+```text
+请求 A
+请求 B
+请求 C
+```
+
+全部同时进入模型，就可能发生：
+
+```text
+Bot 回复 A
+Bot 回复 C
+Bot 回复 B
+```
+
+所以你最好做：
+
+```text
+chat_id → asyncio.Lock / actor queue
+```
+
+逻辑是：
+
+```text
+每个 chat_id 一个消息队列
+```
+
+不同群：
+
+```text
+群A → 可以并行
+群B → 可以并行
+群C → 可以并行
+```
+
+同一个群：
+
+```text
+A → B → C
+严格排队
+```
+
+这比单纯的 `asyncio.gather()` 更重要。
+
+---
+
+# 第七阶段：接入大模型
+
+你的 `.env`：
+
+```env
+BOT_TOKEN=xxx
+
+LLM_BASE_URL=https://api.deepseek.com
+LLM_API_KEY=xxx
+LLM_MODEL=deepseek-flash
+```
+
+DeepSeek 当前 API 仍提供 OpenAI 兼容接口，官方示例就是通过 OpenAI SDK 设置 `base_url="https://api.deepseek.com"`；官方当前文档列出的模型包括 `deepseek-flash` 和 `deepseek-v4-pro`。旧的 `deepseek-v4-flash` 名称目前会映射到 V4.1-Flash。([DeepSeek API Docs][4])
+
+代码层就统一：
+
+```python
+from openai import AsyncOpenAI
+
+client = AsyncOpenAI(
+    api_key=settings.llm_api_key,
+    base_url=settings.llm_base_url,
+)
+```
+
+以后换：
+
+```text
+OpenAI
+DeepSeek
+Qwen
+OpenRouter
+其他 OpenAI-compatible
+```
+
+你的 Agent 层不用改。
+
+---
+
+# 第八阶段：设计真正的 Prompt
+
+你这里有个非常好的想法：
+
+> 人设和群设定分离。
+
+我建议再细一点。
+
+## System 1：全局人设
+
+比如：
+
+```text
+你是 XXX。
+
+你负责：
+解释问题
+参与群聊
+查资料
+计算
+编程
+使用工具
+
+你的语气……
+```
+
+只控制：
+
+```text
+性格
+口癖
+说话方式
+身份
+```
+
+---
+
+## System 2：群设定
+
+数据库：
+
+```text
+chat_id
+nickname
+owner
+disabled_topics
+sticker_cooldown
+allow_code
+allow_web
+allow_write
+```
+
+拼进去。
+
+例如：
+
+```text
+当前群：
+昵称：肥鱼
+主人：Alex
+可以运行代码：否
+允许联网：是
+贴纸冷却：30 秒
+```
+
+---
+
+## System 3：工具策略
+
+这个**不要让模型自己决定**。
+
+程序生成：
+
+```json
+{
+  "allowed_tools": [
+    "search_web",
+    "calc",
+    "read_file"
+  ]
+}
+```
+
+而不是：
+
+```text
+模型自己决定我有没有权限。
+```
+
+这是整个系统的关键安全边界。
+
+---
+
+# 第九阶段：做 Tool Calling
+
+模型收到：
+
+```text
+帮我算一下 123*456
+```
+
+模型可能返回：
+
+```json
+{
+  "tool": "calc",
+  "arguments": {
+    "expression": "123*456"
+  }
+}
+```
+
+你的程序：
+
+```text
+验证 tool 名字
+↓
+验证 JSON Schema
+↓
+检查权限
+↓
+执行
+↓
+返回结果
+↓
+重新请求模型
+```
+
+形成：
+
+```text
+LLM
+ ↓
+tool call
+ ↓
+executor
+ ↓
+tool result
+ ↓
+LLM
+ ↓
+最终回答
+```
+
+最多：
+
+```text
+4 rounds
+```
+
+这个设计合理。
+
+DeepSeek 官方现在支持 Tool Calls，并且特别提醒：模型生成的 arguments 不一定是有效 JSON，也可能包含没定义的参数，因此你的程序必须自己做 schema validation。([DeepSeek API Docs][5])
+
+所以：
+
+```text
+Pydantic
+```
+
+非常适合。
+
+---
+
+# 第十阶段：工具执行器不要直接写在 Agent 里面
+
+最好是：
+
+```python
+TOOLS = {
+    "calc": CalcTool(),
+    "search_web": SearchTool(),
+    "read_file": ReadFileTool(),
+    ...
+}
+```
+
+然后：
+
+```text
+Agent
+   ↓
+ToolRegistry
+   ↓
+Policy
+   ↓
+Executor
+```
+
+例如：
+
+```text
+模型说：
+
+run_code(...)
+```
+
+程序先：
+
+```text
+run_code 是否启用？
+        ↓
+当前群允许吗？
+        ↓
+当前用户允许吗？
+        ↓
+参数合法吗？
+        ↓
+进入 sandbox
+```
+
+任何一步失败：
+
+```json
+{
+  "error": "permission_denied",
+  "tool": "run_code"
+}
+```
+
+再把这个交给模型，让模型用一句话告诉用户。
+
+---
+
+# 第十一阶段：`calc`
+
+这是最简单的工具。
+
+不要：
+
+```python
+eval(expression)
+```
+
+哪怕你扫了字符串也不要。
+
+用：
+
+```text
+AST parser
+```
+
+只允许：
+
+```text
++
+-
+*
+/
+%
+**
+()
+数字
+```
+
+例如：
+
+```text
+2 * (5 + 8)
+```
+
+可以。
+
+但：
+
+```text
+__import__("os")
+```
+
+直接拒绝。
+
+这个工具应该做到：
+
+```text
+纯计算
+零文件
+零网络
+零 shell
+```
+
+它是你的 L0 工具。
+
+---
+
+# 第十二阶段：`read_file`
+
+这里开始必须做路径安全。
+
+用户说：
+
+```text
+读取 README.md
+```
+
+程序计算：
+
+```python
+root = Path(f"workspaces/{chat_id}").resolve()
+target = (root / user_path).resolve()
+```
+
+然后：
+
+```text
+target 必须位于 root 内
+```
+
+否则：
+
+```text
+拒绝
+```
+
+防止：
+
+```text
+../../.env
+../../ssh/id_rsa
+```
+
+---
+
+# 第十三阶段：`write_file`
+
+必须：
+
+```text
+resolve
+ ↓
+root containment check
+ ↓
+目录创建
+ ↓
+如果存在
+    ↓
+写 .bak
+ ↓
+原子写入
+```
+
+最好不要：
+
+```python
+open(path, "w")
+```
+
+直接覆盖。
+
+使用：
+
+```text
+tmp file
+↓
+fsync
+↓
+rename
+```
+
+这样程序崩了也不容易把文件写成半截。
+
+---
+
+# 第十四阶段：工作区
+
+你设计：
+
+```text
+workspaces/<chat_id>/
+```
+
+是对的。
+
+例如：
+
+```text
+workspaces/
+├── -100123456/
+│   ├── README.md
+│   ├── notes/
+│   └── code/
+│
+└── -100987654/
+    └── ...
+```
+
+一个群一个空间。
+
+但是注意：
+
+**不要让模型直接拿到任意文件系统路径。**
+
+模型只能看到：
+
+```text
+workspace-relative path
+```
+
+比如：
+
+```text
+code/main.py
+```
+
+永远不要把：
+
+```text
+C:\Users\Alex\Desktop\xxx
+```
+
+暴露给模型。
+
+---
+
+# 第十五阶段：`run_code`
+
+这是你整个项目危险程度最高的部分。
+
+我建议你的版本分三级。
+
+## Level 0
+
+```text
+Python
+数学计算
+字符串处理
+JSON
+```
+
+不允许：
+
+```text
+网络
+文件系统
+shell
+import
+```
+
+---
+
+## Level 1
+
+允许：
+
+```text
+读取当前群 workspace
+写当前群 workspace
+```
+
+但：
+
+```text
+不能访问宿主机
+不能联网
+不能执行 shell
+```
+
+---
+
+## Level 2
+
+允许安装依赖：
+
+```text
+pip install xxx
+```
+
+这一档才进入：
+
+```text
+强化 Docker / microVM
+```
+
+而不是你的 Bot 主进程直接执行。
+
+---
+
+# 十六阶段：不要把 Docker 当成“自动安全”
+
+这个特别重要。
+
+你应该让真正执行代码的是：
+
+```text
+Bot 主进程
+    ↓
+Sandbox Manager
+    ↓
+Docker/Podman
+    ↓
+一次性容器
+    ↓
+执行
+    ↓
+返回 stdout/stderr
+    ↓
+销毁
+```
+
+容器里面：
+
+```text
+非 root
+CPU 限制
+Memory 限制
+PID 限制
+时间限制
+文件大小限制
+无网络
+只挂载当前 workspace
+禁止 Docker socket
+```
+
+然后：
+
+```text
+15–30 秒超时
+```
+
+直接 kill。
+
+而你说的：
+
+```text
+扫描 os.system
+subprocess
+eval
+动态导入
+```
+
+仍然可以保留，但只能叫：
+
+```text
+preflight check
+```
+
+不能把它当成安全边界。
+
+因为：
+
+```text
+没有 subprocess
+≠
+没有危险
+```
+
+Python 还有一大堆其他方式碰系统。
+
+---
+
+# 第十七阶段：`search_web`
+
+这里又出现一个非常容易被忽略的安全问题。
+
+比如用户说：
+
+```text
+搜索这个 URL
+```
+
+而文件里藏着：
+
+```text
+https://attacker.example/exfil?data=...
+```
+
+模型可能把敏感信息拼进去。
+
+所以你要把：
+
+```text
+search_web
+```
+
+定义成：
+
+```text
+只能搜索公开信息
+不能上传 workspace 内容
+不能发送 token
+不能发送环境变量
+```
+
+而且最好做：
+
+```text
+URL/domain allowlist
+```
+
+至少工具执行器要清楚：
+
+```text
+用户输入 ≠ 已授权网络操作
+```
+
+---
+
+# 第十八阶段：`host_info`
+
+我建议它不要默认启用。
+
+因为：
+
+```text
+host_info
+```
+
+可能泄露：
+
+```text
+CPU
+内存
+磁盘
+OS
+hostname
+IP
+进程
+环境
+Docker
+```
+
+如果以后你把 Bot 放服务器上，群里任何一个人都可能：
+
+```text
+“查一下你机器现在运行什么”
+```
+
+所以第一版只允许：
+
+```text
+CPU
+内存
+磁盘剩余
+Python 版本
+Bot uptime
+```
+
+不要：
+
+```text
+全部环境变量
+全部进程命令行
+网络接口详细信息
+SSH
+用户目录
+```
+
+---
+
+# 第十九阶段：贴纸系统
+
+你这个思路很漂亮：
+
+```text
+模型
+↓
+valence
+arousal
+↓
+程序
+↓
+余弦匹配
+↓
+sticker
+```
+
+不要让模型直接返回：
+
+```text
+file_id
+```
+
+让它返回：
+
+```json
+{
+  "valence": 0.8,
+  "arousal": 0.6,
+  "tag": ["开心", "调皮"]
+}
+```
+
+然后：
+
+```text
+StickerMatcher
+```
+
+自己决定：
+
+```text
+哪个 sticker
+```
+
+这样模型永远不知道你的 Telegram `file_id`。
+
+Telegram 的 `file_id` 可以持久使用，但贴纸资料应当保存当前 Bot 的真实 sticker `file_id`；Telegram 也明确说明 file ID 与 Bot 身份相关，所以测试 Bot 和正式 Bot 不能直接共享同一套 file_id 数据。([Telegram][2])
+
+---
+
+# 第二十阶段：贴纸数据库
+
+可以：
+
+```sql
+stickers (
+    id INTEGER PRIMARY KEY,
+    file_id TEXT NOT NULL,
+    file_unique_id TEXT NOT NULL,
+    valence REAL,
+    arousal REAL,
+    tags TEXT,
+    last_used_at INTEGER
+)
+```
+
+例如：
+
+```text
+🐳
+valence=0.95
+arousal=0.80
+tags=["开心","兴奋"]
+```
+
+匹配：
+
+```text
+model vector
+        ↓
+cosine similarity
+        ↓
+top K
+        ↓
+冷却过滤
+        ↓
+随机一点
+        ↓
+sendSticker
+```
+
+这样不会每次都发同一个。
+
+---
+
+# 第二十一阶段：记忆
+
+我不建议一上来搞向量数据库。
+
+第一版直接：
+
+```text
+SQLite
++
+FTS5
+```
+
+足够。
+
+表：
+
+```text
+messages
+summaries
+notes
+chat_settings
+stickers
+updates
+usage
+```
+
+短期记忆：
+
+```text
+最近 30–50 条
+```
+
+每：
+
+```text
+10–20 轮
+```
+
+或者：
+
+```text
+静默 > 2 分钟
+```
+
+异步总结。
+
+例如：
+
+```text
+摘要：
+Alex 正在开发 Telegram AI Bot，
+使用 DeepSeek Flash，
+正在设计 run_code 沙箱。
+目前 workspaces 结构已经完成。
+```
+
+下一次只带：
+
+```text
+summary
++
+最近 30 条原文
+```
+
+而不是把几千条消息全部塞给模型。
+
+---
+
+# 第二十二阶段：FTS
+
+SQLite 自带 FTS5，所以：
+
+```text
+用户以前问过：
+“DSH-IM 怎么连接微信？”
+```
+
+几天以后：
+
+```text
+这个之前怎么搞？
+```
+
+程序可以：
+
+```text
+FTS
+↓
+搜摘要
+↓
+搜 workspace notes
+↓
+Top K
+↓
+重排
+↓
+塞进上下文
+```
+
+但一定遵守你说的：
+
+> 检索是补背景，不替换短期原文。
+
+这个设计正确。
+
+---
+
+# 第二十三阶段：出站队列
+
+所有：
+
+```text
+sendMessage
+sendSticker
+editMessage
+```
+
+都不要让业务代码直接发。
+
+全部进入：
+
+```text
+OutboundQueue
+```
+
+例如：
+
+```text
+Agent
+ ↓
+OutboundQueue
+ ↓
+RateLimiter
+ ↓
+Telegram API
+```
+
+然后实现：
+
+```text
+per-chat limiter
+global limiter
+sticker limiter
+retry_after
+exponential backoff
+```
+
+Telegram 官方目前的 FAQ 给出的典型限制包括：单聊天尽量不要超过 1 消息/秒、群约 20 消息/分钟、批量广播约 30 消息/秒；超过时可能返回 429。([Telegram][2])
+
+你自己的设置可以更保守：
+
+```text
+群：
+10~15/min
+
+单聊天：
+0.8~1/s
+
+Sticker：
+例如 1/20s
+```
+
+这样实际运行会舒服很多。
+
+---
+
+# 第二十四阶段：4096 字符拆分
+
+Telegram `sendMessage` 的文本限制目前是 **1–4096 字符（实体解析后）**。([Telegram][6])
+
+不能简单：
+
+```python
+text[:4096]
+```
+
+因为你可能正好切在：
+
+```text
+代码块
+Markdown
+HTML entity
+```
+
+里面。
+
+应该：
+
+```text
+优先按段落
+↓
+代码块
+↓
+句子
+↓
+最后才按字符硬切
+```
+
+而且最好避免把一个代码块拆坏。
+
+---
+
+# 第二十五阶段：typing / 状态消息
+
+你说的：
+
+```text
+正在搜索……
+正在执行……
+```
+
+很值得做。
+
+例如：
+
+```text
+用户：
+帮我查一下这个项目。
+
+Bot：
+🔎 正在搜索……
+```
+
+然后：
+
+```text
+执行完
+↓
+editMessage
+```
+
+变成：
+
+```text
+✅ 找到了……
+```
+
+这样用户不会觉得 Bot 死了。
+
+但这个状态消息也要走：
+
+```text
+OutboundQueue
+```
+
+否则状态消息自己就可能制造 Flood Limit。
+
+---
+
+# 第二十六阶段：配额
+
+你一开始就应该记录：
+
+```text
+chat_id
+user_id
+input_tokens
+output_tokens
+tool_calls
+tool_runtime
+api_cost_estimate
+date
+```
+
+然后：
+
+```text
+daily quota
+monthly quota
+```
+
+尤其你的 Bot 这种：
+
+```text
+DeepSeek 几千万 token / 天
+```
+
+的玩法，很容易让一个群把 API 钱包打穿。
+
+可以：
+
+```text
+普通消息
+50 次/月
+```
+
+这种限制，也可以按 token。
+
+---
+
+# 第二十七阶段：真正的权限设计
+
+我最推荐你最终做到：
+
+```text
+┌───────────────────────────┐
+│ Telegram 用户             │
+└────────────┬──────────────┘
+             ↓
+      Trigger / Context
+             ↓
+        LLM Agent
+             ↓
+      Tool Registry
+             ↓
+        Policy Engine
+             ↓
+ ┌───────────┼────────────┐
+ ↓           ↓            ↓
+Read       Write        Execute
+ ↓           ↓            ↓
+文件        文件         Sandbox
+```
+
+而：
+
+```text
+Policy Engine
+```
+
+**完全不属于模型。**
+
+比如群设置：
+
+```json
+{
+  "allow_search": true,
+  "allow_read": true,
+  "allow_write": false,
+  "allow_code": true,
+  "allow_host_info": false
+}
+```
+
+模型即使说：
+
+```text
+我要 write_file
+```
+
+程序还是可以：
+
+```text
+PermissionDenied
+```
+
+---
+
+# 第二十八阶段：群主控制命令
+
+你最终非常需要这些命令：
+
+```text
+/settings
+/persona
+/memory
+/clear
+/stats
+/quota
+/stickers
+/code
+/web
+/workspace
+```
+
+例如：
+
+```text
+/code on
+```
+
+而且：
+
+```text
+只有群管理员
+```
+
+才能设置。
+
+Telegram 的 Bot Commands 本身支持不同 scope，因此可以让普通成员和管理员看到不同的命令菜单。官方也明确提醒：即使命令菜单里没有显示某个命令，后端仍然必须自己验证用户是否有权限。([Telegram][1])
+
+---
+
+# 第二十九阶段：日志
+
+你原本写：
+
+> 不记录 token、文件正文和原始工具参数。
+
+非常正确。
+
+我建议日志记录：
+
+```text
+2026-10-06 17:20
+chat=-100...
+user=123...
+trigger=mention
+model=deepseek-flash
+tool=search_web
+tool_status=success
+latency=2.8s
+input_tokens=...
+output_tokens=...
+```
+
+不要记录：
+
+```text
+API Key
+BOT_TOKEN
+文件全文
+环境变量
+完整 URL query
+原始 tool args
+```
+
+尤其是：
+
+```text
+search_web
+run_code
+write_file
+```
+
+这些工具参数里非常可能出现用户隐私。
+
+---
+
+# 第三十阶段：数据库结构
+
+第一版 SQLite 可以直接这么设计：
+
+```text
+updates
+messages
+summaries
+notes
+chat_settings
+stickers
+usage
+tool_failures
+```
+
+其中最重要的：
+
+```text
+messages
+---------
+id
+chat_id
+message_id
+user_id
+role
+text
+reply_to_message_id
+created_at
+```
+
+这样以后：
+
+```text
+回复谁？
+上一句是谁？
+Bot 在哪条消息之后说的？
+```
+
+都能查。
+
+---
+
+# 第三十一阶段：工具熔断
+
+你设计：
+
+> 同一工具本轮连续失败两次，就移出本轮工具列表。
+
+这个非常好。
+
+我会改成：
+
+```text
+本轮失败 2 次
+↓
+本轮禁用
+```
+
+同时记录：
+
+```text
+tool_failures
+```
+
+例如：
+
+```text
+search_web
+5min 内失败 8 次
+```
+
+则进一步：
+
+```text
+暂时熔断 30 秒
+```
+
+恢复以后再打开。
+
+---
+
+# 第三十二阶段：`asyncio.gather()`
+
+这里也不要“所有工具都并行”。
+
+可以：
+
+```text
+search_web
++
+calc
++
+read_file
+```
+
+并行。
+
+但：
+
+```text
+write_file
+→
+run_code
+```
+
+如果 `run_code` 要读取刚写入的文件，就必须：
+
+```text
+write_file
+↓
+await
+↓
+run_code
+```
+
+所以你应该让工具依赖关系决定是否并行，而不是：
+
+```python
+asyncio.gather(*all_tools)
+```
+
+盲目全并行。
+
+---
+
+# 第三十三阶段：第一版其实不要做 microVM
+
+你写：
+
+> microVM 或强化容器
+
+我建议你别一上来就搞复杂。
+
+第一版：
+
+```text
+Docker / Podman
+```
+
+足够。
+
+先做好：
+
+```text
+非 root
+只挂 workspace
+无网络
+资源限制
+超时
+PID 限制
+容器销毁
+```
+
+之后真的需要高风险代码执行，再考虑：
+
+```text
+Firecracker
+Kata
+gVisor
+microVM
+```
+
+否则很容易项目变成：
+
+> 我本来想做个 Telegram Bot，最后开始研究虚拟化安全。
+
+---
+
+# 第三十四阶段：部署
+
+你第一版直接：
+
+```text
+自己的电脑 / VPS
++
+long polling
+```
+
+启动：
+
+```bash
+python app.py
+```
+
+就行。
+
+aiogram 当前文档仍支持 `start_polling()`，而且一个 Bot Token 同时只能有一个 polling 进程；以后需要横向扩展时再考虑 webhook。([Aiogram 文档][3])
+
+所以你最开始甚至不需要：
+
+```text
+Nginx
+Redis
+Webhook
+Kubernetes
+```
+
+都别碰。
+
+---
+
+# 你最终运行起来后，实际数据流应该是这样
+
+例如群里：
+
+> @肥鱼 帮我查一下 DeepSeek V4.1 Flash 的价格，然后算一下 500 万 token 大概多少钱
+
+你的 Bot：
+
+```text
+Telegram
+ ↓
+update_id 去重
+ ↓
+保存消息
+ ↓
+Trigger = 强触发
+ ↓
+debounce
+ ↓
+chat_id queue
+ ↓
+取最近 40 条
+ ↓
+取群设定
+ ↓
+取摘要
+ ↓
+LLM
+ ↓
+tool call:
+   search_web
+   calc
+ ↓
+Policy Engine
+ ↓
+并行执行 search + calc
+ ↓
+工具结果
+ ↓
+LLM
+ ↓
+最终回答
+ ↓
+OutboundQueue
+ ↓
+Telegram
+```
+
+如果模型判断：
+
+```text
+还需要再搜一次
+```
+
+就：
+
+```text
+第二轮 tool call
+```
+
+最多：
+
+```text
+4 轮
+```
+
+之后无论如何结束。
+
+---
+
+# 我会把你的最终架构改成这个
+
+```text
+                         Telegram
+                            │
+                            ▼
+                    ┌───────────────┐
+                    │ Update Ingest │
+                    └───────┬───────┘
+                            │
+                     update_id 去重
+                            │
+                            ▼
+                    ┌───────────────┐
+                    │ Message Gate  │
+                    └───────┬───────┘
+                            │
+                     Trigger 判断
+                            │
+                            ▼
+                    ┌───────────────┐
+                    │ Per-Chat Queue│
+                    └───────┬───────┘
+                            │
+                         Debounce
+                            │
+                            ▼
+                    ┌───────────────┐
+                    │ ContextBuilder│
+                    └───────┬───────┘
+                            │
+            ┌───────────────┼──────────────┐
+            ▼               ▼              ▼
+         人设/群设定      短期记忆       FTS/摘要
+            └───────────────┼──────────────┘
+                            ▼
+                    ┌───────────────┐
+                    │   LLM Agent   │
+                    └───────┬───────┘
+                            │
+                       Tool Calling
+                            │
+                            ▼
+                    ┌───────────────┐
+                    │ Policy Engine │
+                    └───────┬───────┘
+                            │
+          ┌─────────┬───────┼─────────┬─────────┐
+          ▼         ▼       ▼         ▼         ▼
+        Search     Calc    Files     Sticker   Host
+                            │
+                            ▼
+                         Sandbox
+                            │
+                            ▼
+                      Tool Results
+                            │
+                            ▼
+                         LLM Loop
+                            │
+                            ▼
+                    ┌───────────────┐
+                    │ Outbound Queue│
+                    └───────┬───────┘
+                            │
+                    Rate Limit / 429
+                            │
+                            ▼
+                         Telegram
+```
+
+---
+
+# 最后给你一个真正适合动手的顺序
+
+**你不要现在就做全部功能。**
+
+你按这个顺序操作最舒服：
+
+```text
+① @BotFather 创建 Bot
+② /setprivacy → Disable
+③ 踢出群 → 重新拉入
+④ Python 3.11+
+⑤ 建项目目录
+⑥ 安装 aiogram/openai/aiosqlite
+⑦ 写 .env
+⑧ 写最简单的 long polling
+⑨ 打印收到的群消息
+⑩ 加 update_id 去重
+⑪ 加消息过滤
+⑫ 加 1–2 秒 debounce
+⑬ 加 chat_id 队列
+⑭ 接 DeepSeek API
+⑮ 让 Bot 正常聊天
+⑯ SQLite 保存最近 50 条
+⑰ 做 Trigger Gate
+⑱ 做 Tool Registry
+⑲ 先只做 calc
+⑳ 再做 search_web
+㉑ 再做 read_file
+㉒ 再做 write_file
+㉓ 再做 sticker
+㉔ 做 workspace
+㉕ 做摘要 + FTS
+㉖ 做 Docker run_code
+㉗ 做权限系统
+㉘ 做 outbound queue
+㉙ 做限速 + 429
+㉚ 做日志 + metrics
+```
+
+其中真正的**核心 MVP**其实只有：
+
+```text
+Telegram
++
+Debounce
++
+Chat Queue
++
+DeepSeek
++
+SQLite
++
+calc
++
+search_web
++
+read_file
+```
+
+先把这个跑起来，你已经有一个很好玩的“群聊 AI Bot”了。
+
+之后的：
+
+```text
+贴纸
+工作区
+长期记忆
+代码执行
+沙箱
+监控
+```
+
+都是往上加能力，而不是推翻重写。
+
+另外，你原本的“一个 Token、一个人设、多群隔离”的设计完全可以成立：`chat_id` 作为租户隔离键即可，不需要每个群一个 Bot。Telegram 本身也支持按不同 scope 管理 Bot 命令和群内行为。([Telegram][6])
+
+如果你准备真的开始写，我最建议的下一步不是继续设计，而是**直接把第 ①～⑩ 做成一个能运行的 Python 项目骨架**：创建 Bot → 收群消息 → 去重 → debounce → 识别 @/回复/追问 → 接 DeepSeek。这样你可以一边运行一边往上加。
+
+[1]: https://core.telegram.org/bots/features?roistat_visit=3080792&utm_source=chatgpt.com "Telegram Bot Features"
+[2]: https://core.telegram.org/bots/faq?utm_source=chatgpt.com "Bots FAQ"
+[3]: https://docs.aiogram.dev/en/latest/dispatcher/dispatcher.html?utm_source=chatgpt.com "Dispatcher - aiogram 3.31.0 documentation"
+[4]: https://api-docs.deepseek.com/guides/codex?utm_source=chatgpt.com "Your First API Call | DeepSeek API Docs"
+[5]: https://api-docs.deepseek.com/guides/tool_calls/?utm_source=chatgpt.com "Tool Calls | DeepSeek API Docs"
+[6]: https://core.telegram.org/bots/api%20?utm_source=chatgpt.com "Telegram Bot API"

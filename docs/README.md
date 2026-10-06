@@ -29,7 +29,7 @@
 | 表结构、索引、迁移、保留清理 | `docs/database.md` | memory |
 | Token/成本优化（开发侧 + 运行侧） | `docs/token.md` | 其他 |
 | 阶段划分、阶段验收、当前进度 | `TODO.md` | docs/（细节） |
-| 运行环境、Docker/systemd、持久化目录、备份恢复、健康检查、优雅关闭、换机迁移 | `docs/deployment.md` | architecture（只引用） |
+| 运行环境、Docker/systemd、持久化目录、备份恢复、健康检查、优雅关闭、换机迁移、VPS 上线准备（rootless Podman / subuid-subgid / 预拉镜像 / 沙箱验收） | `docs/deployment.md` | architecture（只引用） |
 
 ## 3. 文件清单与唯一职责
 

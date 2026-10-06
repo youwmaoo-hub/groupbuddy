@@ -87,8 +87,10 @@
 - 临时输出目录 `storage/sandbox/`：正常、异常、超时、取消、Bot 关停都立即删除；
   启动时清理带 `groupbuddy=1` 标签的残留容器（上次进程被强杀留下的）。
 - 代码扫描（`app/sandbox/preflight.py`：`os.system`/`subprocess`/`eval`/`__import__`/网络/写入…）只作 **preflight 提示**（只记日志），不作为安全边界。
-- 真实验收：在目标机（Linux + rootless Podman）运行 `scripts/verify_sandbox.py`，逐项验证无网络、非 root、只读根、
-  越界写失败、超时销毁、其他群 workspace 不可见、宿主目录不可见；全部 PASS 才允许开启 Tier B。
+- 真实验收：在目标机（Linux + rootless Podman）由**运行 Bot 的同一用户**执行 `scripts/verify_sandbox.py`，逐项验证无网络、非 root、
+  只读根、fsize 上限、cgroup 资源上限（256 MB / 0.5 CPU / 64 PIDs）、超时销毁、无残留容器、临时目录已清理、
+  其他群 workspace 不可见、宿主目录不可见。上线清单与 Tier A/B 判读见 `docs/deployment.md` §12；
+  Tier B 任一项不 PASS 就把 `SANDBOX_TIER_B=off` 只保留 Tier A。
 - **红线：禁止挂载 docker/podman socket**（等价于宿主机 root 权限），**禁止 privileged / host network / 宿主目录挂载**。
 - 若确需调用容器运行时，只允许由权限受限的独立组件用固定模板调用（白名单参数）；模型无法影响镜像、参数与宿主路径。
 - 不使用 microVM/Kata/gVisor（阶段 1–8）；确有高风险需求时再评估。

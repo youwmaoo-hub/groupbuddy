@@ -6,6 +6,7 @@
     .venv/bin/python scripts/verify_sandbox.py --pull   # 允许脚本先拉取镜像
 
 逐项打印 PASS/FAIL，任一失败退出码 1。只写 storage/workspaces/<测试 chat_id>/。
+必须以运行 Bot 的同一个用户、同一份配置执行（工作目录、.env、目录属主保持一致）。
 运行期 pull 由部署阶段负责（SANDBOX_BACKEND 的 run_code 自身永不 pull）。
 """
 
@@ -41,9 +42,14 @@ async def main(argv: list[str]) -> int:
     if not backend.available():
         print("FAIL 没有可用的容器运行时：安装 rootless Podman 后重试")
         return 1
+    env = settings.subprocess_env()
+    print(
+        f"路径 workspace={settings.workspace_root} 临时目录={settings.sandbox_temp_dir} "
+        f"日志={settings.log_dir} 镜像={settings.sandbox_image}"
+    )
     if "--pull" in argv:
-        subprocess.run([backend.binary, "pull", settings.sandbox_image], check=False)
-    elif subprocess.run([backend.binary, "image", "exists", settings.sandbox_image], check=False).returncode != 0:
+        subprocess.run([backend.binary, "pull", settings.sandbox_image], check=False, env=env)
+    elif subprocess.run([backend.binary, "image", "exists", settings.sandbox_image], check=False, env=env).returncode != 0:
         print(f"FAIL 镜像不存在：{settings.sandbox_image}（先执行 {backend.binary} pull {settings.sandbox_image}）")
         return 1
 
@@ -70,6 +76,21 @@ async def main(argv: list[str]) -> int:
     await check("无网络", "import socket; socket.create_connection(('1.1.1.1', 53), 2)", want_ok=False)
     await check("只读根", "open('/usr/lib/probe.txt', 'w').write('x')", want_ok=False)
     await check("单文件大小上限", "import resource; print('FSIZE', resource.getrlimit(resource.RLIMIT_FSIZE)[0])", contains="FSIZE 8388608")
+    await check(
+        "资源上限生效（cgroup）",
+        "import os\n"
+        "def rd(p):\n"
+        "    try:\n"
+        "        return open(p).read().strip()\n"
+        "    except OSError:\n"
+        "        return None\n"
+        "mem = rd('/sys/fs/cgroup/memory.max') or rd('/sys/fs/cgroup/memory/memory.limit_in_bytes')\n"
+        "pids = rd('/sys/fs/cgroup/pids.max') or rd('/sys/fs/cgroup/pids/pids.max')\n"
+        "cpu = rd('/sys/fs/cgroup/cpu.max') or rd('/sys/fs/cgroup/cpu/cpu.cfs_quota_us')\n"
+        "ok = mem == '268435456' and pids == '64' and cpu in ('50000 100000', '50000')\n"
+        "print('LIMITS', ok, mem, pids, cpu)\n",
+        contains="LIMITS True",
+    )
     await check("超时被 kill", "import time; time.sleep(60)", timeout=1, allow_codes=("timeout",))
 
     workspace_root = Path(settings.workspace_root)
@@ -78,12 +99,15 @@ async def main(argv: list[str]) -> int:
     (other_dir / "other.txt").write_text("other", encoding="utf-8")
 
     if backend.supports_workspace_write():
-        await check(
-            "Tier B 本群 workspace 读写",
-            "open('/workspace/probe.txt', 'w').write('hi'); print('READ', open('/workspace/probe.txt').read())",
+        tierb = await check(
+            "Tier B 本群 workspace 读写（非 root）",
+            "import os; open('/workspace/probe.txt', 'w').write('hi'); "
+            "print('READ', open('/workspace/probe.txt').read(), 'UID', os.getuid())",
             workspace=True,
             contains="READ hi",
         )
+        if tierb is not None and "UID 0" in str(tierb["stdout"]):
+            results[-1] = (results[-1][0], False, "容器内是 root")
         host_file = workspace_root / str(VERIFY_CHAT_ID) / "probe.txt"
         results.append(("Tier B 宿主侧可见", host_file.is_file(), str(host_file)))
         listing = await check("Tier B 其他群不可见", "import os; print('LS', sorted(os.listdir('/workspace')))", workspace=True)
@@ -105,6 +129,10 @@ async def main(argv: list[str]) -> int:
     stale = await backend.list_containers()
     results.append(("执行后没有残留容器", not stale, ",".join(stale)))
 
+    temp_dir = Path(settings.sandbox_temp_dir)
+    leftovers = sorted(x.name for x in temp_dir.glob("*")) if temp_dir.exists() else []
+    results.append(("临时输出目录已清理", not leftovers, ",".join(leftovers)))
+
     for path in (workspace_root / str(VERIFY_CHAT_ID) / "probe.txt", other_dir / "other.txt"):
         if path.exists():
             path.unlink()
@@ -114,6 +142,13 @@ async def main(argv: list[str]) -> int:
         print(f"{'PASS' if ok else 'FAIL'} {name} | {detail}")
         if not ok:
             failed += 1
+    tier_a = [ok for name, ok, _ in results if name.startswith("Tier A")]
+    tier_b = [ok for name, ok, _ in results if name.startswith("Tier B")]
+    print(f"Tier A：{'PASS' if tier_a and all(tier_a) else 'FAIL'}")
+    if backend.supports_workspace_write():
+        print(f"Tier B：{'PASS' if tier_b and all(tier_b) else 'FAIL'}")
+    else:
+        print("Tier B：未启用（fail-closed 生效）")
     print(f"\n合计 {len(results)} 项，失败 {failed} 项")
     return 1 if failed else 0
 

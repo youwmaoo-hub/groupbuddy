@@ -6,8 +6,8 @@
 
 ## 1. 环境契约（同一份代码，两种环境）
 
-- 开发：本机 Windows（可选 Docker），用于编写与离线测试。
-- 生产：Linux VPS，按 24/7 服务运行。
+- 开发：本机 Windows（可选 Docker），用于编写与离线测试；沙箱在 Windows 上只用 FakeBackend 离线测试，不跑真实容器。
+- 生产：Linux VPS（rootless Podman），按 24/7 服务运行；VPS 上线清单见 §12。
 - 允许存在的差异只有 `.env`、容器运行时与进程托管方式；业务代码不写平台分支、不依赖 Windows 特性。
 - 禁止把本机路径、用户名、主机名、IP、域名写进代码或文档。
 - 路径一律用 `pathlib` + 配置项拼接，不用字符串硬编码盘符或斜杠。
@@ -21,15 +21,15 @@
 - `app/`（代码）：无状态，可随时重建；容器镜像只包含代码。
 - `storage/`（持久数据）：`bot.db`、`workspaces/<chat_id>/`、`logs/`、`backups/`。
 - 容器部署必须把 `storage/` 挂成 volume 或绑定挂载，容器重建/升级不得丢数据。
-- 目录真值以 `.env.example` 为准：`DATA_DIR`、`DB_PATH`、`WORKSPACE_ROOT`。
+- 目录真值以 `.env.example` 为准：`DATA_DIR`、`DB_PATH`、`WORKSPACE_ROOT`、`LOG_DIR`、`SANDBOX_TEMP_DIR`；默认值是相对路径，按**进程工作目录**解析，VPS 上建议写绝对路径（见 §12.4）。
 - 首次启动由程序创建缺失目录；目录不可写时拒绝启动（fail-closed）。
 
 ## 3. 配置注入
 
 - 只有 `app/config.py` 读取环境变量；其余模块只接收 `Settings`（见 `docs/architecture.md` §2）。
-- 必须注入：`BOT_TOKEN`、`LLM_BASE_URL`、`LLM_API_KEY`、`LLM_MODEL`、`DB_PATH`、`WORKSPACE_ROOT`、`TIMEZONE`、`BACKUP_KEEP`。
+- 必填只有 `BOT_TOKEN` 与 `LLM_API_KEY`（无默认值，缺失拒绝启动）；其余键都有代码默认值（`LLM_BASE_URL`、`LLM_MODEL`、`DATA_DIR`、`DB_PATH`、`WORKSPACE_ROOT`、`LOG_DIR`、`SANDBOX_TEMP_DIR`、`TIMEZONE` 等）。生产环境建议把路径类键显式写出来（见 §12.4）。
 - 实例身份：`BOT_INSTANCE_ID`（默认 `default`）。多实例部署时每实例注入不同的 `DATA_DIR`/`DB_PATH`/`WORKSPACE_ROOT`，互不共享目录（见 `docs/domain.md` §2）。
-- `.env` 与 `.env.example` 键名一一对应，模块导入即校验，缺失启动失败。
+- `.env.example` 列出常用键与默认值；`.env` 只写需要覆盖的键。键名拼错会被**静默忽略**（走默认值），改完按 §12.5 核对启动日志里的 `配置加载完成` 一行。
 
 ## 4. 时间与 UTC
 
@@ -86,3 +86,95 @@
 ## 11. 明确不做（阶段 1–9）
 
 Kubernetes、微服务、Redis、外部数据库、Nginx、Webhook 入口、多机 HA、CI/CD 平台、自动扩容。
+
+## 12. Linux VPS 上线准备（阶段 7 沙箱）
+
+正式生产目标是 **Linux + rootless Podman**；Windows 只做开发与离线测试（沙箱走 FakeBackend，不跑真实容器）。
+本节是 VPS 到位后的上线清单；在 §12.6 通过之前，「Linux 真机验收」保持为阶段 7 的待办项。
+
+### 12.1 目标机条件
+
+- Linux（x86_64 / arm64）+ systemd + cgroup v2；Podman ≥ 4 且以 rootless 运行（`podman info` 显示 `cgroupVersion: v2`）。
+- 专用非 root 用户运行 Bot（下称 `<bot 用户>`）：不属于 `docker` 组、不挂载 podman socket。
+- 已装 Python 3.12 虚拟环境与 Podman CLI；项目目录含 `app/`、`.env`、`storage/`。
+- 资源建议：内存 ≥ 1 GB（Bot 常驻 + `SANDBOX_MEMORY_MB` 256 × `SANDBOX_MAX_CONCURRENT` 2），磁盘 ≥ 5 GB（镜像 + 数据 + 日志）。
+- 容器运行时是**可选依赖**：没有 Podman/Docker 时 Bot 照常运行，只是 `run_code` 一律 `sandbox_unavailable`（fail-closed，不退回宿主机）。
+
+### 12.2 安装并启用 rootless Podman（一次性）
+
+```bash
+sudo apt-get update && sudo apt-get install -y podman        # Debian/Ubuntu；RHEL 系用 dnf install podman
+sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 <bot 用户>
+sudo loginctl enable-linger <bot 用户>
+```
+
+用**运行 Bot 的同一个用户**（不加 `sudo`）核对：
+
+```bash
+sudo -iu <bot 用户>
+podman info --format '{{.Host.Security.Rootless}}'   # 必须输出 true
+grep <bot 用户> /etc/subuid /etc/subgid               # 各一行，范围不重叠
+```
+
+- 报 subuid/subgid 相关错误时执行 `podman system migrate` 后重试。
+- 拉镜像受网络影响：部署阶段先配好镜像源或代理；运行期不再下载（见 §12.3）。
+
+### 12.3 预拉沙箱镜像（运行期禁止 pull）
+
+```bash
+podman pull python:3.12-slim
+podman image exists python:3.12-slim && echo IMAGE_OK
+```
+
+### 12.4 目录、属主与 `.env`
+
+- VPS 上用绝对路径写 `DATA_DIR`、`DB_PATH`、`WORKSPACE_ROOT`、`LOG_DIR`、`SANDBOX_TEMP_DIR`（默认值是相对**进程工作目录**的相对路径）。
+- `storage/`（`bot.db`、`workspaces/`、`logs/`、`sandbox/`）属主必须是 `<bot 用户>`；程序首次启动创建缺失目录，不可写则拒绝启动。
+- `.env` 权限 `600`、属主同一用户；不要放进 `storage/`，不要提交进 Git。
+- 沙箱键保持默认即可：`SANDBOX_BACKEND=auto`、`SANDBOX_IMAGE=python:3.12-slim`、`SANDBOX_TIER_B=auto`、`SANDBOX_MAX_CONCURRENT=2`；**不要**改成运行期自动拉取镜像。
+
+### 12.5 启动 Bot
+
+```bash
+cd <项目根>            # 含 app/、.env、storage/
+.venv/bin/python -m app.main
+```
+
+启动日志逐项核对（任一不对先不要开放 `run_code`）：
+
+- `配置加载完成 … SANDBOX_BACKEND=auto …`：确认 `.env` 真被读到（键名拼错会被静默忽略，见 §3）。
+- `沙箱状态 {'backend': 'podman', 'available': True, 'workspace_write': True|False, …}`：`available=False` 说明后端不可用，此时 `run_code` 一律 `sandbox_unavailable`（fail-closed）。
+- `Bot 就绪 username=… bot_id=… model=…`：轮询已建立。
+- 停止用 `SIGTERM`（`Ctrl+C` 或 `kill <pid>`）：停收更新 → 限时排空 10 秒 → 落库并关闭；**不要** `kill -9`。
+- 阶段 1–9 不做进程内热加载：改 `.env` 或代码后重启进程。
+
+### 12.6 真机验收 `scripts/verify_sandbox.py`
+
+```bash
+cd <项目根>
+.venv/bin/python scripts/verify_sandbox.py           # 镜像已预拉取（推荐）
+.venv/bin/python scripts/verify_sandbox.py --pull    # 允许脚本先拉取镜像（仅部署阶段）
+```
+
+- 必须与 Bot 用**同一个用户、同一份配置**执行；脚本只写 `storage/workspaces/999001/`（结束时删除）与沙箱临时目录探针。
+- 输出逐项 `PASS/FAIL`，末尾给出 `Tier A` / `Tier B` 结论与 `合计 N 项，失败 M 项`；退出码 0 = 全部通过。
+
+| 结论 | 判定方式 | 后续动作 |
+|---|---|---|
+| Tier A 通过 | Tier A 各项全 PASS：纯计算、非 root、无网络、只读根、fsize 上限、cgroup 资源上限、超时销毁、无残留容器、临时目录已清理 | 可开放纯计算 `run_code` |
+| Tier B 通过 | `workspace_write=True` 且 Tier B 各项全 PASS：本群 workspace 读写且容器内非 root、其他群不可见、宿主目录不可见 | 可开放 `workspace=true` |
+| Tier B 失败 | `workspace_write=False`，或 Tier B 任一项 FAIL | 在 `.env` 写 `SANDBOX_TIER_B=off` 并重启，只保留 Tier A；**不要**用 privileged / root / 宿主目录挂载放宽 |
+
+### 12.7 开放 `run_code`（群开关）
+
+- `run_code` 是 L3 工具，群开关 `chat_settings.allow_code` 默认 0；`workspace=true` 还需要 `allow_write`（见 `docs/security.md` §2）。
+- 阶段 8 之前没有群主命令，只能按 `docs/database.md` §2 直接改 `chat_settings`（先停进程再改，避免并发写）；改完重启进程。
+- 验收未通过或不确定时保持关闭：默认关闭时该工具不会出现在提示词里。
+
+### 12.8 24/7 运行注意（当前实现已具备）
+
+- 数据全在 `storage/`：SQLite（WAL + `busy_timeout=5000`）、每群 `workspaces/`、`logs/`、`sandbox/`；备份与恢复见 §8 与 `docs/database.md` §5（自动备份任务属阶段 9，当前需人工 `sqlite3 .backup`；WAL 模式下不要直接 `cp` 数据库文件）。
+- 日志：`LOG_DIR` 下 5 MB × 3 轮转，统一经 SecretFilter 脱敏；日常 `LOG_LEVEL=INFO` 足够，排查时临时改 DEBUG。
+- 沙箱临时文件用后即删；启动时清理带 `groupbuddy=1` 标签的残留容器；被 `SIGKILL` 后可能留下空临时目录，直接清空 `SANDBOX_TEMP_DIR` 即可。
+- 健康检查（`storage/health.json`）与 `/health` 属阶段 8；当前以「进程存活 + 日志 + `scripts/verify_sandbox.py` 是否通过」判断状态。
+- 单机单进程：同一个 Bot Token 只允许一个 polling 进程；进程托管（systemd 或容器 `restart`）属阶段 9。

@@ -65,6 +65,6 @@
 阶段 4（工作区与文件：`read_file` / `write_file` + 共享路径安全）已完成；
 阶段 5（贴纸：`stickers` 表 + 情绪匹配 + 冷却 + `send_sticker`）已完成；
 阶段 6（记忆：分档窗口 + 字符预算、噪声标记、模板化摘要、FTS 检索）已完成；
-阶段 7（沙箱 run_code：固定容器参数 + rootless Podman/Docker 后端 + fail-closed）已完成；阶段 8 未开始。
+阶段 7（沙箱 run_code：固定容器参数 + rootless Podman/Docker 后端 + fail-closed）已完成，部署前准备已收尾（VPS 上线清单 `docs/deployment.md` §12、真机验收 `scripts/verify_sandbox.py`），Linux 真机验收待 VPS；阶段 8 未开始。
 阶段 10（Web 控制面板与多实例）只完成架构预留（`docs/domain.md`、`docs/architecture.md` §10），未开发面板代码。
 阶段划分与验收见 `TODO.md`。

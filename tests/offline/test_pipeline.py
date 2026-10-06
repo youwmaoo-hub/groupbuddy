@@ -6,7 +6,7 @@ import asyncio
 import unittest
 
 from app.config import today_in_timezone
-from app.gate.debounce import Debouncer
+from app.gate.debounce import Batch, Debouncer
 from app.gate.dedupe import UpdateDeduplicator
 from app.gate.limits import ProactiveLimiter
 from app.gate.queue import ChatQueue
@@ -18,6 +18,8 @@ from app.session.context import ContextBuilder
 from app.session.mood import MoodTracker
 from app.session.runner import SessionRunner
 from app.storage.repo import chat_settings, messages, stickers, updates, usage
+from app.session.retrieval import term_tokens
+from app.storage.repo import summaries as summaries_repo
 from app.storage.repo.stickers import DbStickerStore
 from app.tools.builtin import build_registry
 from app.tools.executor import ToolExecutor
@@ -216,6 +218,75 @@ class PipelineTests(DbTestCase):
         self.assertEqual(last_payload[-1]["role"], "system")
         self.assertIn("心情不错", str(last_payload[-1]["content"]))
 
+    async def test_summary_memory_block_is_injected(self) -> None:
+        await summaries_repo.insert(
+            self.connection,
+            chat_id=1,
+            text="当前话题：部署脚本",
+            tokens=term_tokens("当前话题：部署脚本"),
+            msg_from=1,
+            msg_to=1,
+        )
+        self._build("好的")
+        await self._send(["@bot 在的"])
+        await self._flush()
+        payload = self.llm.calls[0]
+        self.assertEqual(payload[1]["role"], "system")
+        self.assertTrue(str(payload[1]["content"]).startswith("## 记忆"))
+        self.assertIn("最近摘要：", str(payload[1]["content"]))
+        self.assertTrue(str(payload[0]["content"]).startswith("## 全局人格"))
+
+    async def test_retrieval_snippets_are_injected_on_recall(self) -> None:
+        await summaries_repo.insert(
+            self.connection,
+            chat_id=1,
+            text="之前讨论过部署脚本的写法",
+            tokens=term_tokens("之前讨论过部署脚本的写法"),
+        )
+        self._build("我记得")
+        await self._send(["@bot 之前那个部署脚本怎么搞的"])
+        await self._flush()
+        memory = str(self.llm.calls[0][1]["content"])
+        self.assertIn("相关记录：", memory)
+        self.assertIn("[摘要#", memory)
+
+    async def test_budget_trims_old_history_and_keeps_current(self) -> None:
+        self.settings = make_settings(self.tmp, HISTORY_BUDGET_CHARS=80)
+        old_text = "很久以前的旧消息" * 6
+        for index in range(6):
+            await messages.insert(
+                self.connection,
+                chat_id=1,
+                message_id=500 + index,
+                user_id=42,
+                role="user",
+                text=f"{old_text}{index}",
+            )
+        self._build("好")
+        await self._send(["@bot 现在的问题是什么"])
+        await self._flush()
+        contents = [str(item["content"]) for item in self.llm.calls[0]]
+        self.assertTrue(any("现在的问题是什么" in item for item in contents))
+        self.assertFalse(any(f"{old_text}0" in item for item in contents))
+        self.assertGreater(self.runner._context.consume_trimmed(1), 0)
+
+    def test_window_size_tiers(self) -> None:
+        self._build()
+        builder = self.runner._context
+
+        def batch_of(*texts: str) -> Batch:
+            items = [
+                make_incoming(update_id=900 + index, chat_id=1, message_id=900 + index, text=text)
+                for index, text in enumerate(texts)
+            ]
+            return Batch(chat_id=1, items=items, last_at=0.0, full=False)
+
+        fence = chr(96) * 3
+        self.assertEqual(builder.window_size(batch_of("哈哈")), self.settings.history_chitchat)
+        self.assertEqual(builder.window_size(batch_of("普通的一句话，随便聊聊")), self.settings.history_default)
+        self.assertEqual(builder.window_size(batch_of("之前那个怎么搞的")), self.settings.history_complex)
+        self.assertEqual(builder.window_size(batch_of(f"看代码 {fence}x{fence}")), self.settings.history_complex)
+
     async def test_send_sticker_needs_group_switch(self) -> None:
         await chat_settings.upsert(self.connection, 1, allow_sticker=0)
         self._build(tool_reply("send_sticker", {"valence": 1.0, "arousal": 1.0}), "不发")
@@ -297,7 +368,10 @@ class PipelineTests(DbTestCase):
         self.clock.advance(2.0)
         self.assertEqual(self.debouncer.due(), [])
         self.assertEqual(self.llm.calls, [])
-        self.assertEqual(len(await messages.recent(self.connection, chat_id=1, limit=10)), 1)
+        stored = await messages.recent(self.connection, chat_id=1, limit=10, include_noise=True)
+        self.assertEqual(len(stored), 1)
+        self.assertTrue(stored[0].noise)  # F3.2：入库即打噪声标，但默认不进上下文
+        self.assertEqual(await messages.recent(self.connection, chat_id=1, limit=10), [])
 
     async def test_private_chat_is_silent_and_free(self) -> None:
         # docs/requirements.md §2.2：私聊默认完全不处理

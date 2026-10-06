@@ -11,7 +11,8 @@
 阶段 2：**已完成**（发言闸门：不要求 @ 的主动回复判定 + 冷却与每窗口上限）。
 阶段 3：**已完成**（工具主干：注册表 / 权限判定 / 执行器 + `calc` + `search_web` 接口）。
 阶段 4：**已完成**（工作区与文件：`read_file` / `write_file` + 共享路径安全）。
-阶段 5：**已完成**（贴纸：`stickers` 表、情绪匹配、冷却与出站媒体通道）。一次只推进一个阶段；不得跳阶段。
+阶段 5：**已完成**（贴纸：`stickers` 表、情绪匹配、冷却与出站媒体通道）。
+阶段 6：**已完成**（记忆：分档窗口 + 字符预算、噪声标记、模板化摘要、FTS 检索）。一次只推进一个阶段；不得跳阶段。
 阶段 0 含部署约束增补：Windows 开发 / Linux VPS 24/7 生产，同一份代码（见 `docs/deployment.md`）。
 阶段 10（Web 控制面板与多实例）：**仅完成架构预留**（`docs/domain.md`、`docs/architecture.md` §10），未开发面板，未建控制面表。
 
@@ -77,7 +78,13 @@
 ### 阶段 6 · 记忆
 
 - 交付：F3.1–F3.4（动态窗口、噪声标记、模板化摘要、FTS5 检索）
+  实现位置：`app/session/{noise,retrieval,summary}.py`、`app/session/context.py`（唯一组装点）、
+  `app/storage/repo/{summaries,notes}.py`（FTS 显式同步）、migration 3（summaries/notes/FTS + `usage.purpose`）、
+  `scripts/register_note.py`（一次性运维写入口）。
 - 验收：长会话后仍能回答"之前那个怎么搞的"；摘要遵循模板；检索只补背景。
+  离线覆盖：`tests/offline/{test_noise,test_retrieval,test_summary}.py` 与 `test_storage.py`/`test_pipeline.py` 扩展。
+- 明确不做：向量检索/embedding、Redis、跨群/全局记忆、用户画像、群主 memory 命令、面板、Forum Topic 实际逻辑、
+  mode 路由、search_web 后端与知识缺口行为、阶段 7 sandbox；不引入新依赖（含分词库）；不把消息原文索引进 FTS。
 
 ### 阶段 7 · 沙箱 run_code
 

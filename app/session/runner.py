@@ -17,6 +17,7 @@ from app.llm.loop import Outcome, Responder
 from app.outbound.queue import OutboundQueue
 from app.session.context import ContextBuilder
 from app.session.mood import MoodTracker
+from app.session.noise import is_noise
 from app.storage.repo import chat_settings, messages, usage
 from app.telegram.parse import IncomingMessage
 from app.tools.executor import ToolExecutor
@@ -69,6 +70,11 @@ class SessionRunner:
             logger.debug("过滤丢弃 chat_id=%s 原因=%s", incoming.chat_id, result.reason)
             return
 
+        noise = is_noise(
+            incoming.text,
+            mentions_bot=incoming.mentions_bot,
+            reply_to_bot=incoming.reply_to_bot,
+        )
         await messages.insert(
             self._connection,
             chat_id=incoming.chat_id,
@@ -78,7 +84,11 @@ class SessionRunner:
             text=incoming.text,
             thread_id=incoming.thread_id,
             reply_to_message_id=None,
+            noise=noise,
         )
+        if noise:  # 噪声不进触发、不进上下文、不进摘要输入（docs/memory.md §3）
+            logger.debug("噪声消息不参与触发 chat_id=%s", incoming.chat_id)
+            return
 
         since_bot_reply = await messages.since_last_assistant(self._connection, chat_id=incoming.chat_id)
         decision = self._detector.decide(incoming, since_bot_reply=since_bot_reply)
@@ -155,6 +165,7 @@ class SessionRunner:
                 output_tokens=reply.output_tokens,
                 tool_calls=outcome.tool_calls,
                 tool_ms=outcome.tool_ms,
+                purpose="chat",
             )
         except Exception:
             logger.exception("记账失败 chat_id=%s", batch.chat_id)

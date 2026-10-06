@@ -54,6 +54,14 @@ class Settings(BaseSettings):
     proactive_window_seconds: float = Field(default=300.0, alias="PROACTIVE_WINDOW_SECONDS")
     proactive_max_per_window: int = Field(default=3, alias="PROACTIVE_MAX_PER_WINDOW")
 
+    # --- 记忆（阶段 6，docs/memory.md） ---
+    history_budget_chars: int = Field(default=6000, alias="HISTORY_BUDGET_CHARS")
+    summary_min_messages: int = Field(default=40, alias="SUMMARY_MIN_MESSAGES")
+    summary_quiet_seconds: float = Field(default=120.0, alias="SUMMARY_QUIET_SECONDS")
+    summary_max_chars: int = Field(default=300, alias="SUMMARY_MAX_CHARS")
+    summary_max_output_tokens: int = Field(default=400, alias="SUMMARY_MAX_OUTPUT_TOKENS")
+    summary_poll_seconds: float = Field(default=15.0, alias="SUMMARY_POLL_SECONDS")
+
     # --- 工具（阶段 3） ---
     tool_max_rounds: int = Field(default=2, ge=0, le=4, alias="TOOL_MAX_ROUNDS")
     # search_web 后端未定（docs/requirements.md §4 #1）：none = 不注册该工具
@@ -122,6 +130,12 @@ class Settings(BaseSettings):
             "HISTORY_DEFAULT": self.history_default,
             "HISTORY_COMPLEX": self.history_complex,
             "HISTORY_CHITCHAT": self.history_chitchat,
+            "HISTORY_BUDGET_CHARS": self.history_budget_chars,
+            "SUMMARY_MIN_MESSAGES": self.summary_min_messages,
+            "SUMMARY_QUIET_SECONDS": self.summary_quiet_seconds,
+            "SUMMARY_MAX_CHARS": self.summary_max_chars,
+            "SUMMARY_MAX_OUTPUT_TOKENS": self.summary_max_output_tokens,
+            "SUMMARY_POLL_SECONDS": self.summary_poll_seconds,
             "ALLOW_PRIVATE_CHAT": self.allow_private_chat,
             "FOLLOWUP_MAX_MESSAGES": self.followup_max_messages,
             "PROACTIVE_COOLDOWN_SECONDS": self.proactive_cooldown_seconds,

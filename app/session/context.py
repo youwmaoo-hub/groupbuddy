@@ -7,14 +7,21 @@ import aiosqlite
 from app.config import Settings
 from app.gate.debounce import Batch
 from app.llm.prompts import build_messages, build_system_prompt
-from app.storage.repo import chat_settings, messages
+from app.session import retrieval
+from app.storage.repo import chat_settings, messages, summaries
 from app.storage.repo_models import StoredMessage
+
+MEMORY_HEADING = "## 记忆"
+COMPLEX_TEXT_CHARS = 400
 
 
 class ContextBuilder:
+    """唯一上下文组装点：固定段 → 记忆块 → 历史窗口 → 本轮 → 情绪（docs/token.md 链 2）。"""
+
     def __init__(self, connection: aiosqlite.Connection, settings: Settings) -> None:
         self._connection = connection
         self._settings = settings
+        self._trimmed: dict[int, int] = {}
 
     async def build(
         self,
@@ -42,13 +49,82 @@ class ContextBuilder:
         history = await messages.recent(
             self._connection,
             chat_id=batch.chat_id,
-            limit=self._settings.history_default,
+            limit=self.window_size(batch),
             until_id=until_id,
         )
         latest = batch.items[-1] if batch.items else None
         if latest is not None and not any(item.message_id == latest.message_id for item in history):
             history = [*history, _as_stored(latest)]
-        return build_messages(system_prompt, history, mood=mood)
+
+        # 先按"本轮 + 情绪"的占用裁剪历史；记忆块随后再占用剩余预算
+        reserved = sum(len(item.text) for item in batch.items) + len(mood or "")
+        history, dropped = self._trim(history, reserved=reserved)
+
+        memory = await self._memory_lines(batch, dropped=dropped)
+        if memory:
+            memory_text = MEMORY_HEADING + "\n" + "\n".join(memory)
+            reserved += len(memory_text)
+            history, extra = self._trim(history, reserved=reserved)
+            dropped += extra
+        if dropped:
+            self._trimmed[batch.chat_id] = dropped
+
+        payload = build_messages(system_prompt, history, mood=mood)
+        if memory:
+            payload.insert(1, {"role": "system", "content": MEMORY_HEADING + "\n" + "\n".join(memory)})
+        return payload
+
+    def window_size(self, batch: Batch) -> int:
+        """纯规则分档：复杂 50 / 闲聊 10 / 默认 20（docs/memory.md §2）。"""
+        texts = [item.text for item in batch.items]
+        joined = "\n".join(texts)
+        if (
+            any("```" in text for text in texts)
+            or any(len(text) >= COMPLEX_TEXT_CHARS for text in texts)
+            or "http://" in joined
+            or "https://" in joined
+            or retrieval.retrieval_wanted(texts)
+        ):
+            return self._settings.history_complex
+        if texts and all(len(text) < 10 for text in texts) and not any("?" in text or "？" in text for text in texts):
+            return self._settings.history_chitchat
+        return self._settings.history_default
+
+    def consume_trimmed(self, chat_id: int) -> int:
+        """最近一次组装被预算裁掉的历史条数（观测/测试用，不参与决策）。"""
+        return self._trimmed.pop(chat_id, 0)
+
+    def _trim(self, history: list[StoredMessage], *, reserved: int) -> tuple[list[StoredMessage], int]:
+        """超预算从最旧历史开始丢；本轮消息永不丢。"""
+        budget = self._settings.history_budget_chars
+        dropped = 0
+        total = reserved + sum(len(row.text) for row in history)
+        while history and total > budget:
+            total -= len(history[0].text)
+            history.pop(0)
+            dropped += 1
+        return history, dropped
+
+    async def _memory_lines(self, batch: Batch, *, dropped: int) -> list[str]:
+        """记忆块：最近 1 条摘要 + 按需检索片段（查不到就不注入）。"""
+        lines: list[str] = []
+        latest = await summaries.latest(self._connection, chat_id=batch.chat_id)
+        if latest is not None:
+            lines.append("最近摘要：" + " ".join(latest.text.split()))
+
+        start = await summaries.cursor(self._connection, chat_id=batch.chat_id)
+        pending = await messages.pending_since(self._connection, chat_id=batch.chat_id, after_id=start)
+        snippets = await retrieval.search_memory(
+            self._connection,
+            chat_id=batch.chat_id,
+            text=" ".join(item.text for item in batch.items),
+            trimmed=dropped,
+            has_unsummarized=pending.messages > 0,
+        )
+        if snippets:
+            lines.append("相关记录：")
+            lines.extend(f"- {line}" for line in snippets)
+        return lines
 
 
 def _as_stored(item) -> StoredMessage:

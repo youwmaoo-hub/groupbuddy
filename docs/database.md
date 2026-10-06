@@ -39,23 +39,25 @@ messages (
 );
 CREATE INDEX idx_messages_chat_time ON messages (chat_id, created_at DESC);
 
--- 滚动摘要
+-- 滚动摘要（阶段 6 / migration 3）：tokens 是检索用分词串（中文双字 bigram + 拉丁词）
 summaries (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   chat_id    INTEGER NOT NULL,
   thread_id  INTEGER,
   text       TEXT NOT NULL,
+  tokens     TEXT NOT NULL,
   msg_from   INTEGER, msg_to INTEGER,
   created_at INTEGER NOT NULL
 );
 CREATE INDEX idx_summaries_chat ON summaries (chat_id, created_at DESC);
 
--- 长期笔记
+-- 长期笔记（阶段 6 / migration 3）：同名覆盖，version 递增
 notes (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   chat_id    INTEGER NOT NULL,
   name       TEXT NOT NULL,
   text       TEXT NOT NULL,
+  tokens     TEXT NOT NULL,
   version    INTEGER NOT NULL DEFAULT 1,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,
@@ -102,6 +104,7 @@ usage (
   output_tokens  INTEGER NOT NULL DEFAULT 0,
   tool_calls     INTEGER NOT NULL DEFAULT 0,
   tool_ms        INTEGER NOT NULL DEFAULT 0,
+  purpose        TEXT NOT NULL DEFAULT 'chat',  -- chat=回复调用；summary=摘要调用（阶段 6）
   created_at     INTEGER NOT NULL
 );
 CREATE INDEX idx_usage_chat_day ON usage (chat_id, day);
@@ -116,9 +119,9 @@ tool_failures (
 );
 CREATE INDEX idx_tool_failures_tool_time ON tool_failures (tool, created_at DESC);
 
--- FTS（内容同步由写入方负责）
-CREATE VIRTUAL TABLE summaries_fts USING fts5(text, content='summaries', content_rowid='id');
-CREATE VIRTUAL TABLE notes_fts     USING fts5(text, content='notes',     content_rowid='id');
+-- FTS（阶段 6 / migration 3；索引 tokens 列，内容同步由 repo 显式维护，不用 trigger）
+CREATE VIRTUAL TABLE summaries_fts USING fts5(tokens, content='summaries', content_rowid='id');
+CREATE VIRTUAL TABLE notes_fts     USING fts5(tokens, content='notes',     content_rowid='id');
 ```
 
 ## 3. 关系与不变量

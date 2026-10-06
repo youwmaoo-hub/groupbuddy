@@ -25,6 +25,7 @@ from app.outbound.ratelimit import RateLimiter
 from app.session.context import ContextBuilder
 from app.session.mood import MoodTracker
 from app.session.runner import SessionRunner
+from app.session.summary import SummaryScheduler, SummaryService
 from app.storage.db import apply_migrations, close_db, open_db
 from app.storage.repo import updates
 from app.storage.repo.stickers import DbStickerStore
@@ -139,8 +140,20 @@ class Application:
                 name="debounce-loop",
             ),
             asyncio.create_task(self._housekeeping_loop(), name="housekeeping"),
+            asyncio.create_task(self._summary_loop(connection), name="summary-scheduler"),
         ]
         logger.info("启动完成 data_dir=%s db=%s", settings.data_dir, settings.db_path)
+
+    async def _summary_loop(self, connection: aiosqlite.Connection) -> None:
+        """后台摘要：异步、按群串行、可优雅停止，不阻塞回复（docs/memory.md §4）。"""
+        service = SummaryService(connection, self._llm, self._settings, clock=time.monotonic)
+        scheduler = SummaryScheduler(
+            service,
+            connection,
+            poll_seconds=self._settings.summary_poll_seconds,
+            stop=self._stop,
+        )
+        await scheduler.run()
 
     async def run_forever(self) -> None:
         await self._stop.wait()

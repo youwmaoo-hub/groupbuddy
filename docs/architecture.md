@@ -45,6 +45,9 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | 会话 | `app/session/runner.py` | 一轮编排：context → llm → tools → outbound |
 | | `app/session/context.py` | ContextBuilder：预算式历史 + 噪声过滤；窗口按本轮边界（`id` 快照）截断 |
 | | `app/session/mood.py` | 当前情绪：最近一次贴纸的 valence/arousal（进程内存、TTL 10 分钟） |
+| | `app/session/noise.py` | 噪声判定（纯函数）：不进触发、不进上下文、不进摘要输入 |
+| | `app/session/retrieval.py` | 中文分词与 FTS 检索：触发条件、查询构造、≤3 条 / ≤800 字符 |
+| | `app/session/summary.py` | 摘要服务与后台调度（滚动增量、模板、按群串行、可重试幂等） |
 | 模型 | `app/llm/client.py` | OpenAI 兼容客户端（base_url 可换厂商） |
 | | `app/llm/loop.py` | 工具循环；轮次/时长/成本上限 |
 | | `app/llm/prompts.py` | 固定段：全局人格（`docs/persona.md`）→ 群设定 → 工具策略 → 输出规则；动态段末条可注入当前情绪 |
@@ -61,7 +64,7 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | 服务（阶段 10） | `app/services/*` | 业务唯一入口（instances / credentials / chat_settings / usage / memory_admin / workspace_admin / status） |
 | 出站 | `app/outbound/queue.py` | 统一出口；重试与退避 |
 | | `app/outbound/ratelimit.py` | per-chat 与全局令牌桶 |
-| 记账 | `app/observability/usage.py` | tokens / 工具调用 / 耗时 |
+| 记账 | `app/storage/repo/usage.py` | tokens / 工具调用 / 耗时（含 `purpose` 维度：chat / summary） |
 
 ## 4. 数据流
 
@@ -91,6 +94,7 @@ Telegram Update
 - **每轮一次**：同一群同时只有一个回复任务，一轮最多一次模型调用（阶段 3 起为一次工具循环内不超过轮次上限）与一次回复。
 - **主动发言闸门**：未点名的候选消息（`question`/`troubleshoot`/`resource`/`followup`）先过冷却与每窗口上限，被压住即 `wait`（0 token、只入库）；被点名不受限制（`docs/requirements.md` §2.1）。
 - **出站串行**：同一群的文本与贴纸发送共用一把锁（`app/outbound/queue.py`）；贴纸走独立的 1 条/20 秒限速通道。
+- **摘要调度**：后台任务 `summary-scheduler` 按 `chat_id` 串行、异步、可重试、幂等，随关闭信号停止，不阻塞回复（`app/session/summary.py`）。
 - 每群邮箱有容量上限，溢出策略：合并待处理批次并保留最新若干条，不无限堆积。
 - `update_id` 落库是幂等来源；同一条更新重复到达不会被处理两次。
 - 单个 LLM 调用、单个工具调用都有超时；超时按失败处理，不阻塞队列后续任务。

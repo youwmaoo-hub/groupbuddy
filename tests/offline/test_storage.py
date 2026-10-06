@@ -12,11 +12,12 @@ from tests.offline.helpers import DbTestCase
 class MigrationTests(DbTestCase):
     async def test_load_migrations(self) -> None:
         versions = load_migrations()
-        self.assertEqual(len(versions), 1)
+        self.assertEqual(len(versions), 2)
         self.assertEqual(len(versions[0]), 6)
+        self.assertEqual(len(versions[1]), 1)
 
     async def test_apply_is_idempotent(self) -> None:
-        self.assertEqual(await apply_migrations(self.connection), 1)
+        self.assertEqual(await apply_migrations(self.connection), 2)
 
 
 class UpdateDedupeTests(DbTestCase):

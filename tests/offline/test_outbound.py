@@ -101,5 +101,53 @@ class OutboundQueueTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(sender.sent, [])
 
 
+class StickerRateLimiterTests(unittest.TestCase):
+    def test_sticker_channel_is_one_per_twenty_seconds(self) -> None:
+        clock = FakeClock()
+        limiter = RateLimiter(group_per_minute=1000, private_per_second=1000.0, clock=clock)
+        self.assertEqual(limiter.delay(chat_id=1, chat_type="supergroup", kind="sticker"), 0.0)
+        limiter.record(chat_id=1, chat_type="supergroup", kind="sticker")
+        self.assertGreater(limiter.delay(chat_id=1, chat_type="supergroup", kind="sticker"), 19.0)
+        self.assertEqual(limiter.delay(chat_id=1, chat_type="supergroup"), 0.0)  # 文本通道不受影响
+        clock.advance(20.0)
+        self.assertEqual(limiter.delay(chat_id=1, chat_type="supergroup", kind="sticker"), 0.0)
+
+    def test_sticker_channel_is_per_chat(self) -> None:
+        clock = FakeClock()
+        limiter = RateLimiter(group_per_minute=1000, private_per_second=1000.0, clock=clock)
+        limiter.record(chat_id=1, chat_type="supergroup", kind="sticker")
+        self.assertEqual(limiter.delay(chat_id=2, chat_type="supergroup", kind="sticker"), 0.0)
+
+
+class StickerQueueTests(unittest.IsolatedAsyncioTestCase):
+    def _queue(self, sender: FakeSender, *, max_attempts: int = 3) -> OutboundQueue:
+        self.clock = FakeClock()
+        limiter = RateLimiter(group_per_minute=1000, private_per_second=1000.0, clock=self.clock)
+        return OutboundQueue(sender, limiter, max_attempts=max_attempts, sleep=FakeSleep(self.clock))
+
+    async def test_send_sticker_success(self) -> None:
+        sender = FakeSender()
+        queue = self._queue(sender)
+        self.assertTrue(await queue.send_sticker(chat_id=1, chat_type="supergroup", file_id="F1"))
+        self.assertEqual(sender.stickers, [{"chat_id": 1, "file_id": "F1"}])
+
+    async def test_send_sticker_retries_after_rate_limit(self) -> None:
+        sender = FakeSender(rate_limited_times=1)
+        queue = self._queue(sender)
+        self.assertTrue(await queue.send_sticker(chat_id=1, chat_type="supergroup", file_id="F1"))
+        self.assertEqual(len(sender.stickers), 1)
+
+    async def test_send_sticker_gives_up_after_max_attempts(self) -> None:
+        sender = FakeSender(rate_limited_times=5)
+        queue = self._queue(sender, max_attempts=2)
+        self.assertFalse(await queue.send_sticker(chat_id=1, chat_type="supergroup", file_id="F1"))
+        self.assertEqual(sender.stickers, [])
+
+    async def test_send_sticker_failure_returns_false(self) -> None:
+        sender = FakeSender(sticker_fail_times=1)
+        queue = self._queue(sender)
+        self.assertFalse(await queue.send_sticker(chat_id=1, chat_type="supergroup", file_id="F1"))
+
+
 if __name__ == "__main__":
     unittest.main()

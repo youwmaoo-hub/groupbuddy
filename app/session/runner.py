@@ -16,6 +16,7 @@ from app.gate.trigger import TriggerDetector
 from app.llm.loop import Outcome, Responder
 from app.outbound.queue import OutboundQueue
 from app.session.context import ContextBuilder
+from app.session.mood import MoodTracker
 from app.storage.repo import chat_settings, messages, usage
 from app.telegram.parse import IncomingMessage
 from app.tools.executor import ToolExecutor
@@ -43,6 +44,7 @@ class SessionRunner:
         responder: Responder,
         outbound: OutboundQueue,
         tools: ToolExecutor | None = None,
+        mood: MoodTracker | None = None,
     ) -> None:
         self._settings = settings
         self._connection = connection
@@ -54,6 +56,7 @@ class SessionRunner:
         self._responder = responder
         self._outbound = outbound
         self._tools = tools
+        self._mood = mood
 
     async def handle(self, incoming: IncomingMessage) -> None:
         """接收路径：必须立刻返回，绝不等待模型。"""
@@ -92,9 +95,15 @@ class SessionRunner:
     async def handle_batch(self, batch: Batch) -> None:
         """Agent Loop：上下文 → 模型（可含工具循环）→ 出站 → 记账。"""
         group = await chat_settings.get(self._connection, batch.chat_id)
-        context = ToolContext(chat_id=batch.chat_id, user_id=batch.items[-1].user_id, group=group)
+        context = ToolContext(
+            chat_id=batch.chat_id,
+            user_id=batch.items[-1].user_id,
+            group=group,
+            chat_type=batch.items[-1].chat_type,
+        )
         allowed = self._tools.allowed_names(context) if self._tools is not None else ()
-        payload = await self._context.build(batch, group=group, allowed_tools=allowed)
+        mood = self._mood.describe(batch.chat_id) if self._mood is not None else None
+        payload = await self._context.build(batch, group=group, allowed_tools=allowed, mood=mood)
         outcome = await self._responder.reply(payload, context=context)
         await self._record_usage(batch, outcome)  # 只要调用了模型就记账，哪怕本轮不说话
         if outcome.text is None:

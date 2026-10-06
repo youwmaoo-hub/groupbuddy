@@ -15,8 +15,10 @@ from app.llm.loop import Responder
 from app.outbound.queue import OutboundQueue
 from app.outbound.ratelimit import RateLimiter
 from app.session.context import ContextBuilder
+from app.session.mood import MoodTracker
 from app.session.runner import SessionRunner
-from app.storage.repo import chat_settings, messages, updates, usage
+from app.storage.repo import chat_settings, messages, stickers, updates, usage
+from app.storage.repo.stickers import DbStickerStore
 from app.tools.builtin import build_registry
 from app.tools.executor import ToolExecutor
 from app.tools.policy import Policy
@@ -40,22 +42,31 @@ class PipelineTests(DbTestCase):
         rate_limited_times: int = 0,
         on_complete=None,
         search_backend: str = "none",
+        sticker_fail_times: int = 0,
     ) -> None:
         self.clock = FakeClock()
         self.debouncer = Debouncer(quiet_seconds=1.2, max_messages=5, clock=self.clock)
         self.proactive = ProactiveLimiter(
             cooldown_seconds=20.0, window_seconds=300.0, max_per_window=3, clock=self.clock
         )
+        self.llm = FakeLLMClient(*replies, fail=fail, on_complete=on_complete)
+        self.sender = FakeSender(rate_limited_times=rate_limited_times, sticker_fail_times=sticker_fail_times)
+        limiter = RateLimiter(
+            group_per_minute=1000, private_per_second=1000.0, sticker_per_second=1000.0, clock=self.clock
+        )
+        self.outbound = OutboundQueue(self.sender, limiter, sleep=FakeSleep(self.clock))
+        self.mood = MoodTracker(clock=self.clock.monotonic)
         tool_settings = self.settings
         if search_backend != "none":
             tool_settings = self.settings.model_copy(update={"search_backend": search_backend})
-        self.registry = build_registry(tool_settings)
+        self.registry = build_registry(
+            tool_settings,
+            store=DbStickerStore(self.connection),
+            outbound=self.outbound,
+            mood=self.mood,
+        )
         self.policy = Policy(self.registry)
         self.tools = ToolExecutor(self.registry, self.policy, clock=self.clock.monotonic)
-        self.llm = FakeLLMClient(*replies, fail=fail, on_complete=on_complete)
-        self.sender = FakeSender(rate_limited_times=rate_limited_times)
-        limiter = RateLimiter(group_per_minute=1000, private_per_second=1000.0, clock=self.clock)
-        self.outbound = OutboundQueue(self.sender, limiter, sleep=FakeSleep(self.clock))
         self.runner = SessionRunner(
             settings=self.settings,
             connection=self.connection,
@@ -67,8 +78,8 @@ class PipelineTests(DbTestCase):
             responder=Responder(self.llm, self.settings, self.tools),
             outbound=self.outbound,
             tools=self.tools,
+            mood=self.mood,
         )
-
     async def _send(self, texts, *, chat_id: int = 1, start_update: int = 100, start_message: int = 10) -> None:
         for index, text in enumerate(texts):
             await self.runner.handle(
@@ -97,7 +108,7 @@ class PipelineTests(DbTestCase):
         await self._send(["@bot 2*3 等于几"])
         await self._flush()
         self.assertEqual([item["text"] for item in self.sender.sent], ["等于 6"])
-        self.assertEqual(self.llm.tool_names[0], ["calc", "read_file"])
+        self.assertEqual(self.llm.tool_names[0], ["calc", "read_file", "send_sticker"])
         tool_messages = [item for item in self.llm.calls[1] if item.get("role") == "tool"]
         self.assertIn("6", str(tool_messages[0]["content"]))
         summary = await self._usage()
@@ -107,13 +118,13 @@ class PipelineTests(DbTestCase):
         self._build("好")
         await self._send(["@bot 帮我查一下"])
         await self._flush()
-        self.assertEqual(self.llm.tool_names[0], ["calc", "read_file"])
+        self.assertEqual(self.llm.tool_names[0], ["calc", "read_file", "send_sticker"])
 
     async def test_search_web_exposed_with_fake_backend(self) -> None:
         self._build(tool_reply("search_web", {"query": "天气"}), "查到一条", search_backend="fake")
         await self._send(["@bot 查一下天气"])
         await self._flush()
-        self.assertEqual(self.llm.tool_names[0], ["calc", "read_file", "search_web"])
+        self.assertEqual(self.llm.tool_names[0], ["calc", "read_file", "search_web", "send_sticker"])
         self.assertEqual([item["text"] for item in self.sender.sent], ["查到一条"])
         tool_messages = [item for item in self.llm.calls[1] if item.get("role") == "tool"]
         self.assertIn("results", str(tool_messages[0]["content"]))
@@ -165,6 +176,54 @@ class PipelineTests(DbTestCase):
         await self.outbound.stop()
         self.assertIn("write_file", self.llm.tool_names[2])
         self.assertEqual((self.settings.workspace_root / "1" / "out.txt").read_text(encoding="utf-8"), "hi")
+
+    async def test_send_sticker_end_to_end_and_file_id_stays_out(self) -> None:
+        file_id = "CAACAgIAAxkBAAEtradefile"
+        await stickers.register(
+            self.connection,
+            chat_id=1,
+            file_id=file_id,
+            file_unique_id="UNIQ1",
+            valence=1.0,
+            arousal=1.0,
+            tags=["开心"],
+        )
+        self._build(tool_reply("send_sticker", {"valence": 1.0, "arousal": 1.0, "tags": ["开心"]}), "发了个贴纸")
+        await self._send(["@bot 开心一下"])
+        await self._flush()
+        self.assertEqual([item["text"] for item in self.sender.sent], ["发了个贴纸"])
+        self.assertEqual([item["file_id"] for item in self.sender.stickers], [file_id])
+        self.assertNotIn(file_id, str(self.llm.calls))
+        self.assertEqual((await self._usage())["tool_calls"], 1)
+
+    async def test_mood_is_injected_on_the_next_turn(self) -> None:
+        await stickers.register(
+            self.connection, chat_id=1, file_id="F1", file_unique_id="U1", valence=1.0, arousal=1.0
+        )
+        self._build(tool_reply("send_sticker", {"valence": 1.0, "arousal": 1.0}), "发了个贴纸")
+        await self._send(["@bot 开心一下"])
+        self.clock.advance(2.0)
+        for batch in self.debouncer.due():
+            await self.runner.handle_batch(batch)
+        await self.outbound.drain(5.0)
+        await self.runner.handle(make_incoming(update_id=810, chat_id=1, message_id=95, text="@bot 在吗"))
+        self.clock.advance(2.0)
+        for batch in self.debouncer.due():
+            await self.runner.handle_batch(batch)
+        await self.outbound.drain(5.0)
+        await self.outbound.stop()
+        last_payload = self.llm.calls[-1]
+        self.assertEqual(last_payload[-1]["role"], "system")
+        self.assertIn("心情不错", str(last_payload[-1]["content"]))
+
+    async def test_send_sticker_needs_group_switch(self) -> None:
+        await chat_settings.upsert(self.connection, 1, allow_sticker=0)
+        self._build(tool_reply("send_sticker", {"valence": 1.0, "arousal": 1.0}), "不发")
+        await self._send(["@bot 发个贴纸"])
+        await self._flush()
+        self.assertNotIn("send_sticker", self.llm.tool_names[0])
+        tool_messages = [item for item in self.llm.calls[1] if item.get("role") == "tool"]
+        self.assertIn("permission_denied", str(tool_messages[0]["content"]))
 
     async def test_rapid_messages_merge_into_one_model_call(self) -> None:
         self._build("好的，收到")

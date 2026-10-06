@@ -62,6 +62,7 @@
 阶段 0（文档骨架）已完成；阶段 1（最小可运行闭环，含私聊默认静默与本轮消息边界）已完成并通过真机验收；
 阶段 2（发言闸门：不要求 @ 的主动回复判定 + 冷却/窗口上限）已完成；
 阶段 3（工具主干：registry / policy / executor + `calc` + `search_web` 接口）已完成；
-阶段 4（工作区与文件：`read_file` / `write_file` + 共享路径安全）已完成；阶段 5 未开始。
+阶段 4（工作区与文件：`read_file` / `write_file` + 共享路径安全）已完成；
+阶段 5（贴纸：`stickers` 表 + 情绪匹配 + 冷却 + `send_sticker`）已完成；阶段 6 未开始。
 阶段 10（Web 控制面板与多实例）只完成架构预留（`docs/domain.md`、`docs/architecture.md` §10），未开发面板代码。
 阶段划分与验收见 `TODO.md`。

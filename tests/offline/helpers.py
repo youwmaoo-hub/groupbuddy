@@ -114,10 +114,12 @@ def tool_reply(
 class FakeSender:
     """实现 outbound.queue 的 Sender 协议。"""
 
-    def __init__(self, *, rate_limited_times: int = 0, fail_times: int = 0) -> None:
+    def __init__(self, *, rate_limited_times: int = 0, fail_times: int = 0, sticker_fail_times: int = 0) -> None:
         self.sent: list[dict[str, object]] = []
+        self.stickers: list[dict[str, object]] = []
         self.rate_limited_times = rate_limited_times
         self.fail_times = fail_times
+        self.sticker_fail_times = sticker_fail_times
         self._next_id = 1000
 
     async def send_message(self, *, chat_id: int, text: str, reply_to_message_id: int | None = None) -> int:
@@ -128,6 +130,17 @@ class FakeSender:
             self.fail_times -= 1
             raise SendFailed("模拟发送失败")
         self.sent.append({"chat_id": chat_id, "text": text, "reply_to_message_id": reply_to_message_id})
+        self._next_id += 1
+        return self._next_id
+
+    async def send_sticker(self, *, chat_id: int, file_id: str) -> int:
+        if self.rate_limited_times > 0:
+            self.rate_limited_times -= 1
+            raise RateLimited(0.0)
+        if self.sticker_fail_times > 0:
+            self.sticker_fail_times -= 1
+            raise SendFailed("模拟贴纸发送失败")
+        self.stickers.append({"chat_id": chat_id, "file_id": file_id})
         self._next_id += 1
         return self._next_id
 

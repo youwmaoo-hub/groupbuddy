@@ -22,13 +22,15 @@ class ContextBuilder:
         *,
         group: dict[str, object] | None = None,
         allowed_tools: tuple[str, ...] = (),
+        mood: str | None = None,
     ) -> list[dict[str, str]]:
         """窗口按 chat_id 过滤，绝不跨群；本轮用户消息永不丢。
 
         本轮边界：只取"处理开始时已入库"的消息（docs/architecture.md §5），
         模型调用期间新到的消息不会回填进本轮，留给下一轮。
 
-        group 由调用方传入可避免重复查询；allowed_tools 决定 System3 里可选的工具。
+        group 由调用方传入可避免重复查询；allowed_tools 决定 System3 里可选的工具；
+        mood 非空时作为动态段末条注入（docs/persona.md §2、docs/token.md 链 2）。
         """
         current = group if group is not None else await chat_settings.get(self._connection, batch.chat_id)
         system_prompt = build_system_prompt(
@@ -46,7 +48,7 @@ class ContextBuilder:
         latest = batch.items[-1] if batch.items else None
         if latest is not None and not any(item.message_id == latest.message_id for item in history):
             history = [*history, _as_stored(latest)]
-        return build_messages(system_prompt, history)
+        return build_messages(system_prompt, history, mood=mood)
 
 
 def _as_stored(item) -> StoredMessage:

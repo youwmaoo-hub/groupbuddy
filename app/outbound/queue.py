@@ -27,6 +27,8 @@ class Sender(Protocol):
 
     async def send_message(self, *, chat_id: int, text: str, reply_to_message_id: int | None = None) -> int: ...
 
+    async def send_sticker(self, *, chat_id: int, file_id: str) -> int: ...
+
 
 class RateLimited(Exception):
     """发送被限速，带 Telegram 给的 retry_after 秒数。"""
@@ -176,6 +178,7 @@ class OutboundQueue:
         self._workers: dict[int, asyncio.Task[None]] = {}
         self._running = True
         self._inflight = 0  # 已出队但仍在发送的消息数（drain 必须等它归零）
+        self._locks: dict[int, asyncio.Lock] = {}  # 同群串行：文本与贴纸不交错
 
     async def enqueue(
         self,
@@ -219,6 +222,9 @@ class OutboundQueue:
     def _event(self, chat_id: int) -> asyncio.Event:
         return self._events.setdefault(chat_id, asyncio.Event())
 
+    def _lock(self, chat_id: int) -> asyncio.Lock:
+        return self._locks.setdefault(chat_id, asyncio.Lock())
+
     def _ensure_worker(self, chat_id: int) -> None:
         task = self._workers.get(chat_id)
         if task is None or task.done():
@@ -239,6 +245,10 @@ class OutboundQueue:
             await event.wait()
 
     async def _deliver(self, message: OutboundMessage) -> None:
+        async with self._lock(message.chat_id):
+            await self._deliver_locked(message)
+
+    async def _deliver_locked(self, message: OutboundMessage) -> None:
         for chunk in message.chunks:
             while True:
                 wait = self._limiter.delay(chat_id=message.chat_id, chat_type=message.chat_type)
@@ -266,3 +276,30 @@ class OutboundQueue:
                 self._limiter.record(chat_id=message.chat_id, chat_type=message.chat_type)
                 message.reply_to_message_id = None
                 break
+
+    async def send_sticker(self, *, chat_id: int, chat_type: str, file_id: str) -> bool:
+        """贴纸专用发送：同群与文本串行、走贴纸限速与 429 退避；失败返回 False。
+
+        file_id 只在这里与 Sender 之间传递，绝不进入日志与返回值之外的地方。
+        """
+        async with self._lock(chat_id):
+            attempts = 0
+            while True:
+                wait = self._limiter.delay(chat_id=chat_id, chat_type=chat_type, kind="sticker")
+                if wait > 0:
+                    await self._sleep(wait)
+                try:
+                    await self._sender.send_sticker(chat_id=chat_id, file_id=file_id)
+                except RateLimited as error:
+                    attempts += 1
+                    backoff = self._limiter.apply_retry_after(chat_id=chat_id, retry_after=error.retry_after)
+                    if attempts >= self._max_attempts:
+                        logger.warning("贴纸限速重试超限，放弃 chat_id=%s", chat_id)
+                        return False
+                    await self._sleep(min(backoff + random.uniform(0, 0.5), 60.0))
+                    continue
+                except SendFailed:
+                    logger.warning("贴纸发送失败 chat_id=%s", chat_id)
+                    return False
+                self._limiter.record(chat_id=chat_id, chat_type=chat_type, kind="sticker")
+                return True

@@ -20,7 +20,7 @@
 | `search_web` | L0 | 群开关（需配置后端，见下） | `query: str, top_k?: int=3` | `{results:[{title,url,snippet}]}` | 10s |
 | `read_file` | L1 | 群开关 | `path: str, start_line?: int, end_line?: int, query?: str`（`query` 保留，传入即 `invalid_arguments`） | `{path,start_line,end_line,text,total_lines}` | 3s |
 | `write_file` | L2 | 群开关 | `path: str, content: str` | `{path,bytes,backup?: str}` | 5s |
-| `send_sticker` | L2 | 群开关 | `valence: float, arousal: float, tags?: [str]` | `{sent: bool, sticker_id: int}` | 3s |
+| `send_sticker` | L2 | 群开关 | `valence: float, arousal: float, tags?: [str]` | `{sent: bool, sticker_id: int}`；冷却中 `{sent: false, state: "cooldown", retry_after: N}` | 3s |
 | `run_code` | L3 | 群开关（默认关） | `code: str, timeout_s?: int=15` | `{exit_code,stdout,stderr,truncated}` | 30s |
 | `host_info` | L4 | 默认关 | `fields?: [str]` | `{cpu,memory,disk_free,python,uptime_s}` | 2s |
 
@@ -47,8 +47,11 @@
 
 ### send_sticker
 
-- 模型只给情绪与标签；`file_id` 永不进入模型上下文。
-- 受群设置冷却时间与出站限速约束；冷却中返回 `cooldown` 状态而不是报错。
+- 模型只给情绪与标签；`file_id` 永不进入模型上下文、工具返回、日志与错误消息（只允许存在于 `stickers` 表与 Telegram 发送边界）。
+- 匹配：valence/arousal 余弦相似度为主分 + tags 交集轻量加分（`TAG_BONUS=0.1`）；低于 `MIN_SCORE=0.6` 返回 `not_found`，不强行发不合适的贴纸；分数接近（差值 ≤ `TIE_EPSILON=0.05`）时取 `last_used_at` 更早的，尽量避免连续重复；严格按 `chat_id` 隔离。
+- 冷却取群设置 `chat_settings.sticker_cooldown`（默认 30 秒）；冷却期内返回 `{"sent": false, "state": "cooldown", "retry_after": N}`，这是业务状态而不是错误。
+- 成功后更新该贴纸 `last_used_at`，并把本次情绪写入进程内 mood（TTL 10 分钟，见 `docs/persona.md` §2）。
+- 受出站限速约束：贴纸 1 条/20 秒，与同群文本发送串行（`app/outbound/queue.py`）。
 
 ### run_code
 

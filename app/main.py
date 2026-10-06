@@ -23,9 +23,11 @@ from app.logging_setup import setup_logging
 from app.outbound.queue import OutboundQueue
 from app.outbound.ratelimit import RateLimiter
 from app.session.context import ContextBuilder
+from app.session.mood import MoodTracker
 from app.session.runner import SessionRunner
 from app.storage.db import apply_migrations, close_db, open_db
 from app.storage.repo import updates
+from app.storage.repo.stickers import DbStickerStore
 from app.telegram.handlers import build_router
 from app.telegram.sender import AiogramSender
 from app.tools.builtin import build_registry
@@ -64,10 +66,6 @@ class Application:
 
         instance = settings.bot_instance()
         self._llm = DeepSeekClient(instance.llm)
-        registry = build_registry(settings)
-        policy = Policy(registry)
-        tools = ToolExecutor(registry, policy)
-        responder = Responder(self._llm, settings, tools)
 
         bot = Bot(instance.bot_token)
         me = await bot.get_me()
@@ -82,10 +80,17 @@ class Application:
         limiter = RateLimiter(
             group_per_minute=settings.send_rate_group_per_minute,
             private_per_second=settings.send_rate_private_per_second,
+            sticker_per_second=settings.send_rate_sticker_per_second,
             max_backoff=settings.send_backoff_max_seconds,
         )
         outbound = OutboundQueue(AiogramSender(bot), limiter)
         self._outbound = outbound
+
+        mood = MoodTracker()
+        registry = build_registry(settings, store=DbStickerStore(connection), outbound=outbound, mood=mood)
+        policy = Policy(registry)
+        tools = ToolExecutor(registry, policy)
+        responder = Responder(self._llm, settings, tools)
 
         debouncer = Debouncer(
             quiet_seconds=settings.debounce_seconds,
@@ -107,6 +112,7 @@ class Application:
             responder=responder,
             outbound=outbound,
             tools=tools,
+            mood=mood,
         )
         chat_queue = ChatQueue(runner.handle_batch, max_batch_messages=settings.debounce_max_messages)
         self._chat_queue = chat_queue

@@ -12,6 +12,7 @@
 - 禁止把本机路径、用户名、主机名、IP、域名写进代码或文档。
 - 路径一律用 `pathlib` + 配置项拼接，不用字符串硬编码盘符或斜杠。
 - 支持部署方式：Docker/Podman 容器，或 systemd 直接跑 Python。
+- 贴纸登记属一次性本地运维操作：`python scripts/register_sticker.py --chat-id … --file-id … --file-unique-id … --valence … --arousal … [--tags a,b] [--db storage/bot.db]`；只读写 SQLite、不读 `.env`，数据库 schema 版本需要 ≥2（先启动一次 Bot 应用迁移）；输出不回显 `file_id`。
 - 单机单进程优先；不引入 Kubernetes、微服务、Redis（明确不做清单见 §11）。
 
 ## 2. 目录布局与持久化

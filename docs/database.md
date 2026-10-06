@@ -78,7 +78,7 @@ chat_settings (
   updated_at       INTEGER NOT NULL
 );
 
--- 贴纸（file_id 与 Bot 身份绑定，换 Token 后需重新登记）
+-- 贴纸（阶段 5 / migration 2 加入；file_id 与 Bot 身份绑定，换 Token 后需重新登记；按群规模小，不额外建索引）
 stickers (
   id           INTEGER PRIMARY KEY AUTOINCREMENT,
   chat_id      INTEGER NOT NULL,

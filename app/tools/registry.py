@@ -48,6 +48,7 @@ class ToolContext:
     chat_id: int
     user_id: int
     group: dict[str, object]
+    chat_type: str = "supergroup"
     # 本轮每个工具的失败次数与本轮已被禁用（失败 2 次）的工具名
     failures_this_round: dict[str, int] = field(default_factory=dict)
     failed_this_round: set[str] = field(default_factory=set)

@@ -37,3 +37,13 @@ class AiogramSender:
         except TelegramAPIError as error:
             raise SendFailed(f"{type(error).__name__}: {error}") from error
         return int(message.message_id)
+
+    async def send_sticker(self, *, chat_id: int, file_id: str) -> int:
+        """贴纸发送：file_id 只在这里交给 Telegram，不进入日志与模型上下文。"""
+        try:
+            message = await self._bot.send_sticker(chat_id=chat_id, sticker=file_id)
+        except TelegramRetryAfter as error:
+            raise RateLimited(float(error.retry_after)) from error
+        except TelegramAPIError as error:
+            raise SendFailed(f"{type(error).__name__}: {error}") from error
+        return int(message.message_id)

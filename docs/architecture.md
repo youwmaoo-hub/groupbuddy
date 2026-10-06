@@ -44,6 +44,7 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | | `app/gate/queue.py` | per-chat 串行 actor；运行期间新消息合并为下一轮一批 |
 | 会话 | `app/session/runner.py` | 一轮编排：context → llm → tools → outbound |
 | | `app/session/context.py` | ContextBuilder：预算式历史 + 噪声过滤；窗口按本轮边界（`id` 快照）截断 |
+| | `app/session/mood.py` | 当前情绪：最近一次贴纸的 valence/arousal（进程内存、TTL 10 分钟） |
 | 模型 | `app/llm/client.py` | OpenAI 兼容客户端（base_url 可换厂商） |
 | | `app/llm/loop.py` | 工具循环；轮次/时长/成本上限 |
 | | `app/llm/prompts.py` | 固定段：全局人格（`docs/persona.md`）→ 群设定 → 工具策略 → 输出规则；动态段末条可注入当前情绪 |
@@ -51,7 +52,7 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | | `app/tools/policy.py` | 权限判定唯一出口（等级 → 本群开关，见 `docs/security.md` §2） |
 | | `app/tools/executor.py` | 注册表 → 权限 → schema → 执行 → 结构化结果；失败计数与熔断 |
 | | `app/tools/workspace.py` | 路径解析与文件安全（workspace 越界、符号/硬链接、UTF-8、1 MB、原子写 + 单层 `.bak`）——`read_file`/`write_file` 共用的唯一实现 |
-| | `app/tools/builtin/*.py` | 已实现 `calc`、`search_web`（接口）、`read_file`、`write_file`；`send_sticker`/`host_info`/`run_code` 属后续阶段 |
+| | `app/tools/builtin/*.py` | 已实现 `calc`、`search_web`（接口）、`read_file`、`write_file`、`send_sticker`；`host_info`/`run_code` 属后续阶段 |
 | 沙箱 | `app/sandbox/runner.py` | 容器调用的唯一实现（阶段 7） |
 | 存储 | `app/storage/db.py` | aiosqlite 连接、WAL、`user_version` 迁移 |
 | | `app/storage/repo/*.py` | messages / settings / usage / stickers / notes 读写 |
@@ -89,6 +90,7 @@ Telegram Update
 - **运行期间合并**：每个 `chat_id` 最多只有一个待处理批次，新消息并入其中并只保留最新 N 条（`debounce_max_messages`，默认 5），因此"Bot 正在思考"不会持续产生新的模型调用。
 - **每轮一次**：同一群同时只有一个回复任务，一轮最多一次模型调用（阶段 3 起为一次工具循环内不超过轮次上限）与一次回复。
 - **主动发言闸门**：未点名的候选消息（`question`/`troubleshoot`/`resource`/`followup`）先过冷却与每窗口上限，被压住即 `wait`（0 token、只入库）；被点名不受限制（`docs/requirements.md` §2.1）。
+- **出站串行**：同一群的文本与贴纸发送共用一把锁（`app/outbound/queue.py`）；贴纸走独立的 1 条/20 秒限速通道。
 - 每群邮箱有容量上限，溢出策略：合并待处理批次并保留最新若干条，不无限堆积。
 - `update_id` 落库是幂等来源；同一条更新重复到达不会被处理两次。
 - 单个 LLM 调用、单个工具调用都有超时；超时按失败处理，不阻塞队列后续任务。

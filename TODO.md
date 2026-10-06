@@ -10,7 +10,8 @@
 阶段 1：**已完成**（最小可运行闭环，含私聊默认静默与本轮消息边界），已通过真实 Telegram + DeepSeek 端到端验收。
 阶段 2：**已完成**（发言闸门：不要求 @ 的主动回复判定 + 冷却与每窗口上限）。
 阶段 3：**已完成**（工具主干：注册表 / 权限判定 / 执行器 + `calc` + `search_web` 接口）。
-阶段 4：**已完成**（工作区与文件：`read_file` / `write_file` + 共享路径安全）。一次只推进一个阶段；不得跳阶段。
+阶段 4：**已完成**（工作区与文件：`read_file` / `write_file` + 共享路径安全）。
+阶段 5：**已完成**（贴纸：`stickers` 表、情绪匹配、冷却与出站媒体通道）。一次只推进一个阶段；不得跳阶段。
 阶段 0 含部署约束增补：Windows 开发 / Linux VPS 24/7 生产，同一份代码（见 `docs/deployment.md`）。
 阶段 10（Web 控制面板与多实例）：**仅完成架构预留**（`docs/domain.md`、`docs/architecture.md` §10），未开发面板，未建控制面表。
 
@@ -66,7 +67,12 @@
 ### 阶段 5 · 贴纸
 
 - 交付：F4.5（`stickers` 表、情绪匹配、冷却）
+  实现位置：`app/storage/schema.sql`（migration 2）、`app/storage/repo/stickers.py`、`app/tools/builtin/send_sticker.py`、
+  `app/session/mood.py`、`app/outbound/{queue,ratelimit}.py`（贴纸通道）、`scripts/register_sticker.py`（运维登记，一次性）。
 - 验收：情绪匹配合理、受冷却与限速约束、模型上下文不出现 `file_id`。
+  离线覆盖：`tests/offline/{test_stickers,test_mood,test_outbound,test_pipeline}.py`。
+- 明确不做：群主 `/sticker` 命令与面板（阶段 8/10）；自动抓取/学习/贴纸包管理；语音与通用 `send_media()`（阶段 11+）；
+  mood 持久化与情绪历史；贴纸统计与审计；不判断 Telegram 用户身份（`allow_sticker` 默认开，谁能改属阶段 8）。
 
 ### 阶段 6 · 记忆
 

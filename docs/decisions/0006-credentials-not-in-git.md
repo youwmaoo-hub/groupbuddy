@@ -26,7 +26,7 @@
 
 - 部署必须手工创建 `.env`；缺必填键时启动即 fail-closed 报错。
 - 现场排查不能直接打印配置对象（要经脱敏），排障手段变少但可接受。
-- `SecretFilter` 目前没有专门测试（技术债 T25），靠代码审查与人工核对。
+- `SecretFilter` 已有专门测试（`tests/offline/test_logging.py`：msg / tuple args / dict args 三条脱敏路径，以及根 logger 装配后写进轮转文件的内容确实不含凭据；技术债 T25 已补）。
 
 ## 验证方式
 

@@ -7,7 +7,9 @@ from __future__ import annotations
 
 import asyncio
 import os
+import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -354,3 +356,62 @@ class RunCodeToolTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotIn("run_code", registry.names())
         registry = build_registry(settings, store=object(), outbound=object(), mood=object(), sandbox=FakeRunner())
         self.assertIn("run_code", registry.names())
+
+
+class CliBackendRunTests(unittest.IsolatedAsyncioTestCase):
+    """真实 CLI 后端的进程启动、退出码与超时销毁（不依赖容器运行时，用本机解释器当子进程）。"""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self._tmp.cleanup)
+        self.backend = CliBackend("podman")
+
+    def _paths(self) -> tuple[Path, Path]:
+        base = Path(self._tmp.name)
+        return base / "stdout.txt", base / "stderr.txt"
+
+    async def test_output_files_receive_streams_and_exit_code_is_zero(self) -> None:
+        stdout_path, stderr_path = self._paths()
+
+        result = await self.backend.run(
+            [sys.executable, "-c", "import sys; print('hello'); print('oops', file=sys.stderr)"],
+            env=dict(os.environ),
+            stdout_path=stdout_path,
+            stderr_path=stderr_path,
+            timeout=30.0,
+        )
+
+        self.assertEqual(0, result.exit_code)
+        self.assertFalse(result.timed_out)
+        self.assertIn("hello", stdout_path.read_text(encoding="utf-8"))
+        self.assertIn("oops", stderr_path.read_text(encoding="utf-8"))
+
+    async def test_non_zero_exit_code_is_reported(self) -> None:
+        stdout_path, stderr_path = self._paths()
+
+        result = await self.backend.run(
+            [sys.executable, "-c", "import sys; sys.exit(3)"],
+            env=dict(os.environ),
+            stdout_path=stdout_path,
+            stderr_path=stderr_path,
+            timeout=30.0,
+        )
+
+        self.assertEqual(3, result.exit_code)
+        self.assertFalse(result.timed_out)
+
+    async def test_timeout_kills_the_process_and_reports_it(self) -> None:
+        stdout_path, stderr_path = self._paths()
+        started = time.monotonic()
+
+        result = await self.backend.run(
+            [sys.executable, "-c", "import time; time.sleep(30)"],
+            env=dict(os.environ),
+            stdout_path=stdout_path,
+            stderr_path=stderr_path,
+            timeout=0.3,
+        )
+
+        self.assertTrue(result.timed_out)
+        self.assertEqual(-1, result.exit_code)
+        self.assertLess(time.monotonic() - started, 20.0)

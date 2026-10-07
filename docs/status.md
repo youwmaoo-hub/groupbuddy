@@ -10,10 +10,10 @@
 |---|---|
 | 代码 commit | `78ae9cff6f733f87ab5b0c63d6cc8d1294ff3b4e`（短 `78ae9cf`，分支 `main`；阶段 8 四模式代码 + 契约文档） |
 | 跟踪文件数 | 132（`git ls-files`） |
-| 提交数 | 27（阶段提交 + 文档治理 `b529741` + A1–A3 修复 `f7f34b5` + 文档同步 `3347301` + 部署记录 + 阶段 8 F5.2 `7382639` + F5.1 `c49fdc5` + F5.3 `1d649b8` + F5.4 `101c26c` + 基线 `ad560f4` + F4.7 `de73b57` + 四模式 `78ae9cf` + 本次状态更新） |
-| 本机工作树 | 干净（`git status --porcelain` 无输出） |
-| 真机仓库 | `/home/bot/app` = detached HEAD @ `3347301`，工作树干净，属主 `bot:bot`；**代码基线落后于本机**：本机其后的 `07a9288`（部署记录，纯文档）与阶段 8 F5.2 提交均未上真机 |
-| 真机远端 | `origin` = VPS `/tmp/dsh_deploy_3347301.bundle`（文件存在，可 `git fetch`；仍未配置正式远端，未建 GitHub remote、未 push） |
+| 提交数 | 28（阶段提交 + 文档治理 `b529741` + A1–A3 修复 `f7f34b5` + 文档同步 `3347301` + 部署记录 + 阶段 8 F5.2 `7382639` + F5.1 `c49fdc5` + F5.3 `1d649b8` + F5.4 `101c26c` + 基线 `ad560f4` + F4.7 `de73b57` + 四模式 `78ae9cf` + 四模式基线 `88531d2` + 本次真机验收记录） |
+| 本机工作树 | 干净（`git status --porcelain` 无输出）；本机 `main` HEAD 在此验收之后只有一个纯文档记录提交（本次 `docs:` 提交），代码内容与真机 `88531d2` 一致 |
+| 真机仓库 | `/home/bot/app` = detached HEAD @ `88531d2`（本次验收实际运行的 checkout；**代码内容 = 本机 `78ae9cf`**，与本机一致），工作树干净，属主 `bot:bot`，跟踪文件 132 |
+| 真机远端 | `origin` = VPS `/tmp/dsh_deploy_88531d2.bundle`（文件存在，可 `git fetch`；仍未配置正式远端，未建 GitHub remote、未 push） |
 | 运行时目录 | 真机 `storage/` 存在（本轮沙箱验收自动创建）：`logs/`、`sandbox/`、`workspaces/{999001,999002}` 均为空目录，属主 `bot:bot` |
 
 ## 2. 已完成阶段与能力
@@ -55,10 +55,13 @@
 
 | 检查 | 命令 | 结果 |
 |---|---|---|
-| 全量离线测试 | `sudo -u bot bash -lc "cd /home/bot/app && .venv/bin/python -m unittest discover -s tests -t ."` | `Ran 293 tests` / `OK` / 退出码 0（Linux 上无 skip；对应真机 checkout `3347301`，含 A1–A3 的 10 条回归） |
-| 沙箱真机验收 | `sudo -u bot bash -lc "cd /home/bot/app && .venv/bin/python scripts/verify_sandbox.py"` | **13 项全 PASS，失败 0 项**，退出码 0；`Tier A：PASS`、`Tier B：PASS`（对应真机 checkout `3347301`） |
-| 证据日志 | 保留在 VPS `/tmp/dsh_tests_3347301.log`（43 行）、`/tmp/dsh_verify_3347301.log`（26 行） | 验收执行后容器数 0；`storage/sandbox` 与 `storage/workspaces/{999001,999002}` 已清空 |
-| 环境复核 | `.venv/bin/python -V` | Python 3.11.2；`podman images` 只有 `python:3.12-slim`（未重新 pull） |
+| 全量离线测试 | `sudo -u bot bash -lc 'cd /home/bot/app && .venv/bin/python -m unittest discover -s tests -t .'` | **`Ran 416 tests` / `OK` / 退出码 0**（真机 checkout `88531d2`；Linux 上无 skip；`FAILED`/`ERROR:` 行 0 条，逐项无失败） |
+| 沙箱真机验收 | `sudo -u bot bash -lc 'cd /home/bot/app && .venv/bin/python scripts/verify_sandbox.py'` | **13 项全 PASS，失败 0 项**，退出码 0；`Tier A：PASS`、`Tier B：PASS`（`88531d2`；与阶段 7 `3347301` 相比无回归） |
+| migration 4 真机检查 | 临时库上 `apply_migrations` + `PRAGMA user_version` + `sqlite_master` | 加载/应用/`user_version` = 4；`tool_failures`、`idx_tool_failures_tool_time`、`idx_tool_failures_chat_time` 均存在；真机 `storage/bot.db` 尚未创建（Bot 未启动，属预期） |
+| `host_info` Linux 实测 | bot 用户直调 `HostInfoTool`（默认全字段 + `fields` 选择） | cpu=2、memory=4105363456（= `/proc/meminfo` MemTotal）、disk_free=35596984320、python=`3.11.2`、uptime_s=68691（= `/proc/uptime`，非进程时长回退）；`fields` 选择生效；返回键恰为冻结五字段 |
+| 证据日志 | 本机临时目录 `<本地临时目录>` 下的 `dsh_tests_vps_88531d2.log`（stdout）与 `dsh_verify_vps_88531d2.log`（13 项逐项输出）；VPS 上未落盘日志文件 | 验收执行后容器数 0、`storage/sandbox` 为空、`storage/workspaces` 仅 `999001`/`999002` |
+| 环境复核 | `.venv/bin/python -V`；bot 用户 `podman images` | Python 3.11.2；镜像仍只有 `python:3.12-slim`（未重新 pull）；无 `bot` 用户 python 进程 |
+| 历史记录（阶段 7） | 同上两条命令，真机 checkout `3347301` | `Ran 293 tests` / `OK`；沙箱 13 项全 PASS（保留在 git 历史中，判读口径相同） |
 | 验收时间 | 2026-10-07（VPS 时间） | — |
 
 Tier A 7/7：纯计算、非 root（UID 1002）、无网络、只读根、单文件大小上限（fsize 8388608）、资源上限（memory 268435456 / pids 64 / cpu 50000-100000）、超时被 kill 且容器已销毁。
@@ -91,8 +94,8 @@ Tier B 4/4：本群 workspace 读写（非 root）、宿主侧可见、其他群
 
 ## 7. 下一步
 
-1. **阶段 8 代码已全部完成（待用户封板）**：F5.2（管理员判定 + 命令通道 + T12）、F5.1（`/settings <字段> <值>` 写入、即时生效）、F5.3（日/月配额）、F5.4（`/stats` + `/health`，`tool_failures` 留痕与 7 天清理，与 `storage/health.json` 同一内部状态）、F4.7（`host_info`：`cpu`/`memory`/`disk_free`/`python`/`uptime_s`，L4 + `allow_host_info` 默认关）与四模式（`78ae9cf`：窗口 / 输出上限 / 工具档位，`docs/token.md` §5）。
-2. 是否把阶段 8 提交（`7382639`、`c49fdc5`、`1d649b8`、`101c26c`、`de73b57`、`78ae9cf`）同步到真机并在真机重跑测试（本机 416 条，真机仍为 `3347301` 的 293 条）。
+1. **阶段 8 已全部完成并通过真机验收**（真机 `88531d2`：416 条全量 OK、沙箱 13 项全 PASS、migration 4 与 `host_info` Linux 行为符合契约）：F5.2（管理员判定 + 命令通道 + T12）、F5.1（`/settings <字段> <值>` 写入、即时生效）、F5.3（日/月配额）、F5.4（`/stats` + `/health`，`tool_failures` 留痕与 7 天清理，与 `storage/health.json` 同一内部状态）、F4.7（`host_info`：`cpu`/`memory`/`disk_free`/`python`/`uptime_s`，L4 + `allow_host_info` 默认关）与四模式（`78ae9cf`：窗口 / 输出上限 / 工具档位，`docs/token.md` §5）。阶段 8 内明确留到后续的只有 `/clear`、链 3 轮次分档、模型档位路由。
+2. 阶段 9（部署与 24/7 运行：`BOT_TOKEN` 落 `.env`、systemd/容器托管、备份恢复）需用户授权后开工；真机当前仍无 `.env`、未启动 Bot、未配 systemd。
 3. 是否立项修 B 组技术债（`TODO.md` T4 / T7 / T9 / T10 / T25 等；T1–T3 已随 `f7f34b5`、T12 已随 `7382639`、T15 已随 `101c26c` 修复）。
 4. 是否配置正式远端（GitHub），以便后续换 Agent 维护。
 
@@ -102,9 +105,9 @@ Tier B 4/4：本群 workspace 读写（非 root）、宿主侧可见、其他群
 # 本机（Windows，仓库根）
 python -m unittest discover -s tests -t .
 
-# 真机（Linux VPS，bot 用户）
-sudo -u bot bash -lc "cd /home/bot/app && .venv/bin/python -m unittest discover -s tests -t ."
-sudo -u bot bash -lc "cd /home/bot/app && .venv/bin/python scripts/verify_sandbox.py"   # 需要容器运行时
+# 真机（Linux VPS，bot 用户；注意用单引号包住 bash -lc 的内容）
+sudo -u bot bash -lc 'cd /home/bot/app && .venv/bin/python -m unittest discover -s tests -t .'
+sudo -u bot bash -lc 'cd /home/bot/app && .venv/bin/python scripts/verify_sandbox.py'   # 需要容器运行时
 ```
 
 代码同步（无正式远端时的临时通道，替换 `<sha>`）：
@@ -116,9 +119,11 @@ scp -i <部署用私钥> <本地临时目录>/dsh_deploy_<sha>.bundle root@<vps>
 
 # 真机：确认 sha256 一致后
 sha256sum /tmp/dsh_deploy_<sha>.bundle
-sudo -u bot bash -lc "cd /home/bot/app && git bundle verify /tmp/dsh_deploy_<sha>.bundle \
-  && git fetch /tmp/dsh_deploy_<sha>.bundle main:refs/remotes/origin/main && git checkout <sha>"
+sudo -u bot bash -lc 'cd /home/bot/app && git bundle verify /tmp/dsh_deploy_<sha>.bundle \
+  && git fetch /tmp/dsh_deploy_<sha>.bundle main:refs/remotes/origin/main \
+  && git remote set-url origin /tmp/dsh_deploy_<sha>.bundle && git checkout <sha>'
 ```
 
 约束：`/home/bot/app` 属主是 `bot`，root 直接执行 git 会报 `dubious ownership`，所有 git 操作必须经 `sudo -u bot bash -lc '…'`；
-`podman images` / `podman ps` 必须在 `bot` 用户可读的目录（如 `/home/bot/app`）里执行，否则会因 `cannot chdir to /root` 而失败。
+`podman images` / `podman ps` 必须在 `bot` 用户可读的目录（如 `/home/bot/app`）里执行，否则会因 `cannot chdir to /root` 而失败；
+**`bash -lc` 的内容必须用单引号，不要用双引号**：双引号会让外层 shell 先展开 `$(…)` / `$?` / `$HOME`，实测导致 `cd` 未生效（留在 `/root`，报 `.venv/bin/python: No such file or directory`）且重定向文件变成 root 所有（`bot` 再写就 `Permission denied`）。

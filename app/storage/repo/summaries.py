@@ -11,6 +11,7 @@ import time
 import aiosqlite
 
 from app.storage.repo_models import PendingSummary, SearchHit, SummaryRow
+from app.storage.tx import transaction
 
 SELECT_COLUMNS = "id, chat_id, thread_id, text, tokens, msg_from, msg_to, created_at"
 
@@ -47,22 +48,22 @@ async def insert(
     created_at: int | None = None,
 ) -> int:
     """写一条摘要并同步 FTS；返回新行 id。"""
-    cursor = await connection.execute(
-        INSERT_SQL,
-        (
-            chat_id,
-            thread_id,
-            text,
-            tokens,
-            msg_from,
-            msg_to,
-            created_at if created_at is not None else int(time.time()),
-        ),
-    )
-    summary_id = int(cursor.lastrowid or 0)
-    await cursor.close()
-    await connection.execute(FTS_INSERT_SQL, (summary_id, tokens))
-    await connection.commit()
+    async with transaction(connection):
+        cursor = await connection.execute(
+            INSERT_SQL,
+            (
+                chat_id,
+                thread_id,
+                text,
+                tokens,
+                msg_from,
+                msg_to,
+                created_at if created_at is not None else int(time.time()),
+            ),
+        )
+        summary_id = int(cursor.lastrowid or 0)
+        await cursor.close()
+        await connection.execute(FTS_INSERT_SQL, (summary_id, tokens))
     return summary_id
 
 
@@ -129,9 +130,10 @@ async def prune(connection: aiosqlite.Connection, *, chat_id: int, keep: int = 5
     cursor = await connection.execute(PRUNE_SQL, (chat_id, max(0, keep)))
     stale = await cursor.fetchall()
     await cursor.close()
-    for row in stale:
-        await connection.execute(FTS_DELETE_SQL, (int(row["id"]), str(row["tokens"])))
-        await connection.execute(DELETE_SQL, (int(row["id"]),))
-    if stale:
-        await connection.commit()
+    if not stale:
+        return 0
+    async with transaction(connection):
+        for row in stale:
+            await connection.execute(FTS_DELETE_SQL, (int(row["id"]), str(row["tokens"])))
+            await connection.execute(DELETE_SQL, (int(row["id"]),))
     return len(stale)

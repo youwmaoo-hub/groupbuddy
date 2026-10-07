@@ -170,7 +170,7 @@ CREATE VIRTUAL TABLE notes_fts     USING fts5(tokens, content='notes',     conte
 ## 6. 写入规则
 
 - 所有写入在事务中完成；同一事务内不做网络或工具调用。
-  **当前偏差（技术债）**：迁移已按块原子（见 §1）；各 repo 仍自己 `commit()`，主表 + FTS 的多语句写可能半提交、无 `rollback`（`TODO.md` T9）。
+  **实现（技术债 T9 已修）**：迁移按块原子（见 §1）；repo 层不再自己 `commit()`，每个写入路径都用 `app/storage/tx.py` 的 `transaction()`（`SAVEPOINT` … `RELEASE` / `ROLLBACK TO`）包住：成功由最外层 `RELEASE` 提交，任一句失败则整体回滚后抛出，半成品不会被后续别的写入顺带提交。用 `SAVEPOINT` 而不是 `BEGIN IMMEDIATE`，是因为整进程共享同一条连接，另一任务可能已经开着事务（savepoint 可安全嵌套）。覆盖：`messages`（insert/clear_chat）、`chat_settings.upsert`、`usage.record`、`updates`（mark_seen/purge_old）、`tool_failures`（record/purge_old）、`notes`（upsert/delete）、`summaries`（insert/prune）、`stickers`（register/mark_used）；离线回归见 `tests/offline/test_transactions.py`。
 - 工具执行与 LLM 调用**不**持有数据库写锁（先算后写）。
 - 记账失败不得影响回复；`usage` 写入异常只记日志。
 

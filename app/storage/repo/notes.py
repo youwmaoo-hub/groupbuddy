@@ -7,6 +7,7 @@ import time
 import aiosqlite
 
 from app.storage.repo_models import NoteRow, SearchHit
+from app.storage.tx import transaction
 
 SELECT_COLUMNS = "id, chat_id, name, text, tokens, version, created_at, updated_at"
 
@@ -42,14 +43,14 @@ async def upsert(
     """同名覆盖（version+1），并同步 FTS：先 delete 旧 tokens 再插新。"""
     previous = await get(connection, chat_id=chat_id, name=name)
     moment = updated_at if updated_at is not None else int(time.time())
-    await connection.execute(UPSERT_SQL, (chat_id, name, text, tokens, moment, moment))
-    row = await get(connection, chat_id=chat_id, name=name)
-    note_id = 0 if row is None else row.id
-    if previous is not None:
-        await connection.execute(FTS_DELETE_SQL, (previous.id, previous.tokens))
-    if note_id:
-        await connection.execute(FTS_INSERT_SQL, (note_id, tokens))
-    await connection.commit()
+    async with transaction(connection):
+        await connection.execute(UPSERT_SQL, (chat_id, name, text, tokens, moment, moment))
+        row = await get(connection, chat_id=chat_id, name=name)
+        note_id = 0 if row is None else row.id
+        if previous is not None:
+            await connection.execute(FTS_DELETE_SQL, (previous.id, previous.tokens))
+        if note_id:
+            await connection.execute(FTS_INSERT_SQL, (note_id, tokens))
     return note_id
 
 
@@ -78,11 +79,11 @@ async def delete(connection: aiosqlite.Connection, *, chat_id: int, name: str) -
     previous = await get(connection, chat_id=chat_id, name=name)
     if previous is None:
         return False
-    await connection.execute(FTS_DELETE_SQL, (previous.id, previous.tokens))
-    cursor = await connection.execute(DELETE_SQL, (chat_id, name))
-    deleted = cursor.rowcount > 0
-    await cursor.close()
-    await connection.commit()
+    async with transaction(connection):
+        await connection.execute(FTS_DELETE_SQL, (previous.id, previous.tokens))
+        cursor = await connection.execute(DELETE_SQL, (chat_id, name))
+        deleted = cursor.rowcount > 0
+        await cursor.close()
     return deleted
 
 

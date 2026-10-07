@@ -6,6 +6,8 @@ import time
 
 import aiosqlite
 
+from app.storage.tx import transaction
+
 DEFAULTS: dict[str, object] = {
     "mode": "normal",
     "allow_search": 1,
@@ -45,9 +47,9 @@ async def upsert(connection: aiosqlite.Connection, chat_id: int, **changes: obje
     names = ", ".join(("chat_id", *columns, "updated_at"))
     placeholders = ", ".join("?" for _ in range(len(columns) + 2))
     assignments = ", ".join(f"{column}=excluded.{column}" for column in (*columns, "updated_at"))
-    await connection.execute(
-        f"INSERT INTO chat_settings ({names}) VALUES ({placeholders}) "
-        f"ON CONFLICT (chat_id) DO UPDATE SET {assignments}",
-        (chat_id, *[changes[column] for column in columns], int(time.time())),
-    )
-    await connection.commit()
+    async with transaction(connection):
+        await connection.execute(
+            f"INSERT INTO chat_settings ({names}) VALUES ({placeholders}) "
+            f"ON CONFLICT (chat_id) DO UPDATE SET {assignments}",
+            (chat_id, *[changes[column] for column in columns], int(time.time())),
+        )

@@ -6,6 +6,8 @@ import time
 
 import aiosqlite
 
+from app.storage.tx import transaction
+
 
 async def record(
     connection: aiosqlite.Connection,
@@ -23,24 +25,24 @@ async def record(
     created_at: int | None = None,
 ) -> None:
     """记一次模型调用；purpose 区分用途（chat / summary 等），记账失败不得影响回复。"""
-    await connection.execute(
-        "INSERT INTO usage (chat_id, user_id, day, model, input_tokens, cached_tokens, output_tokens, tool_calls, tool_ms, purpose, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        (
-            chat_id,
-            user_id,
-            day,
-            model,
-            input_tokens,
-            cached_tokens,
-            output_tokens,
-            tool_calls,
-            tool_ms,
-            purpose,
-            created_at if created_at is not None else int(time.time()),
-        ),
-    )
-    await connection.commit()
+    async with transaction(connection):
+        await connection.execute(
+            "INSERT INTO usage (chat_id, user_id, day, model, input_tokens, cached_tokens, output_tokens, tool_calls, tool_ms, purpose, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                chat_id,
+                user_id,
+                day,
+                model,
+                input_tokens,
+                cached_tokens,
+                output_tokens,
+                tool_calls,
+                tool_ms,
+                purpose,
+                created_at if created_at is not None else int(time.time()),
+            ),
+        )
 
 
 async def tokens_used(

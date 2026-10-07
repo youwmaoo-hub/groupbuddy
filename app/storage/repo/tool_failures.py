@@ -11,6 +11,8 @@ import time
 
 import aiosqlite
 
+from app.storage.tx import transaction
+
 #: 保留天数（docs/database.md §4）。
 RETENTION_DAYS = 7
 
@@ -24,11 +26,11 @@ async def record(
     created_at: int | None = None,
 ) -> None:
     """记一次工具失败；留痕失败不得影响工具结果（调用方另行兜底）。"""
-    await connection.execute(
-        "INSERT INTO tool_failures (tool, chat_id, error_code, created_at) VALUES (?, ?, ?, ?)",
-        (tool, chat_id, error_code, created_at if created_at is not None else int(time.time())),
-    )
-    await connection.commit()
+    async with transaction(connection):
+        await connection.execute(
+            "INSERT INTO tool_failures (tool, chat_id, error_code, created_at) VALUES (?, ?, ?, ?)",
+            (tool, chat_id, error_code, created_at if created_at is not None else int(time.time())),
+        )
 
 
 async def count(
@@ -61,8 +63,8 @@ async def purge_old(
 ) -> int:
     """删除超过保留期的失败记录（启动时与每小时 housekeeping 各执行一次）。"""
     cutoff = (now if now is not None else int(time.time())) - days * 86400
-    cursor = await connection.execute("DELETE FROM tool_failures WHERE created_at < ?", (cutoff,))
-    await connection.commit()
-    deleted = cursor.rowcount
-    await cursor.close()
+    async with transaction(connection):
+        cursor = await connection.execute("DELETE FROM tool_failures WHERE created_at < ?", (cutoff,))
+        deleted = cursor.rowcount
+        await cursor.close()
     return int(deleted or 0)

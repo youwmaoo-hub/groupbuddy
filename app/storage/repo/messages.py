@@ -7,6 +7,7 @@ import time
 import aiosqlite
 
 from app.storage.repo_models import PendingSummary, StoredMessage
+from app.storage.tx import transaction
 
 INSERT_SQL = """
 INSERT INTO messages (chat_id, message_id, thread_id, user_id, role, text, reply_to_message_id, noise, created_at)
@@ -29,23 +30,23 @@ async def insert(
     created_at: int | None = None,
 ) -> bool:
     """写入一条消息；同一群内 message_id 重复视为重放，返回 False。"""
-    cursor = await connection.execute(
-        INSERT_SQL,
-        (
-            chat_id,
-            message_id,
-            thread_id,
-            user_id,
-            role,
-            text,
-            reply_to_message_id,
-            1 if noise else 0,
-            created_at if created_at is not None else int(time.time()),
-        ),
-    )
-    await connection.commit()
-    inserted = cursor.rowcount == 1
-    await cursor.close()
+    async with transaction(connection):
+        cursor = await connection.execute(
+            INSERT_SQL,
+            (
+                chat_id,
+                message_id,
+                thread_id,
+                user_id,
+                role,
+                text,
+                reply_to_message_id,
+                1 if noise else 0,
+                created_at if created_at is not None else int(time.time()),
+            ),
+        )
+        inserted = cursor.rowcount == 1
+        await cursor.close()
     return inserted
 
 
@@ -148,8 +149,8 @@ async def since_last_assistant(connection: aiosqlite.Connection, *, chat_id: int
 
 async def clear_chat(connection: aiosqlite.Connection, chat_id: int) -> int:
     """/clear 用：删除该群消息原文，不影响其他群。"""
-    cursor = await connection.execute("DELETE FROM messages WHERE chat_id = ?", (chat_id,))
-    await connection.commit()
-    deleted = cursor.rowcount
-    await cursor.close()
+    async with transaction(connection):
+        cursor = await connection.execute("DELETE FROM messages WHERE chat_id = ?", (chat_id,))
+        deleted = cursor.rowcount
+        await cursor.close()
     return deleted

@@ -10,6 +10,7 @@ from typing import Protocol
 import aiosqlite
 
 from app.storage.repo_models import StickerRow
+from app.storage.tx import transaction
 
 COLUMNS = ("chat_id", "file_id", "file_unique_id", "valence", "arousal", "tags", "last_used_at", "created_at")
 
@@ -58,22 +59,22 @@ async def register(
     created_at: int | None = None,
 ) -> int:
     """登记/更新一张贴纸，返回内部 id（同群同 file_unique_id 覆盖）。"""
-    await connection.execute(
-        UPSERT_SQL,
-        (
-            chat_id,
-            file_id,
-            file_unique_id,
-            valence,
-            arousal,
-            encode_tags(tags),
-            created_at if created_at is not None else int(time.time()),
-        ),
-    )
-    await connection.commit()
-    cursor = await connection.execute(SELECT_ONE_SQL, (chat_id, file_unique_id))
-    row = await cursor.fetchone()
-    await cursor.close()
+    async with transaction(connection):
+        await connection.execute(
+            UPSERT_SQL,
+            (
+                chat_id,
+                file_id,
+                file_unique_id,
+                valence,
+                arousal,
+                encode_tags(tags),
+                created_at if created_at is not None else int(time.time()),
+            ),
+        )
+        cursor = await connection.execute(SELECT_ONE_SQL, (chat_id, file_unique_id))
+        row = await cursor.fetchone()
+        await cursor.close()
     return int(row[0]) if row is not None else 0
 
 
@@ -86,8 +87,8 @@ async def candidates(connection: aiosqlite.Connection, *, chat_id: int) -> list[
 
 
 async def mark_used(connection: aiosqlite.Connection, *, sticker_id: int, used_at: int) -> None:
-    await connection.execute(MARK_USED_SQL, (used_at, sticker_id))
-    await connection.commit()
+    async with transaction(connection):
+        await connection.execute(MARK_USED_SQL, (used_at, sticker_id))
 
 
 class StickerStore(Protocol):

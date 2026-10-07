@@ -123,7 +123,7 @@ class PipelineTests(DbTestCase):
         await self._send(["@bot 2*3 等于几"])
         await self._flush()
         self.assertEqual([item["text"] for item in self.sender.sent], ["等于 6"])
-        self.assertEqual(self.llm.tool_names[0], ["calc", "read_file", "send_sticker"])
+        self.assertEqual(self.llm.tool_names[0], ["calc", "read_file"])  # 贴纸库空：send_sticker 不下发
         tool_messages = [item for item in self.llm.calls[1] if item.get("role") == "tool"]
         self.assertIn("6", str(tool_messages[0]["content"]))
         summary = await self._usage()
@@ -133,13 +133,13 @@ class PipelineTests(DbTestCase):
         self._build("好")
         await self._send(["@bot 帮我查一下"])
         await self._flush()
-        self.assertEqual(self.llm.tool_names[0], ["calc", "read_file", "send_sticker"])
+        self.assertEqual(self.llm.tool_names[0], ["calc", "read_file"])  # 贴纸库空：send_sticker 不下发
 
     async def test_search_web_exposed_with_fake_backend(self) -> None:
         self._build(tool_reply("search_web", {"query": "天气"}), "查到一条", search_backend="fake")
         await self._send(["@bot 查一下天气"])
         await self._flush()
-        self.assertEqual(self.llm.tool_names[0], ["calc", "read_file", "search_web", "send_sticker"])
+        self.assertEqual(self.llm.tool_names[0], ["calc", "read_file", "search_web"])  # 贴纸库空：send_sticker 不下发
         self.assertEqual([item["text"] for item in self.sender.sent], ["查到一条"])
         tool_messages = [item for item in self.llm.calls[1] if item.get("role") == "tool"]
         self.assertIn("results", str(tool_messages[0]["content"]))
@@ -333,6 +333,24 @@ class PipelineTests(DbTestCase):
         self.assertNotIn("send_sticker", self.llm.tool_names[0])
         tool_messages = [item for item in self.llm.calls[1] if item.get("role") == "tool"]
         self.assertIn("permission_denied", str(tool_messages[0]["content"]))
+
+    async def test_send_sticker_is_hidden_when_the_library_is_empty(self) -> None:
+        """真实使用发现：贴纸库为空时 send_sticker 必然 not_found（白花一轮工具调用 + 污染 /stats）。"""
+        await chat_settings.upsert(self.connection, 1, allow_sticker=1)
+        self._build("好的")
+        await self._send(["@bot 发个贴纸"])
+        await self._flush()
+        self.assertEqual(len(self.llm.calls), 1)  # 普通消息照常回复，没有额外工具轮次
+        self.assertNotIn("send_sticker", self.llm.tool_names[0])
+        self.assertEqual([item["text"] for item in self.sender.sent], ["好的"])
+
+    async def test_send_sticker_is_offered_once_the_library_has_one(self) -> None:
+        await chat_settings.upsert(self.connection, 1, allow_sticker=1)
+        await stickers.register(self.connection, chat_id=1, file_id="F1", file_unique_id="U1")
+        self._build("好的")
+        await self._send(["@bot 发个贴纸"])
+        await self._flush()
+        self.assertIn("send_sticker", self.llm.tool_names[0])
 
     async def test_rapid_messages_merge_into_one_model_call(self) -> None:
         self._build("好的，收到")

@@ -52,6 +52,8 @@ class ToolContext:
     # 本轮每个工具的失败次数与本轮已被禁用（失败 2 次）的工具名
     failures_this_round: dict[str, int] = field(default_factory=dict)
     failed_this_round: set[str] = field(default_factory=set)
+    # 本群贴纸库是否非空；false 时 send_sticker 不下发给模型（空库必然 not_found）
+    stickers_available: bool = True
 
 
 @dataclass(frozen=True, slots=True)

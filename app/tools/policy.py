@@ -26,8 +26,12 @@ class Policy:
         self._registry = registry
 
     def allowed_names(self, context: ToolContext) -> tuple[str, ...]:
-        """已注册 ∩ 本群允许 ∩ 模式档位；注入 System3 与 tools 参数的唯一来源。"""
-        return tuple(name for name in self._registry.names() if self._enabled(name, context))
+        """已注册 ∩ 本群允许 ∩ 模式档位 ∩ 本轮可下发；注入 System3 与 tools 参数的唯一来源。"""
+        return tuple(
+            name
+            for name in self._registry.names()
+            if self._enabled(name, context) and self._advertised(name, context)
+        )
 
     def check(self, name: str, context: ToolContext) -> str | None:
         """允许返回 None，否则返回错误码（目前只有 permission_denied）。"""
@@ -61,3 +65,12 @@ class Policy:
         if bool(int(context.group.get(column, 0) or 0)):
             return True
         return profile.readonly_regardless_of_switch and level == modes.READONLY_LEVEL
+
+    @staticmethod
+    def _advertised(name: str, context: ToolContext) -> bool:
+        """本轮是否值得把这个工具交给模型；只影响下发清单，不影响 `check()` 的执行契约。
+
+        贴纸库为空时 `send_sticker` 必然返回 not_found：提前不下发可以省掉一轮白跑的工具调用，
+        也不再污染 `/stats` 的错误率；库为空时若模型仍硬调，执行路径依旧按原语义返回 not_found。
+        """
+        return not (name == "send_sticker" and not context.stickers_available)

@@ -37,8 +37,8 @@ def _registry(*names: str) -> ToolRegistry:
     return registry
 
 
-def _ctx(chat_id: int = 1, **group: object) -> ToolContext:
-    return ToolContext(chat_id=chat_id, user_id=42, group=group)
+def _ctx(chat_id: int = 1, *, stickers_available: bool = True, **group: object) -> ToolContext:
+    return ToolContext(chat_id=chat_id, user_id=42, group=group, stickers_available=stickers_available)
 
 
 class PolicyTests(unittest.TestCase):
@@ -74,6 +74,17 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(policy.allowed_names(_ctx(allow_search=1)), ("calc", "search_web"))
         self.assertEqual(policy.allowed_names(_ctx(chat_id=2, allow_search=0)), ("calc",))
         self.assertEqual(sorted(POLICY_COLUMNS), ["calc", "host_info", "read_file", "run_code", "search_web", "send_sticker", "write_file"])
+
+    def test_send_sticker_is_not_offered_when_the_chat_has_no_stickers(self) -> None:
+        policy = Policy(_registry("send_sticker"))
+        self.assertNotIn("send_sticker", policy.allowed_names(_ctx(allow_sticker=0, stickers_available=True)))
+        self.assertIn("send_sticker", policy.allowed_names(_ctx(allow_sticker=1, stickers_available=True)))
+
+        empty = _ctx(allow_sticker=1, stickers_available=False)
+        self.assertNotIn("send_sticker", policy.allowed_names(empty))
+        self.assertIn("calc", policy.allowed_names(empty))  # 只有贴纸工具受影响
+        # 执行契约不变：库为空时若模型硬调，仍由 send_sticker 自己返回 not_found
+        self.assertIsNone(policy.check("send_sticker", empty))
 
 
 if __name__ == "__main__":

@@ -51,6 +51,7 @@
 - 匹配：valence/arousal 余弦相似度为主分 + tags 交集轻量加分（`TAG_BONUS=0.1`）；低于 `MIN_SCORE=0.6` 返回 `not_found`，不强行发不合适的贴纸；分数接近（差值 ≤ `TIE_EPSILON=0.05`）时取 `last_used_at` 更早的，尽量避免连续重复；严格按 `chat_id` 隔离。
 - 冷却取群设置 `chat_settings.sticker_cooldown`（默认 30 秒）；冷却期内返回 `{"sent": false, "state": "cooldown", "retry_after": N}`，这是业务状态而不是错误。
 - 成功后更新该贴纸 `last_used_at`，并把本次情绪写入进程内 mood（TTL 10 分钟，见 `docs/persona.md` §2）。
+- 本群贴纸库为空时不下发给模型（`stickers_available=false`，见 `docs/security.md` §2）：此时调用必然 `not_found`，提前不下发可省掉一轮白跑的工具调用；执行契约本身不变。
 - 受出站限速约束：贴纸 1 条/20 秒，与同群文本发送串行（`app/outbound/queue.py`）。
 
 ### run_code

@@ -22,7 +22,7 @@ from app.outbound.queue import OutboundQueue
 from app.session.context import ContextBuilder
 from app.session.mood import MoodTracker
 from app.session.noise import is_noise
-from app.storage.repo import chat_settings, messages, usage
+from app.storage.repo import chat_settings, messages, stickers, usage
 from app.telegram.parse import IncomingMessage
 from app.tools.executor import ToolExecutor
 from app.tools.registry import ToolContext
@@ -164,11 +164,16 @@ class SessionRunner:
             return
         group = await chat_settings.get(self._connection, batch.chat_id)
         profile = modes.profile_for(group)
+        # 贴纸库为空时不下发 send_sticker（必然 not_found）；economy 本就关贴纸，短路不多查
+        stickers_available = profile.stickers and bool(
+            await stickers.candidates(self._connection, chat_id=batch.chat_id)
+        )
         context = ToolContext(
             chat_id=batch.chat_id,
             user_id=batch.items[-1].user_id,
             group=group,
             chat_type=batch.items[-1].chat_type,
+            stickers_available=stickers_available,
         )
         allowed = self._tools.allowed_names(context) if self._tools is not None else ()
         mood = self._mood.describe(batch.chat_id) if self._mood is not None else None

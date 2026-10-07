@@ -100,8 +100,8 @@
 
 - 交付：F5.1–F5.4、`host_info`（F4.7）、四种模式（`docs/token.md` §5）、`/health`（实现属本阶段；24/7 托管与自愈属阶段 9）
 - 验收：群主可开关工具等级；非管理员被拒；配额打满后优雅拒绝。
-- 已完成（`7382639`）：群主命令通道最小闭环 —— `app/ops/admin.py` 管理员判定（只认 `getChatAdministrators`、进程内缓存、失败 fail-closed）、`app/ops/commands.py` `/settings` 回显、命令不进模型不写 messages 0 token、未知命令静默、非管理员固定文案；`chat_settings.upsert` 改为单条原子写入（T12）。
-- 待做：F5.1 设置写入（`/settings <字段> <值>`）、F5.3 配额、F5.4 `/stats` + `/health` + `storage/health.json`、F4.7 `host_info`、四模式生效；`tool_failures` 表（T15）与 7 天清理。
+- 已完成（`7382639` F5.2、`c49fdc5` F5.1）：群主命令通道 —— `app/ops/admin.py` 管理员判定（只认 `getChatAdministrators`、进程内缓存、失败 fail-closed）、`app/ops/commands.py` `/settings` 回显与 `/settings <字段> <值>` 写入（字段白名单：模式、6 个工具开关、贴纸冷却；非法输入不写库；改完当轮生效）、命令不进模型不写 messages 0 token、未知命令静默、非管理员固定文案；`chat_settings.upsert` 改为单条原子写入（T12）。
+- 待做：F5.3 配额、F5.4 `/stats` + `/health` + `storage/health.json`、F4.7 `host_info`、四模式（窗口/输出上限/工具档位）生效；`tool_failures` 表（T15）与 7 天清理。
 
 ### 阶段 9 · 部署与 24/7 运行
 

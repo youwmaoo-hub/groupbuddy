@@ -8,9 +8,9 @@
 
 | 项 | 值 |
 |---|---|
-| 代码 commit | `7382639c2b2a1285cb0e6ddb4e74a41286ebda47`（短 `7382639`，分支 `main`；阶段 8 F5.2 代码 + 契约文档） |
+| 代码 commit | `c49fdc5232a2c56e9bd3a090b4ddefe74618a903`（短 `c49fdc5`，分支 `main`；阶段 8 F5.1 代码 + 契约文档） |
 | 跟踪文件数 | 121（`git ls-files`） |
-| 提交数 | 17（阶段提交 + 文档治理 `b529741` + A1–A3 修复 `f7f34b5` + 文档同步 `3347301` + 部署记录 + 阶段 8 F5.2 代码与契约文档 `7382639` + 本次状态更新） |
+| 提交数 | 19（阶段提交 + 文档治理 `b529741` + A1–A3 修复 `f7f34b5` + 文档同步 `3347301` + 部署记录 + 阶段 8 F5.2 `7382639` + F5.1 `c49fdc5` + 本次状态更新） |
 | 本机工作树 | 干净（`git status --porcelain` 无输出） |
 | 真机仓库 | `/home/bot/app` = detached HEAD @ `3347301`，工作树干净，属主 `bot:bot`；**代码基线落后于本机**：本机其后的 `07a9288`（部署记录，纯文档）与阶段 8 F5.2 提交均未上真机 |
 | 真机远端 | `origin` = VPS `/tmp/dsh_deploy_3347301.bundle`（文件存在，可 `git fetch`；仍未配置正式远端，未建 GitHub remote、未 push） |
@@ -28,14 +28,14 @@
 | 5 | 已完成 | 贴纸：`stickers` 表、情绪匹配、冷却、出站媒体通道 |
 | 6 | 已完成 | 记忆：分档窗口 + 字符预算、噪声标记、模板化摘要、FTS5 检索 |
 | 7 | 已完成 | 沙箱 `run_code`：固定 argv、rootless Podman / Docker、Tier A/B、fail-closed；真机部署与验收已完成 |
-| 8 | 进行中 | 权限/配额/运维：**已完成群主命令最小闭环**（管理员判定 `app/ops/admin.py` + `/settings` 回显 + 非管理员被拒 + 未知命令静默，见 `docs/security.md` §2.1）与 T12 修复；配额、`/stats`、`/health` + `health.json`、`host_info`、token 四模式待做 |
+| 8 | 进行中 | 权限/配额/运维：**已完成群主命令最小闭环与群设定写入**（`app/ops/admin.py` 管理员判定 + `/settings` 回显/写入，见 `docs/security.md` §2.1；F5.1/F5.2 + T12）；配额、`/stats`、`/health` + `health.json`、`host_info`、token 四模式生效待做 |
 | 9 / 10 | 未开始 | 部署与 24/7；控制面板与多实例（仅架构预留） |
 
 ## 3. 本机验证（Windows，开发环境）
 
 - 解释器：Python 3.13.15（仓库内 `.venv`）；`openai 3.24.0`；**沙箱走 FakeBackend，不跑真实容器**。
 - 命令：`python -m unittest discover -s tests -t .`
-- 结果：`Ran 315 tests` / `OK (skipped=2)` / 退出码 0（293 原有 + 22 条阶段 8 F5.2 新增：命令解析与管理员判定、命令通道端到端、T12 原子写入）。
+- 结果：`Ran 326 tests` / `OK (skipped=2)` / 退出码 0（293 原有 + 22 条 F5.2 + 11 条 F5.1：字段白名单与合法值、非法输入不写库、改设置当轮生效）。
 - 2 条 skip 为平台条件跳过（Windows 上软/硬链接相关用例，见 `TODO.md` T28）。
 - 覆盖缺口（已知）：`app/main.py`、`app/logging_setup.py`、`app/telegram/handlers.py`、`app/telegram/sender.py` 无测试（见 `TODO.md` T25）。
 
@@ -89,8 +89,8 @@ Tier B 4/4：本群 workspace 读写（非 root）、宿主侧可见、其他群
 
 ## 7. 下一步
 
-1. **阶段 8（进行中）**：已完成群主命令最小闭环（管理员判定 + `/settings` 回显 + T12）。下一项 = F5.1 群设定写入（`/settings <字段> <值>`，让 `mode` 与各工具等级开关真正生效，复用本项的命令通道与原子 upsert）；随后 F5.3 配额（`QUOTA_DAILY_TOKENS` / `QUOTA_MONTHLY_TOKENS`，按 `chat_id` 统计）、F5.4 `/stats` + `/health`（与 `storage/health.json` 同一内部状态）、F4.7 `host_info`、`docs/token.md` §5 四模式。
-2. 是否把阶段 8 提交（`7382639`）同步到真机并在真机重跑测试（本机 315 条，真机仍为 `3347301` 的 293 条）。
+1. **阶段 8（进行中）**：已完成 F5.2（管理员判定 + 命令通道 + T12）与 F5.1（`/settings <字段> <值>` 写入、即时生效）。下一项 = F5.3 配额（`QUOTA_DAILY_TOKENS` / `QUOTA_MONTHLY_TOKENS`，按 `chat_id` 统计，超额优雅拒绝）；随后 F5.4 `/stats` + `/health`（与 `storage/health.json` 同一内部状态）、F4.7 `host_info`、`docs/token.md` §5 四模式（窗口/输出上限/工具档位的完整影响）。
+2. 是否把阶段 8 提交（`7382639`、`c49fdc5`）同步到真机并在真机重跑测试（本机 326 条，真机仍为 `3347301` 的 293 条）。
 3. 是否立项修 B 组技术债（`TODO.md` T4 / T7 / T9 / T10 / T25 等；T1–T3 已随 `f7f34b5`、T12 已随 `7382639` 修复）。
 4. 是否配置正式远端（GitHub），以便后续换 Agent 维护。
 

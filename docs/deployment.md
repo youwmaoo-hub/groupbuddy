@@ -48,7 +48,8 @@
 ## 6. 进程管理与自愈
 
 - 单机单进程；同一 Bot Token 只允许一个 polling 进程。
-- 托管方式（阶段 9 交付）：systemd（`Restart=always`）或容器 `restart: unless-stopped`。
+- 托管方式（阶段 9 已落地）：systemd **用户级**单元 `Restart=always`（模板与命令见 §12.9）或容器 `restart: unless-stopped`；
+  托管只负责拉起与重启，进程内不做热加载。
 - VPS 重启后自动拉起；SQLite 与 workspace 保留，直接恢复运行。
 - 实例生命周期由部署控制：创建/停用实例 = 写配置 + 启/停进程；阶段 1–9 不做进程内热加载（见 `docs/architecture.md` §10）。
 
@@ -97,7 +98,7 @@ Kubernetes、微服务、Redis、外部数据库、Nginx、Webhook 入口、多�
 
 正式生产目标是 **Linux + rootless Podman**；Windows 只做开发与离线测试（沙箱走 FakeBackend，不跑真实容器）。
 本节是 VPS 到位后的上线清单。**真机验收已在阶段 7 完成**（Debian 12 + rootless Podman 4.3.1 + cgroup v2 + Python 3.11.2，13 项全 PASS：Tier A 7/7、Tier B 4/4）；
-当前事实、commit 与证据路径见 `docs/status.md`，条件与判读契约仍以本节 §12.1–§12.7 为准。
+当前事实、commit 与证据路径见 `docs/status.md`，条件与判读契约仍以本节 §12.1–§12.9 为准。
 
 ### 12.1 目标机条件
 
@@ -155,6 +156,8 @@ cd <项目根>            # 含 app/、.env、storage/
 - `Bot 就绪 username=… bot_id=… model=…`：轮询已建立。
 - 停止用 `SIGTERM`（`Ctrl+C` 或 `kill <pid>`）：停收更新 → 限时排空 10 秒 → 落库并关闭；**不要** `kill -9`。
 - 阶段 1–9 不做进程内热加载：改 `.env` 或代码后重启进程。
+- 生产托管时用 systemd 用户级单元执行同一条命令（见 §12.9），停止/重启走 `systemctl --user stop/restart`，
+  等价于发 `SIGTERM`；仍然**不要** `kill -9`。
 
 ### 12.6 真机验收 `scripts/verify_sandbox.py`
 
@@ -190,4 +193,57 @@ cd <项目根>
 - 沙箱临时文件用后即删；启动时清理带 `groupbuddy=1` 标签的残留容器；被 `SIGKILL` 后可能留下空临时目录，直接清空 `SANDBOX_TEMP_DIR` 即可。
 - 健康检查（`storage/health.json`）与 `/health` 已在阶段 8 F5.4 落地（见 §7）；人工检查仍是「进程存活 + 日志 + `scripts/verify_sandbox.py` 是否通过」。
 - 工具失败留痕写入 `storage/bot.db` 的 `tool_failures`（保留 7 天，启动时与每小时清理）；`/stats` 可看本群当日用量与错误率。
-- 单机单进程：同一个 Bot Token 只允许一个 polling 进程；进程托管（systemd 或容器 `restart`）属阶段 9。
+- 单机单进程：同一个 Bot Token 只允许一个 polling 进程；进程托管（systemd 或容器 `restart`）已在阶段 9 落地，见 §12.9。
+
+### 12.9 systemd 用户级单元（阶段 9 最小生产闭环）
+
+选择理由：VPS 已有 `bot` 专用用户与 rootless Podman，用户级单元不需要 root 权限、不引入新组件、不开新端口，
+配合 §12.2 的 `loginctl enable-linger <bot 用户>` 即可机器重启后自动拉起；隔离约束（§10）不变。
+
+单元文件：`<bot 用户家目录>/.config/systemd/user/groupbuddy.service`（权限 `644`、属主 `<bot 用户>`），
+`WorkingDirectory` 必须写成项目根 —— `.env` 是按**进程工作目录**解析的（§3），少了它 `BOT_TOKEN` 会读不到。
+
+```ini
+[Unit]
+Description=<实例名> Telegram bot（最小生产闭环，阶段 9）
+Documentation=file://<项目根>/docs/deployment.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=<项目根>
+ExecStart=<项目根>/.venv/bin/python -m app.main
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target
+```
+
+- `Restart=always` + `RestartSec=5`：异常退出（含 `SIGKILL`）自动拉起；`KillSignal=SIGTERM`/`TimeoutStopSec=30`
+  给应用留出 §5 的 10 秒排空；`NoNewPrivileges=yes` 与 §10 一致，单元不接触 podman/docker socket。
+- 只用应用已支持的键；`.env` 不开新键，`.env.example` 不变。
+
+常用命令（root 以 `<bot 用户>` 身份操作**必须**显式给 `XDG_RUNTIME_DIR`，否则报 `Failed to connect to bus: No medium found`）：
+
+```bash
+U=<bot 用户>
+sudo -u "$U" env XDG_RUNTIME_DIR=/run/user/$(id -u "$U") systemctl --user daemon-reload
+sudo -u "$U" env XDG_RUNTIME_DIR=/run/user/$(id -u "$U") systemctl --user enable --now groupbuddy.service
+sudo -u "$U" env XDG_RUNTIME_DIR=/run/user/$(id -u "$U") systemctl --user status groupbuddy.service
+sudo -u "$U" env XDG_RUNTIME_DIR=/run/user/$(id -u "$U") systemctl --user stop|restart groupbuddy.service
+sudo -u "$U" env XDG_RUNTIME_DIR=/run/user/$(id -u "$U") systemctl --user show -p MainPID -p NRestarts groupbuddy.service
+```
+
+核对口径：
+
+- `systemctl --user is-enabled` = `enabled`，且 `<家目录>/.config/systemd/user/default.target.wants/groupbuddy.service` 符号链接存在；`loginctl show-user "$U"` 的 `Linger=yes`（否则无人登录时不会随机器启动）。
+- 启动日志按 §12.5 逐项核对；`NRestarts` 在 `kill -9 <MainPID>` 之后 +1 且进程换新 PID，说明自动重启生效。
+- 用户级 `journalctl --user` 在目标机上不保证有 journal 文件（实测 `No journal files were found`），
+  排查以 `storage/logs/bot.log` 为准；`storage/health.json` 的 `checked_at` 每 60 秒推进、重启后 `uptime_s` 归零。
+- 容器托管（`compose.yaml` / `Dockerfile`）属阶段 9 的后续可选路径，本阶段未采用，也不在本阶段验收。

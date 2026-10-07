@@ -136,7 +136,7 @@ Telegram Update
 | 论坛主题 | 所有内容表带 `thread_id`（默认 NULL） | 按主题隔离记忆 |
 | 横向扩展 | 单进程 polling | 需要时改 Webhook（同一 Token 只能一个 polling 进程） |
 | 每群独立 Bot | 单 Token + `chat_id` 租户键 | 多 Token 部署多实例 |
-| 模型档位 | 单模型名可配置 | 按复杂度路由（见 token §运行侧） |
+| 模型档位 | 单模型名可配置 | 按复杂度路由（见 token §运行侧）。**评估（2026-10-07）：暂不做**——真实成本 < $0.01、无质量不足证据、`deepseek-v4-pro` 价格与可得性未核实；缝（`LLM_MODEL` 单键）已够用，见 `docs/requirements.md` 未决问题 #2 |
 | 代码执行强度 | Docker/Podman | gVisor/Kata/Firecracker（仅在确有高风险需求时） |
 | 沙箱隔离强度 | 一次性容器 + rootless Podman（Tier B 用 `keep-id`），Bot 进程不接触容器运行时 socket；
 Docker 只支持 Tier A | 独立沙箱服务 / microVM（确有必要时） |

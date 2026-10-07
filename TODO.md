@@ -110,7 +110,7 @@
 - 已完成（`c29ecac`，批处理里程碑 A）：群级人设 Persona —— `/settings persona_override <文本>` **仅群主（Telegram `creator`）可写**，普通管理员与成员一律按固定拒绝文案处理且文案不含字段名；`app/ops/persona.py` 是唯一读取/清洗入口（单行化、上限 500 字符、`off`/`关` 清除），优先级 本群覆盖 > 部署侧 `PERSONA` > 内置人格；`app/ops/admin.py` 新增 `ChatRoles` + `is_owner`（与管理员同一份 300 秒缓存，失败 fail-closed），`app/telegram/admins.py` 一次 `getChatAdministrators` 同时取两者；确认与回显只出现字数、不回显正文。契约见 `docs/persona.md` §2、`docs/security.md` §2.1。
 - 已完成（`495389b`，批处理里程碑 B 第一项）：长期笔记 `/note` —— 填上 `docs/memory.md` §6 一直标注「尚未实现」的写入路径。`app/ops/notes.py`（纯文本：解析/列出/查看/记住/删除、名称 ≤50 字符与正文 ≤500 字符上限、时间戳渲染）、`app/ops/text.py`（人设与笔记共用的单行化）、`app/ops/commands.py` 的 `_note`（**仅群主**，与 `persona_override` 同一 `is_owner` 判定与固定拒绝文案；0 token、不进模型；写入后回读拿权威 `version`）、`app/storage/repo/notes.py` 新增 `list_for_chat` / `delete`（删除同步清 `notes_fts` 外部内容表）；同名覆盖 `version` +1，确认与列表只回名称/版本/字数、不回显正文，写入或删除失败只回固定短句。契约见 `docs/memory.md` §6、`docs/security.md` §2.1、`docs/database.md` §3/§4。
 - 已完成（`e1dcb6a`，工具体验优化）：T31 工具清单逐轮重取 —— `app/llm/loop.py` 每一轮重新取工具清单，本轮被禁用/熔断的工具不再下发给模型（清单为空即不带工具、强制给答案），`app/tools/executor.py` 的 `cooldown` 文案改用 `BreakerConfig.round_failures` 而不是写死 2。修复前第 1 轮快照会让模型继续调用只可能返回 `cooldown` 的工具，白花一整轮模型调用与 token，与 `docs/tools.md` §1、`docs/security.md` §9、F4.8 验收「失败工具不再重复调用」不符。契约见 `docs/tools.md` §1、`docs/security.md` §9、`docs/token.md` §6。
-- 待做（阶段 8 内明确留到后续）：链 3 工具轮次按意图分档（`TOOL_MAX_ROUNDS` 仍为全局 2）、模型档位路由（未决问题 #2）。
+- 待做（阶段 8 内明确留到后续，**均已评估为暂不做**，见 `docs/requirements.md` 未决问题 #2 与 `docs/token.md` §3/§5）：链 3 工具轮次按意图分档（`TOOL_MAX_ROUNDS` 仍为全局 2；「闲聊=0 轮」会连贴纸工具一起关掉，需产品决策）、模型档位路由（真实成本 < $0.01、无质量不足证据、`deepseek-v4-pro` 价格与可得性未核实）。
 
 ### 阶段 9 · 部署与 24/7 运行
 

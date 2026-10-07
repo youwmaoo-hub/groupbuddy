@@ -128,6 +128,7 @@ Tier B 4/4：本群 workspace 读写（非 root）、宿主侧可见、其他群
 - **未配置正式远端**：代码同步通过 git bundle + SSH 完成；bundle 已从 `/tmp` 移到 Bot 用户持久目录（真机 `origin` = `/home/bot/bundles/dsh_deploy_bafe096.bundle`），仍未建 GitHub remote、未 push。
 - 备份/恢复与更新/回滚演练已完成（见 §4.4）；**仍未实现**：程序内自动备份任务与 `BACKUP_INTERVAL_SECONDS`/`BACKUP_KEEP` 环境键（当前只能手工跑 `scripts/backup_db.py`）、`PRAGMA optimize` / `VACUUM`、容器托管（`Dockerfile`/`compose.yaml`，可选路径）。
 - 阶段 8 内明确留到后续的项：链 3 的工具轮次按意图分档（`TOOL_MAX_ROUNDS` 仍为全局 2）、模型档位路由（未决问题 #2）。原留后项 `/clear` 已补做（`8b14aab`，本机；真机尚未同步），群级人设 Persona 已实现（`c29ecac`，本机；真机尚未同步），长期笔记 `/note` 已实现（`495389b`，本机；真机尚未同步；记忆体验优化的第一项，见 `docs/memory.md` §6），工具体验优化修复 T31（`e1dcb6a`，本机；真机尚未同步：工具清单逐轮重取，本轮被禁用的工具不再下发给模型）。
+- **模型档位路由与链 3 轮次分档：已评估为暂不做（2026-10-07）**：真实使用成本 < $0.01（§4.5：29 次 chat 调用 ≈ 44k 输入 / 4.5k 输出、观察到的轮次 `tool_calls=0`），没有复杂轮次质量不足的证据；唯一可用方向是把复杂轮次升级到 `deepseek-v4-pro`（提高花费换质量），其价格与可得性未核实，属部署决策；轮次分档的「闲聊=0 轮」会连贴纸工具一起关掉，与贴纸功能冲突。评估结论见 `docs/requirements.md` 未决问题 #2、`docs/token.md` §3/§5。
 - 未引入 CI、lint、类型检查、锁文件（见 `TODO.md` T27）。
 
 ## 6. 技术债摘要
@@ -147,7 +148,7 @@ Tier B 4/4：本群 workspace 读写（非 root）、宿主侧可见、其他群
 
 ## 7. 下一步
 
-0. **当前批处理路线（用户 2026-10-07 指定，按序推进）**：真实使用反馈 → `/clear`（已完成，`8b14aab`）→ Persona（群级配置，**已完成，`c29ecac`**）→ **记忆体验优化（里程碑 B，进行中：第一项长期笔记 `/note` 已补做 `495389b`——填上 `docs/memory.md` §6 一直标注「尚未实现」的写入路径；其余候选按真实使用证据再评估）** → 工具体验优化（**已完成，`e1dcb6a`**：修复 T31 工具清单逐轮重取；其余候选（工具数量、新基础设施）无真实证据，未自造）→ **模型档位路由（下一项）** → 链式工具轮次优化 → Stage 10.0 服务层接口预留 → B 组技术债 T25/T7/T9 → 阶段 9 小优化（自动备份 / `BACKUP_*` / `PRAGMA optimize` / `VACUUM` / 正式 remote）。原则：已有真实反馈优先处理，无真实证据的新需求不自造；低风险可回滚的决定自行完成并记录。里程碑 A（`/clear` + Persona）已完成；该路线的模块形态统一为「Telegram adapter → `app/ops/` 规则入口 → repo」，Persona 与 `/note` 都按此落地，后续工具 UX 沿用同一形态。
+0. **当前批处理路线（用户 2026-10-07 指定，按序推进）**：真实使用反馈 → `/clear`（已完成，`8b14aab`）→ Persona（群级配置，**已完成，`c29ecac`**）→ **记忆体验优化（里程碑 B，进行中：第一项长期笔记 `/note` 已补做 `495389b`——填上 `docs/memory.md` §6 一直标注「尚未实现」的写入路径；其余候选按真实使用证据再评估）** → 工具体验优化（**已完成，`e1dcb6a`**：修复 T31 工具清单逐轮重取；其余候选（工具数量、新基础设施）无真实证据，未自造）→ 模型档位路由（**已评估，暂不做**）→ 链式工具轮次优化（**已评估，暂不做**：闲聊=0 轮会关掉贴纸工具，需产品决策）→ Stage 10.0 服务层接口预留（`docs/domain.md`/`docs/architecture.md` §10 已预留，无冻结接口规格，属产品设计）→ **B 组技术债 T25/T7/T9（下一项）** → 阶段 9 小优化（`PRAGMA optimize`；`BACKUP_*` 属部署契约变化、正式 remote 需用户确认）。原则：已有真实反馈优先处理，无真实证据的新需求不自造；低风险可回滚的决定自行完成并记录。里程碑 A（`/clear` + Persona）已完成；该路线的模块形态统一为「Telegram adapter → `app/ops/` 规则入口 → repo」，Persona 与 `/note` 都按此落地，后续工具 UX 沿用同一形态。
 1. **阶段 8 已全部完成并通过真机验收**（真机 `88531d2`：416 条全量 OK、沙箱 13 项全 PASS、migration 4 与 `host_info` Linux 行为符合契约）：F5.2（管理员判定 + 命令通道 + T12）、F5.1（`/settings <字段> <值>` 写入、即时生效）、F5.3（日/月配额）、F5.4（`/stats` + `/health`，`tool_failures` 留痕与 7 天清理，与 `storage/health.json` 同一内部状态）、F4.7（`host_info`：`cpu`/`memory`/`disk_free`/`python`/`uptime_s`，L4 + `allow_host_info` 默认关）与四模式（`78ae9cf`：窗口 / 输出上限 / 工具档位，`docs/token.md` §5）。阶段 8 内明确留到后续的只有链 3 轮次分档、模型档位路由（`/clear` 已于 `8b14aab` 补做，群级人设 Persona 已由 `c29ecac` 补做）。
 2. **阶段 9（部署与 24/7）进行中**：最小生产闭环已完成并真机验证（systemd 用户级单元、真实 `.env`、启动时 migration、health 心跳、Telegram 真机收发、stop/start/restart 与 `SIGKILL` 自动重启，见 §4.3）；备份/恢复与更新/回滚演练已通过（`scripts/backup_db.py`、`docs/deployment.md` §8.1，证据见 §4.4），真机当前跑 `26e946d`（= `bafe096`，真机直接相关测试 65 条 OK）。首次真实使用发现的空贴纸库问题已在真机同步并复验（见 §4.5）。阶段 9 未完成部分：程序内自动备份任务与 `BACKUP_*` 环境键、`PRAGMA optimize`/`VACUUM`、容器托管（可选路径）。
 3. 是否立项修 B 组技术债（`TODO.md` T4 / T7 / T9 / T10 / T25 等；T1–T3 已随 `f7f34b5`、T12 已随 `7382639`、T15 已随 `101c26c` 修复）。

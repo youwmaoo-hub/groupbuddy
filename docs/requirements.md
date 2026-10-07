@@ -155,7 +155,7 @@ F2.1 只覆盖强触发；"不需要 @ 也能主动回复"（§2.1 第 1 条）�
 | # | 问题 | 当前默认 |
 |---|---|---|
 | 1 | `search_web` 后端 | 接口已冻结；默认 `SEARCH_BACKEND=none`（不注册、不下发）；`fake` 仅离线测试；真实后端候选 Tavily 或自建 SearXNG（未定） |
-| 2 | 是否做模型档位路由 | **已定（2026-10-07）：做最小规则型路由，已实施（`app/llm/routing.py`，契约见 `docs/token.md` §5.1）**。原评估是暂不做（真实使用成本 < $0.01、无质量不足证据、`deepseek-v4-pro` 价格未核实）；随后按用户批处理指令改为落地最小规则型路由：默认 `LLM_MODEL`（flash），summary / 后台任务与无法判断的任务一律默认档，只有纯规则判定为复杂（代码块 / 单条 ≥400 字 / 含链接 / 检索类措辞）且配置了 `LLM_MODEL_STRONG` 时才升级，选择失败 fail-safe 回默认。不额外调用模型、不新增分类器与新依赖，不绕过 quota / 工具档位 / 沙箱 / 权限。缝保留：`LLM_MODEL`（默认档）与 `LLM_MODEL_STRONG`（升级档）两个键即可换模型与厂商（`docs/architecture.md` §7 扩展预留） |
+| 2 | 是否做模型档位路由 | **已定（2026-10-07）：做最小规则型路由，已实施（`app/llm/routing.py`，契约见 `docs/token.md` §5.1）**。原评估是暂不做（真实使用成本 < $0.01、无质量不足证据、`deepseek-v4-pro` 价格未核实）；随后按用户批处理指令改为落地最小规则型路由：默认 `LLM_MODEL`（flash），summary / 后台任务与无法判断的任务一律默认档，只有纯规则判定为复杂（代码块 / 单条 ≥400 字 / 含链接 / 检索类措辞）且配置了 `LLM_MODEL_STRONG` 时才升级，选择失败 fail-safe 回默认。不额外调用模型、不新增分类器与新依赖，不绕过 quota / 工具档位 / 沙箱 / 权限。缝保留：`LLM_MODEL`（默认档）与 `LLM_MODEL_STRONG`（升级档）两个键即可换模型与厂商（`docs/architecture.md` §7 扩展预留）。同一入口还落地了链 3 的工具轮次分档（`tool_round_limit`，`a5bf651`）：只把全局 `TOOL_MAX_ROUNDS` 调低，闲聊 1 轮（原表 0 轮会连贴纸工具一起关掉）、其余沿用全局上限（契约见 `docs/token.md` §5.2） |
 | 3 | 贴纸素材来源 | 群主手动登记，模型只给 valence/arousal/tags |
 | 4 | 复杂度/追问判定方式 | 纯规则（正则 + 距离阈值），不引入分类模型 |
 | 5 | 部署形态 | **已定**：阶段 7 完成真机部署与验收（Debian 12 + rootless Podman 4.3.1 + Python 3.11.2，Tier A 7/7、Tier B 4/4，见 `docs/status.md`）；容器运行时仍是可选依赖：没有 Podman/Docker 时 `run_code` 自动 fail-closed，其余功能不受影响 |

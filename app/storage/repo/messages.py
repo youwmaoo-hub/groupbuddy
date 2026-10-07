@@ -1,0 +1,155 @@
+"""messages 表：消息原文落库与窗口查询。"""
+
+from __future__ import annotations
+
+import time
+
+import aiosqlite
+
+from app.storage.repo_models import PendingSummary, StoredMessage
+
+INSERT_SQL = """
+INSERT INTO messages (chat_id, message_id, thread_id, user_id, role, text, reply_to_message_id, noise, created_at)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT (chat_id, message_id) DO NOTHING
+"""
+
+
+async def insert(
+    connection: aiosqlite.Connection,
+    *,
+    chat_id: int,
+    message_id: int,
+    user_id: int,
+    role: str,
+    text: str,
+    thread_id: int | None = None,
+    reply_to_message_id: int | None = None,
+    noise: bool = False,
+    created_at: int | None = None,
+) -> bool:
+    """写入一条消息；同一群内 message_id 重复视为重放，返回 False。"""
+    cursor = await connection.execute(
+        INSERT_SQL,
+        (
+            chat_id,
+            message_id,
+            thread_id,
+            user_id,
+            role,
+            text,
+            reply_to_message_id,
+            1 if noise else 0,
+            created_at if created_at is not None else int(time.time()),
+        ),
+    )
+    await connection.commit()
+    inserted = cursor.rowcount == 1
+    await cursor.close()
+    return inserted
+
+
+async def recent(
+    connection: aiosqlite.Connection,
+    *,
+    chat_id: int,
+    limit: int,
+    include_noise: bool = False,
+    thread_id: int | None = None,
+    until_id: int | None = None,
+) -> list[StoredMessage]:
+    """取该群最近 limit 条（时间升序返回）；窗口按 chat_id 过滤，绝不跨群。
+
+    until_id 是本轮边界快照：只取"开始处理这一轮时已入库"的消息。
+    """
+    conditions = ["chat_id = ?"]
+    params: list[object] = [chat_id]
+    if not include_noise:
+        conditions.append("noise = 0")
+    if thread_id is not None:
+        conditions.append("thread_id = ?")
+        params.append(thread_id)
+    if until_id is not None:
+        conditions.append("id <= ?")
+        params.append(until_id)
+
+    sql = (
+        f"SELECT * FROM (SELECT * FROM messages WHERE {' AND '.join(conditions)} "
+        "ORDER BY created_at DESC, id DESC LIMIT ?) ORDER BY created_at ASC, id ASC"
+    )
+    params.append(limit)
+    cursor = await connection.execute(sql, params)
+    rows = await cursor.fetchall()
+    await cursor.close()
+    return [StoredMessage.from_row(row) for row in rows]
+
+
+RANGE_SQL = (
+    "SELECT * FROM messages WHERE chat_id = ? AND noise = 0 AND id > ? ORDER BY id LIMIT ?"
+)
+PENDING_SQL = (
+    "SELECT COUNT(*) AS messages, COALESCE(SUM(LENGTH(text)), 0) AS chars, "
+    "COALESCE(MAX(created_at), 0) AS last_at FROM messages "
+    "WHERE chat_id = ? AND noise = 0 AND id > ?"
+)
+
+
+async def since(
+    connection: aiosqlite.Connection,
+    *,
+    chat_id: int,
+    after_id: int,
+    limit: int = 200,
+) -> list[StoredMessage]:
+    """摘要输入：游标之后的消息（噪声已排除，时间升序）。"""
+    cursor = await connection.execute(RANGE_SQL, (chat_id, after_id, max(1, limit)))
+    rows = await cursor.fetchall()
+    await cursor.close()
+    return [StoredMessage.from_row(row) for row in rows]
+
+
+async def pending_since(connection: aiosqlite.Connection, *, chat_id: int, after_id: int) -> PendingSummary:
+    """未摘要区间的条数/字符数/最后时间（摘要触发判定用）。"""
+    cursor = await connection.execute(PENDING_SQL, (chat_id, after_id))
+    row = await cursor.fetchone()
+    await cursor.close()
+    if row is None:
+        return PendingSummary(messages=0, chars=0, last_at=0)
+    return PendingSummary(messages=int(row["messages"]), chars=int(row["chars"]), last_at=int(row["last_at"]))
+
+
+async def max_id(connection: aiosqlite.Connection, *, chat_id: int) -> int:
+    """该群当前最大行 id，用作本轮边界快照；无消息返回 0。"""
+    cursor = await connection.execute(
+        "SELECT COALESCE(MAX(id), 0) FROM messages WHERE chat_id = ?", (chat_id,)
+    )
+    row = await cursor.fetchone()
+    await cursor.close()
+    return int(row[0]) if row is not None else 0
+
+
+async def since_last_assistant(connection: aiosqlite.Connection, *, chat_id: int) -> int | None:
+    """Bot 上一条发言之后（不含该条、含当前这条）的消息条数；从未发言返回 None。
+
+    只用于追问判定（F2.3）：Bot 刚说完话的几条之内才算"接着上面的话"。
+    """
+    cursor = await connection.execute(
+        "SELECT (SELECT COUNT(*) FROM messages WHERE chat_id = ? AND role = 'assistant') AS spoken, "
+        "(SELECT COUNT(*) FROM messages WHERE chat_id = ? AND id > COALESCE("
+        "(SELECT MAX(id) FROM messages WHERE chat_id = ? AND role = 'assistant'), 0)) AS gap",
+        (chat_id, chat_id, chat_id),
+    )
+    row = await cursor.fetchone()
+    await cursor.close()
+    if row is None or int(row[0]) == 0:
+        return None
+    return int(row[1])
+
+
+async def clear_chat(connection: aiosqlite.Connection, chat_id: int) -> int:
+    """/clear 用：删除该群消息原文，不影响其他群。"""
+    cursor = await connection.execute("DELETE FROM messages WHERE chat_id = ?", (chat_id,))
+    await connection.commit()
+    deleted = cursor.rowcount
+    await cursor.close()
+    return deleted

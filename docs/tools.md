@@ -8,8 +8,8 @@
 
 - 工具清单由程序生成并按权限裁剪后注入 System3（见 `docs/security.md` §2）。
 - 模型返回的 `arguments` 不保证是合法 JSON、也可能是未定义参数：一律经 Pydantic 校验，失败即拒绝。
-- 执行顺序固定（判定顺序以 `docs/security.md` §2 为准）：**注册表 → 本群开关/身份 → 参数 schema → 执行 → 结构化结果**，任何一步失败都返回 §3 的错误码。
-- 输出必须是短的结构化 JSON；超限即截断并标注（见 §4）。
+- 执行顺序固定（判定顺序以 `docs/security.md` §2 为准）：**本轮熔断/禁用 → 注册表 → 本群开关/身份 → 参数 schema → 执行 → 结构化结果**，任何一步失败都返回 §3 的错误码。
+- 输出必须是短的结构化 JSON；上限由工具的 `ToolSpec.max_payload_bytes`（默认 4096 字节）决定，**超限整包丢弃并返回 `too_large`**，不做截断（见 §4）。
 - 同一工具在一轮内失败 2 次 → 本轮禁用；5 分钟内失败 8 次 → 临时熔断 30 秒（见 `docs/security.md` §9；阶段 3 熔断状态在进程内存）。
 
 ## 2. 冻结表
@@ -22,13 +22,13 @@
 | `write_file` | L2 | 群开关 | `path: str, content: str` | `{path,bytes,backup?: str}` | 5s |
 | `send_sticker` | L2 | 群开关 | `valence: float, arousal: float, tags?: [str]` | `{sent: bool, sticker_id: int}`；冷却中 `{sent: false, state: "cooldown", retry_after: N}` | 3s |
 | `run_code` | L3 | 群开关（默认关） | `code: str, timeout_s?: int=15, workspace?: bool=false` | `{exit_code,stdout,stderr,truncated}` | 30s（ToolSpec 35s） |
-| `host_info` | L4 | 默认关 | `fields?: [str]` | `{cpu,memory,disk_free,python,uptime_s}` | 2s |
+| `host_info` | L4 | 默认关 | `fields?: [str]` | `{cpu,memory,disk_free,python,uptime_s}` | 2s（**阶段 8 设计**：无实现文件、从未注册） |
 
 ### calc
 
 - 只接受 `+ - * / % ** ( )`、数字、空白；通过 AST 解析求值。
 - 禁止 `eval`/`exec`；出现名称、属性、调用、下标、推导式等一律拒绝（`invalid_expression`）。
-- 表达式 ≤200 字符；指数绝对值 ≤100；结果绝对值 ≤10^100；除零同样返回 `invalid_expression`。
+- 表达式 ≤200 字符；指数绝对值 ≤100；结果为整数时绝对值 ≤10^100（浮点结果只校验有限性，`inf`/`nan` 拒绝）；除零同样返回 `invalid_expression`。
 - 零文件、零网络、零 shell。
 
 ### search_web
@@ -61,7 +61,9 @@
 - Tier B（`workspace=true`）只在 rootless Podman（`--userns=keep-id`）下可用；其他后端一律 `sandbox_unavailable`。
 - 无容器运行时可用时一律 fail-closed 拒绝（`sandbox_unavailable`），不允许退化为宿主机执行。
 - 默认 `timeout_s=15`，上限 30；超时即 kill 并销毁容器并返回 `timeout`。
-- 错误映射：运行时不可用 / Tier B 未验证 → `sandbox_unavailable`；启动或执行失败 → `execution_failed`；workspace 越界 → `path_outside_workspace`。
+- 错误映射：运行时不可用 / Tier B 未验证 → `sandbox_unavailable`；workspace 越界 → `path_outside_workspace`；
+  后端调用本身抛异常（`OSError`/`TimeoutError`）→ `execution_failed`。
+  **尚未实现**：CLI 以 125/126/127 之类的非零码退出时，`runner.py` 不会把它映射成 `execution_failed`，argv 结果被原样当工具结果返回（技术债见 `TODO.md`）。
 
 ### host_info
 
@@ -84,7 +86,7 @@
 | `too_large` | 输入或输出超过上限 |
 | `timeout` | 超时 |
 | `sandbox_unavailable` | 容器运行时不可用（`run_code` 专用） |
-| `execution_failed` | 目标程序非零退出且有 stderr |
+| `execution_failed` | 后端调用失败；目标程序自身的非零退出**不**映射到此码（见 §2 `run_code`） |
 | `cooldown` | 工具处于冷却/熔断 |
 | `internal_error` | 未分类错误（消息只回一句，不泄露细节） |
 
@@ -94,10 +96,13 @@
 
 | 位置 | 上限 | 超出表现 |
 |---|---|---|
-| `run_code` stdout / stderr | 各 8 KB | 末尾追加 `[output truncated: N bytes]` |
+| `run_code` stdout / stderr | 各 `SANDBOX_OUTPUT_KB`（默认 8）KB | 沙箱内截断并追加 `[output truncated: N bytes]` |
 | `search_web` | 结果 ≤5 条，snippet ≤500 字符 | 多余结果丢弃并计入 `truncated` |
-| `read_file` | 单次 ≤200 行且 ≤16 KB | 返回 `total_lines` 与 `end_line` 供模型续读 |
-| 其他工具 | 4 KB JSON | 截断并标注 |
+| `read_file` | 单次 ≤200 行且 ≤16 KB（`ToolSpec` 显式设 16384） | 超限**整包丢弃** `too_large`，拿不到 `total_lines`；续读只能由模型收窄 `start_line`/`end_line` |
+| 其余工具（含 `run_code` 的汇总结果） | 该工具 `ToolSpec.max_payload_bytes`，默认 4096 字节 | 结果整体丢弃并返回 `{"error":"too_large"}`，**不做截断标注** |
+
+`run_code` 的 `ToolSpec.max_payload_bytes` 显式设为 20480（`app/tools/builtin/run_code.py`）：把 `SANDBOX_OUTPUT_KB` 调大后，
+stdout+stderr 合计很容易超过 20480，此时工具结果会整包丢弃。两处上限存在耦合（技术债见 `TODO.md`）。
 
 ## 5. System3 注入格式
 

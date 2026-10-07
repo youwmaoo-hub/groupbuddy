@@ -9,6 +9,7 @@
 - SQLite（`aiosqlite`），文件：`storage/bot.db`。
 - 连接 PRAGMA：`journal_mode=WAL`、`synchronous=NORMAL`、`foreign_keys=ON`、`busy_timeout=5000`。
 - 时间统一存 Unix 秒（`INTEGER`），不存本地时间字符串。
+- **已知偏差**：`stickers.last_used_at` 目前写的是 `time.monotonic()`（进程相对秒）而非 Unix 秒，重启后"优先未近期使用"的 tie-break 语义反转（技术债见 `TODO.md`）。
 - 时间语义：内部一律 UTC；展示与"按天"归集再按 `TIMEZONE` 配置转换（默认 `Asia/Shanghai`，见 `docs/deployment.md` §4）。
 - 迁移：使用 `PRAGMA user_version` + 代码内有序迁移列表（`app/storage/db.py`）；
   每次启动比对版本并逐条应用，迁移脚本只追加不修改。
@@ -19,7 +20,7 @@
 -- 幂等来源
 updates (
   update_id   INTEGER PRIMARY KEY,
-  chat_id     INTEGER,
+  chat_id     INTEGER NOT NULL,  -- 私聊/无 chat 的更新由 repo 归一为 0
   received_at INTEGER NOT NULL
 );
 
@@ -37,7 +38,7 @@ messages (
   created_at          INTEGER NOT NULL,
   UNIQUE (chat_id, message_id)
 );
-CREATE INDEX idx_messages_chat_time ON messages (chat_id, created_at DESC);
+CREATE INDEX idx_messages_chat_time ON messages (chat_id, created_at);  -- 实际定义无 DESC
 
 -- 滚动摘要（阶段 6 / migration 3）：tokens 是检索用分词串（中文双字 bigram + 拉丁词）
 summaries (
@@ -63,6 +64,7 @@ notes (
   updated_at INTEGER NOT NULL,
   UNIQUE (chat_id, name)
 );
+CREATE INDEX idx_notes_chat ON notes (chat_id, name);  -- 与 UNIQUE 自动索引重复，保留为显式声明
 
 -- 每群设定（工具开关 + 模式 + 冷却；等级映射见 security.md）
 chat_settings (
@@ -96,7 +98,7 @@ stickers (
 usage (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
   chat_id        INTEGER NOT NULL,
-  user_id        INTEGER,
+  user_id        INTEGER NOT NULL,  -- 摘要调用记 0
   day            TEXT NOT NULL,            -- YYYY-MM-DD（按 TIMEZONE 配置归属，默认 Asia/Shanghai）
   model          TEXT NOT NULL,
   input_tokens   INTEGER NOT NULL DEFAULT 0,
@@ -137,14 +139,15 @@ CREATE VIRTUAL TABLE notes_fts     USING fts5(tokens, content='notes',     conte
 
 | 数据 | 保留 | 动作 |
 |---|---|---|
-| `updates` | 48 小时 | 删除更早行（幂等只需覆盖重放窗口） |
-| `tool_failures` | 7 天 | 删除更早行 |
+| `updates` | 48 小时 | 删除更早行（幂等只需覆盖重放窗口；**已实现** `updates.purge_old`，housekeeping 启动时执行） |
+| `tool_failures` | 7 天 | 删除更早行（**阶段 8**：表尚未建） |
 | `messages` | 默认全保留 | 群主 `/clear` 可按群清理；清理后摘要保留 |
-| `summaries` | 每群保留最近 50 条 | 超出归档删除最旧 |
-| 维护 | 每周 | `PRAGMA optimize`；体积明显膨胀时 `VACUUM`（离线执行） |
+| `summaries` | 每群保留最近 50 条 | 超出归档删除最旧（**已实现**：`SUMMARY_KEEP=50`，摘要写成功后立即 prune） |
+| 维护 | 每周 | **阶段 9 计划，无代码**：`PRAGMA optimize`；体积明显膨胀时 `VACUUM`（离线执行） |
 
 ## 5. 备份与恢复
 
+- **状态：阶段 9 计划，尚无任何代码**（本节描述目标形态，`BACKUP_*` 配置键与备份任务都不存在；`docs/deployment.md` §11 同样把它列为阶段 9）。
 - 备份 = 冷快照：用标准库 `sqlite3` 打开 `DB_PATH` 并调 `Connection.backup()` 写入
   `storage/backups/bot.db.YYYYMMDD-HHMM`（不走 `aiosqlite` 连接，避免与工作连接抢锁）。
 - 频率：程序内默认每周 1 次，保留最近 `BACKUP_KEEP`（默认 7）份，更旧的删除；失败只 `WARN`，不阻塞服务。
@@ -155,6 +158,7 @@ CREATE VIRTUAL TABLE notes_fts     USING fts5(tokens, content='notes',     conte
 ## 6. 写入规则
 
 - 所有写入在事务中完成；同一事务内不做网络或工具调用。
+  **当前偏差（技术债）**：没有显式 `BEGIN`/`rollback`，各 repo 自己 `commit()`；多语句写（主表 + FTS）可能半提交，迁移中途失败也无法回滚。
 - 工具执行与 LLM 调用**不**持有数据库写锁（先算后写）。
 - 记账失败不得影响回复；`usage` 写入异常只记日志。
 

@@ -90,13 +90,15 @@ Kubernetes、微服务、Redis、外部数据库、Nginx、Webhook 入口、多�
 ## 12. Linux VPS 上线准备（阶段 7 沙箱）
 
 正式生产目标是 **Linux + rootless Podman**；Windows 只做开发与离线测试（沙箱走 FakeBackend，不跑真实容器）。
-本节是 VPS 到位后的上线清单；在 §12.6 通过之前，「Linux 真机验收」保持为阶段 7 的待办项。
+本节是 VPS 到位后的上线清单。**真机验收已在阶段 7 完成**（Debian 12 + rootless Podman 4.3.1 + cgroup v2 + Python 3.11.2，13 项全 PASS：Tier A 7/7、Tier B 4/4）；
+当前事实、commit 与证据路径见 `docs/status.md`，条件与判读契约仍以本节 §12.1–§12.7 为准。
 
 ### 12.1 目标机条件
 
 - Linux（x86_64 / arm64）+ systemd + cgroup v2；Podman ≥ 4 且以 rootless 运行（`podman info` 显示 `cgroupVersion: v2`）。
 - 专用非 root 用户运行 Bot（下称 `<bot 用户>`）：不属于 `docker` 组、不挂载 podman socket。
-- 已装 Python 3.12 虚拟环境与 Podman CLI；项目目录含 `app/`、`.env`、`storage/`。
+- 已装 Python ≥3.11 虚拟环境与 Podman CLI；项目目录含 `app/`、`.env`、`storage/`。
+  （真机基线是 Debian 12 官方 `python3.11` + `python3-venv`，**不要求 3.12**；本机开发环境为 3.13。应用代码不使用任何 3.12 专有特性，`python:3.12-slim` 只是**沙箱镜像**，与宿主解释器无关。）
 - 资源建议：内存 ≥ 1 GB（Bot 常驻 + `SANDBOX_MEMORY_MB` 256 × `SANDBOX_MAX_CONCURRENT` 2），磁盘 ≥ 5 GB（镜像 + 数据 + 日志）。
 - 容器运行时是**可选依赖**：没有 Podman/Docker 时 Bot 照常运行，只是 `run_code` 一律 `sandbox_unavailable`（fail-closed，不退回宿主机）。
 
@@ -158,6 +160,10 @@ cd <项目根>
 
 - 必须与 Bot 用**同一个用户、同一份配置**执行；脚本只写 `storage/workspaces/999001/`（结束时删除）与沙箱临时目录探针。
 - 输出逐项 `PASS/FAIL`，末尾给出 `Tier A` / `Tier B` 结论与 `合计 N 项，失败 M 项`；退出码 0 = 全部通过。
+- **判读注意（已核实）**：`无网络` 与 `只读根` 是「期望非零退出」的负向断言，只要退出码非零就 PASS，
+  **区分不出「容器根本没启动」与「被正确拒绝」**（阶段 7 首次验收曾因此漏报 7 项 workdir 启动失败）；
+  且正文里 `Tier A：PASS` 只聚合名字以 `Tier A` 开头的 1 个检查项。
+  判读时必须同时看逐项输出、`合计 N 项，失败 M 项` 与失败计数（技术债见 `TODO.md`）。
 
 | 结论 | 判定方式 | 后续动作 |
 |---|---|---|

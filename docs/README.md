@@ -28,7 +28,9 @@
 | 上下文窗口、摘要模板、FTS 检索 | `docs/memory.md` | database |
 | 表结构、索引、迁移、保留清理 | `docs/database.md` | memory |
 | Token/成本优化（开发侧 + 运行侧） | `docs/token.md` | 其他 |
-| 阶段划分、阶段验收、当前进度 | `TODO.md` | docs/（细节） |
+| 阶段划分与阶段验收标准 | `TODO.md` | docs/（细节） |
+| 当前 commit、阶段进度、测试数字、真机验收证据、技术债摘要 | `docs/status.md` | 其他文档（只引用） |
+| 某个设计为什么这样定、放弃过哪些方案 | `docs/decisions/` | 其他文档（只引用） |
 | 运行环境、Docker/systemd、持久化目录、备份恢复、健康检查、优雅关闭、换机迁移、VPS 上线准备（rootless Podman / subuid-subgid / 预拉镜像 / 沙箱验收） | `docs/deployment.md` | architecture（只引用） |
 
 ## 3. 文件清单与唯一职责
@@ -46,7 +48,9 @@
 | `docs/memory.md` | 记忆与检索策略 |
 | `docs/database.md` | 数据模型与迁移 |
 | `docs/token.md` | Token/成本策略 |
-| `TODO.md` | 阶段路线图与进度 |
+| `TODO.md` | 阶段路线图、阶段验收标准与技术债登记 |
+| `docs/status.md` | 当前基线、测试与验收证据、技术债摘要（唯一事实来源） |
+| `docs/decisions/` | 已接受的设计决策（ADR）与被放弃的方案 |
 | `docs/deployment.md` | 运行环境契约与部署运维（唯一权威） |
 
 ## 4. 元数据约定（每个文档头部必须有三行）

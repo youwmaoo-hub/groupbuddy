@@ -22,12 +22,13 @@
 | L3 | `run_code` | 沙箱执行 |
 | L4 | `host_info`、高权限联网 | 默认关闭 |
 
-判定顺序（任一不通过即拒绝，返回 `permission_denied`）：
-1. 工具是否在注册表中；
+判定顺序（`app/tools/executor.py` 逐层判定，任一不通过即拒绝）：
+0. 是否处于本轮禁用/熔断（**最先判定**，命中返回 `cooldown`，见 §9）；
+1. 工具是否在注册表中（未注册 → `permission_denied`）；
 2. 该工具等级在**本群**是否开启（`chat_settings`）；
-3. 触发者身份是否满足该等级要求（管理员/普通成员）；
-4. 参数是否通过 schema 校验；
-5. 进入执行（必要时含沙箱）。
+3. 触发者身份是否满足该等级要求（管理员/普通成员，**阶段 8**）；
+4. 参数是否通过 schema 校验（`invalid_arguments`）；
+5. 进入执行（必要时含沙箱）；工具结果超上限整包丢弃（`too_large`，见 `docs/tools.md` §4）。
 
 等级 → 群开关（`chat_settings` 列；`calc` 无开关，始终可用）：
 
@@ -35,7 +36,7 @@
 |---|---|---|---|---|---|---|---|
 | 开关列 | — | `allow_search` | `allow_read` | `allow_write` | `allow_sticker` | `allow_code` | `allow_host_info` |
 
-工具可用 = 已注册 ∩ 本群开关；未注册、或注册但未登记等级的工单一律拒绝（fail-closed）。第 3 步身份判定随阶段 8 的群主命令落地：阶段 3 只有 L0 工具。
+工具可用 = 已注册 ∩ 本群开关；未注册、或注册但未登记等级的工具一律拒绝（fail-closed）。第 3 步身份判定随阶段 8 的群主命令落地。当前已注册的等级是 L0–L3（`calc`/`search_web`/`read_file`/`write_file`/`send_sticker`/`run_code`）；L4 的 `host_info` 属阶段 8，代码里无实现、从未注册。
 
 系统提示（System3）只能注入**已裁剪**的工具清单；模型永远不能提升自己的权限。
 - **授权只由后端判定**：前端隐藏按钮、前端参数、面板传入的身份都不构成授权；面板改设置走同一条判定（`docs/domain.md` §3）。
@@ -68,13 +69,13 @@
 |---|---|
 | 网络 | `--network=none` |
 | 根文件系统 | `--read-only`；`--tmpfs /tmp:rw,noexec,nosuid,size=16m` 提供可写临时目录 |
-| 用户 | 非 root：Tier A `--user 65534:65534`；Tier B `--userns=keep-id --user <宿主 uid>:<gid>` |
+| 用户 | 非 root。`spec.py` 默认 `--user 65534:65534`；但当后端是 **rootless Podman 且 `SANDBOX_TIER_B≠off`** 时，`backends.py` 会令 `keep_id=True`、`host_user=<宿主 uid>:<gid>`，于是**Tier A 与 Tier B 都会**追加 `--userns=keep-id --user <宿主 uid>:<gid>`（真机验收里 Tier A 观察到 `UID 1002`，即宿主 bot 用户；容器内仍是非 root） |
 | 挂载 | Tier A 不挂载任何宿主目录；Tier B 只挂 `storage/workspaces/<chat_id>` → `/workspace:rw` |
-| 禁止 | docker/podman socket、宿主目录、宿主环境变量、密钥（子进程环境是白名单拷贝） |
-| 限制 | `--memory 256m --memory-swap 256m --cpus 0.5 --pids-limit 64 --ulimit nofile=64:64 --ulimit fsize=8388608:8388608` |
+| 禁止 | docker/podman socket、宿主目录、宿主环境变量、密钥（子进程环境是白名单拷贝：`PATH`/`HOME`/`LANG`/`LC_ALL`/`TMPDIR`/`XDG_RUNTIME_DIR`/`XDG_DATA_HOME`/`DBUS_SESSION_BUS_ADDRESS`/`CONTAINER_HOST`；其中 `CONTAINER_HOST` 指向容器运行时端点，可被 `.env` 覆盖成远端端点，属待评估项） |
+| 限制 | `--memory 256m --memory-swap 256m --cpus 0.5 --pids-limit 64 --ulimit nofile=64:64 --ulimit fsize=8388608:8388608 --cap-drop=ALL --security-opt no-new-privileges` |
 | 时间 | 默认 15s、上限 30s（`SANDBOX_TIMEOUT_DEFAULT` / `SANDBOX_TIMEOUT_MAX`） |
 | 并发 | `SANDBOX_MAX_CONCURRENT=2`（进程内信号量，超出排队） |
-| 输出 | stdout/stderr 各 8 KB，超出即截断并追加 `[output truncated: N bytes]` |
+| 输出 | stdout/stderr 各 `SANDBOX_OUTPUT_KB`（默认 8，可配 1..1024）KB，超出即截断并追加 `[output truncated: N bytes]`。注意耦合：`run_code` 的工具结果上限是 20480 字节，把该配置调大后两流合计会先触发整包丢弃（`too_large`，见 `docs/tools.md` §4） |
 | 镜像/执行 | `python:3.12-slim`（只能部署阶段预拉取）→ `python -I -c <code>`，code 作为单个 argv 参数 |
 | 超时 | kill 进程并销毁容器（`--rm` 兜底 + 显式 kill/rm） |
 
@@ -84,12 +85,14 @@
   `workspace=true` 直接返回 `sandbox_unavailable`（不为了兼容放宽权限）。
 - 无可用运行时 → 直接拒绝（`sandbox_unavailable`），禁止退化为宿主机执行。
 - 模型不能指定镜像、挂载、工作目录或任何 runtime 参数；容器 argv 全部由 `app/sandbox/spec.py` 生成。
-- 临时输出目录 `storage/sandbox/`：正常、异常、超时、取消、Bot 关停都立即删除；
-  启动时清理带 `groupbuddy=1` 标签的残留容器（上次进程被强杀留下的）。
+- 已知缺口：容器/CLI 的 stderr 原样进入模型上下文（`app/sandbox/runner.py`），未做宿主路径清洗，与本文件 §3「日志、错误消息、上下文里都不出现宿主机绝对路径」冲突；记为技术债（见 `TODO.md`）。
+- 临时输出目录 `storage/sandbox/`：单次执行的正常、异常、超时、取消都会删除；进程被强杀（SIGKILL）时仍会残留（关停路径只销毁容器，不遍历临时文件），下次启动由 `cleanup_stale()` 清理带 `groupbuddy=1` 标签的残留容器。
 - 代码扫描（`app/sandbox/preflight.py`：`os.system`/`subprocess`/`eval`/`__import__`/网络/写入…）只作 **preflight 提示**（只记日志），不作为安全边界。
 - 真实验收：在目标机（Linux + rootless Podman）由**运行 Bot 的同一用户**执行 `scripts/verify_sandbox.py`，逐项验证无网络、非 root、
   只读根、fsize 上限、cgroup 资源上限（256 MB / 0.5 CPU / 64 PIDs）、超时销毁、无残留容器、临时目录已清理、
   其他群 workspace 不可见、宿主目录不可见。上线清单与 Tier A/B 判读见 `docs/deployment.md` §12；
+  判读口径：`无网络` 与 `只读根` 是「期望非零退出」的负向断言，无法区分「容器根本没启动」与「被正确拒绝」，
+  且脚本打印的 `Tier A：PASS` 只聚合名字以 `Tier A` 开头的 1 项 —— 必须同时看逐项结果与失败计数（技术债见 `TODO.md`）。
   Tier B 任一项不 PASS 就把 `SANDBOX_TIER_B=off` 只保留 Tier A。
 - **红线：禁止挂载 docker/podman socket**（等价于宿主机 root 权限），**禁止 privileged / host network / 宿主目录挂载**。
 - 若确需调用容器运行时，只允许由权限受限的独立组件用固定模板调用（白名单参数）；模型无法影响镜像、参数与宿主路径。
@@ -99,7 +102,7 @@
 
 - Bot 进程默认不发起出网请求；唯一出口是 `search_web`（以及后续显式批准的工具）。
 - `search_web` 只上行查询串；禁止把 workspace 内容、文件正文、环境变量、密钥、完整对话拼进请求。
-- URL/域名白名单：只允许已登记域名；拒绝 `file://`、内网地址、云元数据地址（SSRF 防护）。
+- URL/域名白名单：只允许已登记域名；拒绝 `file://`、内网地址、云元数据地址（SSRF 防护）。**尚未实现（阶段 8）**：`SEARCH_BACKEND=none` 为默认值，此时 `search_web` 不注册；现有实现只有离线专用的 `FakeSearchBackend`，真实 HTTP 出口与白名单都还没有代码。
 - 用户说"访问这个链接"不等于获得出网授权；由程序判定。
 
 ## 6. 密钥与敏感信息

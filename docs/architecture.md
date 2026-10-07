@@ -6,7 +6,7 @@
 
 ## 1. 形态
 
-单进程 Python 3.13（≥3.11 均可）、单 Bot Token、long polling、SQLite。
+单进程 Python **≥3.11**（本机开发 3.13.15、真机部署 3.11.2；不使用 3.12 及以上的专有语法特性。`python:3.12-slim` 只是**沙箱镜像**，与宿主解释器无关）、单 Bot Token、long polling、SQLite。
 不使用 Redis、消息队列、微服务、Webhook、向量数据库、microVM（阶段 1–8 都不需要）。
 
 开发环境为 Windows（可选 Docker），生产环境为 Linux VPS 按 24/7 服务运行，**同一份代码两种运行环境**。
@@ -24,6 +24,8 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 - `app/main.py` 只做装配：注入 LLM 客户端与发送器，便于测试替换。
 - 三层职责：**适配器**（今天 `app/telegram/`，将来 `app/control/`）→ **服务**（今天 `app/session/`，阶段 10 抽 `app/services/`）→ **领域/存储/工具**（`app/domain/`、`app/storage/`、`app/tools/policy.py`）。
 - 适配器只做协议转换：不得直连 SQLite、workspace、工具执行器、沙箱；控制面板的一切读写经 Control API → 服务层（`docs/domain.md` §3）。
+- **已知偏差（技术债）**：`gate/`、`session/` 里有 4 处反向 import `app.telegram.parse`（`gate/debounce.py`、`gate/filters.py`、`gate/trigger.py`、`session/runner.py`），与本节「不得 import `telegram/`」冲突；
+  一旦 `app/telegram/__init__.py` 变成 re-export 就会成环。`tests/offline/test_layering.py` 目前只锁 5 条规则，既没覆盖「适配器不得直连 SQLite/workspace/执行器/沙箱」这条，也没禁止上述反向 import（见 `TODO.md`）。
 - `app/domain/` 只放对象与身份（纯数据结构），不反向依赖任何业务层。
 
 ## 3. 模块地图（改代码前看这里，不要全仓搜索）
@@ -61,7 +63,7 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | | `app/sandbox/runner.py` | `run_code` 唯一执行入口：并发闸门、超时销毁容器、输出截断、临时文件清理 |
 | | `app/sandbox/preflight.py` | 代码预扫描，仅记日志（不是安全边界） |
 | 存储 | `app/storage/db.py` | aiosqlite 连接、WAL、`user_version` 迁移 |
-| | `app/storage/repo/*.py` | messages / settings / usage / stickers / notes 读写 |
+| | `app/storage/repo/*.py` | messages / chat_settings / usage / stickers / summaries / notes / updates 读写（同名模块逐表一个文件） |
 | 领域 | `app/domain/bot_instance.py` | 领域对象：`BotInstance` 与 `LLMCredentials`（凭据唯一归属，见 `docs/domain.md` §1、§4） |
 | 控制面（阶段 10） | `app/control/*` | HTTP 适配器：面板 API，只调服务层（现不存在） |
 | 服务（阶段 10） | `app/services/*` | 业务唯一入口（instances / credentials / chat_settings / usage / memory_admin / workspace_admin / status） |
@@ -109,6 +111,7 @@ Telegram Update
 - 崩溃重启后：Telegram 会重发未确认更新，靠 `updates` 表幂等吸收（"至少一次，但只回复一次"）。
 - 未完成的回复不重放历史对话，只处理新到达的更新。
 - 数据库写入使用事务；同一形态的写入可重复执行而不产生重复行（唯一键 + `INSERT OR IGNORE`）。
+  **已知偏差（技术债）**：当前没有显式 `BEGIN`/`rollback`（各 repo 自己 `commit()`），多语句写可能半提交、迁移中途失败无法回滚（见 `docs/database.md` §6 与 `TODO.md`）。
 
 ## 7. 扩展预留（现在不实现，只留缝）
 
@@ -134,6 +137,9 @@ Docker 只支持 Tier A | 独立沙箱服务 / microVM（确有必要时） |
 - `gate`/`session` 不依赖 aiogram，可直接用普通数据结构驱动。
 - `tests/offline/` 用标准库 `unittest`，不需要网络、不需要真实 Bot Token、不需要 API Key。
 - 本地开发（Windows）与生产（Linux VPS）跑同一套代码，不维护平台分支。
+- **证据分级**：本地离线 `unittest` 通过只证明本机逻辑；沙箱与平台行为必须由**真机证据**证明（VPS 上跑同一套测试 + `scripts/verify_sandbox.py`）。两类证据分别记录在 `docs/status.md`，不得互相替代（见 `AGENTS.md` 证据纪律）。
+- **覆盖率现状**：283 个测试方法覆盖闸门/会话/工具/沙箱/存储；`app/main.py`、`app/logging_setup.py`、`app/telegram/handlers.py`、`app/telegram/sender.py` 目前没有任何测试，`CliBackend.run` 与真实 LLM 客户端类体也从未执行（见 `TODO.md`）。
+- Windows 上软链接/硬链接相关用例会 `skipTest`（平台能力差异），因此「拒绝符号链接/硬链接」在 Windows 上是**条件跳过**、在 Linux 真机上才真正执行。
 
 ## 9. 可部署性约束（细节见 `docs/deployment.md`）
 
@@ -159,5 +165,25 @@ Docker 只支持 Tier A | 独立沙箱服务 / microVM（确有必要时） |
 | 6 | 队列/限速器/去重是进程内按 `chat_id` 的状态 | 多实例塞进一个进程会互相干扰（429 退避、出站配额） | 单进程 = 单实例，多实例 = 多进程；控制面不共享运行态，不引 Redis（§1） |
 | 7 | `usage` 与设置无实例维度 | 面板的配额、账单、状态需要跨实例聚合 | 运行态数据留实例库；控制面记实例级汇总（阶段 10 建表，`docs/database.md` §7） |
 | 8 | 出站只有文本 `send_message` | 语音/图片进来要改所有调用点 | 出站消息将来加 `kind`；语音走"新增方法、不改签名"（`docs/domain.md` §5） |
+## 11. 装配与关闭顺序（`app/main.py` 是唯一装配点）
+
+启动：`Settings`（唯一读 `.env`）→ 日志 → `open_db` + 迁移 → Telegram Dispatcher/Router → 出站队列与限速器 →
+`SessionRunner`（注入 LLM 客户端、Sender、`DbStickerStore`、`UpdateDeduplicator`）→ `SummaryScheduler` 与 housekeeping（`updates` 清理）→ 开始 polling。
+任一必需配置缺失或持久目录不可写 → 拒绝启动（fail-closed）。
+
+关闭（SIGTERM/SIGINT）：停止接收新更新 → 限时排空当前任务与出站队列 → 停止后台任务 → 关闭数据库与 HTTP 客户端。
+已知偏差（技术债）：`app/main.py` 里 `apply_migrations` 被调用两次（第二次为空操作）、`shutdown()` 在正常路径也会走两次；见 `TODO.md`。
+
+## 12. 可替换边界（换实现只需要动这些点）
+
+| 边界 | 协议/接口 | 默认实现 | 替换方式 |
+|---|---|---|---|
+| LLM 客户端 | `LLMClient`（`app/llm/client.py`） | OpenAI 兼容 HTTP 客户端 | 构造注入（`app/main.py`）；离线测试用脚本化假客户端 |
+| 出站发送 | `Sender` / `OutboundQueue`（`app/outbound/`） | Telegram `sender.py` | 构造注入；离线测试用记录型假实现 |
+| 沙箱后端 | `SandboxBackend`（`app/sandbox/backends.py`） | rootless Podman CLI（Docker 备选、仅 Tier A） | 启动时按 `SANDBOX_BACKEND` 探测一次并固定；离线用 `FakeBackend` |
+| 搜索后端 | `SearchBackend`（`app/tools/builtin/search_web.py`） | `none`（不注册该工具） | `SEARCH_BACKEND=fake` 为离线演示；接真实后端只需实现该协议 |
+| 贴纸存储 | `StickerStore` 协议（`app/storage/repo/stickers.py`） | `DbStickerStore` | 构造注入 |
+
+这些是**唯一**允许替换实现的缝；其余模块之间按 §2 单向依赖直连，不引入新抽象层（`docs/decisions/0002`、`0003`）。
 | 9 | 日志脱敏只依赖 `Settings.secrets` 两个字段 | 面板新增凭据不会被脱敏 | `AGENTS.md` §3 规则 16：新增凭据必须注册进脱敏集合 |
 | 10 | 实例在装配期固定（`build_router`/`parse_update` 注入 bot 身份） | 面板"创建 Bot"后期待热生效，误以为架构不支持 | 实例生命周期由部署控制（写配置 + 启进程），不做热加载（`docs/deployment.md` §6） |

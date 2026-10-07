@@ -9,7 +9,7 @@
 **当前事实只有一个来源：`docs/status.md`**（commit、已完成能力、本机与真机测试、真机验收证据、技术债摘要、下一步）。本节只保留阶段进度。
 
 - 阶段 0–7：**已完成**。阶段 0 含部署约束增补（Windows 开发 / Linux VPS 24/7 生产，同一份代码，见 `docs/deployment.md`）；阶段 1 曾通过真实 Telegram + DeepSeek 端到端验收；阶段 7 的 Linux/Podman 真机验收**已完成**（13/13 PASS，commit 与日志路径见 `docs/status.md`）。
-- 阶段 8（权限、配额与运维）、阶段 9（部署与 24/7 运行）、阶段 10（Web 控制面板与多实例）：**未开始**。阶段 10 仅完成架构预留（`docs/domain.md`、`docs/architecture.md` §10），未开发面板、未建控制面表。
+- 阶段 8（权限、配额与运维）：**进行中** —— 已完成群主命令最小闭环（管理员判定 + `/settings` 回显 + 非管理员被拒，见 `docs/security.md` §2.1）与 T12；配额、`/stats`、`/health` + `storage/health.json`、`host_info`、四模式待做。阶段 9（部署与 24/7 运行）、阶段 10（Web 控制面板与多实例）：**未开始**。阶段 10 仅完成架构预留（`docs/domain.md`、`docs/architecture.md` §10），未开发面板、未建控制面表。
 - 一次只推进一个阶段；不得跳阶段。
 
 ## 阶段表
@@ -100,6 +100,8 @@
 
 - 交付：F5.1–F5.4、`host_info`（F4.7）、四种模式（`docs/token.md` §5）、`/health`（实现属本阶段；24/7 托管与自愈属阶段 9）
 - 验收：群主可开关工具等级；非管理员被拒；配额打满后优雅拒绝。
+- 已完成（`7382639`）：群主命令通道最小闭环 —— `app/ops/admin.py` 管理员判定（只认 `getChatAdministrators`、进程内缓存、失败 fail-closed）、`app/ops/commands.py` `/settings` 回显、命令不进模型不写 messages 0 token、未知命令静默、非管理员固定文案；`chat_settings.upsert` 改为单条原子写入（T12）。
+- 待做：F5.1 设置写入（`/settings <字段> <值>`）、F5.3 配额、F5.4 `/stats` + `/health` + `storage/health.json`、F4.7 `host_info`、四模式生效；`tool_failures` 表（T15）与 7 天清理。
 
 ### 阶段 9 · 部署与 24/7 运行
 
@@ -158,7 +160,7 @@
    主表 + FTS 的多语句写可能半提交、或被其他任务顺带提交；无 `rollback`。契约见 `docs/database.md` §6。
 10. **T10（P1）`stickers.last_used_at` 存 `time.monotonic()`**（`app/tools/builtin/send_sticker.py:113,117,146`），与 `docs/database.md` §1「统一 Unix 秒」冲突；重启后「优先未近期使用」的 tie-break 语义反转（`send_sticker.py:89-96`）。
 11. **T11（P2）迁移解析脆弱** — 裸 `;` 切分（`app/storage/db.py:30`）、编号缺口/重复块无校验（`db.py:25,43`）、版本校验只看块数量（`db.py:67`）。
-12. **T12（P2）`chat_settings.upsert` 读-改-写无锁**（`app/storage/repo/chat_settings.py:40-47`）：两次 await 之间可被改写，存在丢更新。
+12. **T12（P2，已修复，`7382639`）`chat_settings.upsert` 读-改-写无锁**（`app/storage/repo/chat_settings.py`）：两次 await 之间可被改写，存在丢更新 —— 阶段 8 F5.2 改为单条原子 `INSERT … ON CONFLICT DO UPDATE`，只写调用方给出的列（离线测试用 `mock` 断言不再读取当前设置）。
 13. **T13（P2）`notes` 没有运行时写入路径** — 只有运维脚本 `scripts/register_note.py`；500 字上限也只在脚本里校验（`app/storage/repo/notes.py` 层无约束）。
 14. **T14（P2）`thread_id` 恒为 NULL** — `messages.recent()` 支持该参数（`app/storage/repo/messages.py:69-71`）但没有调用方传入；摘要、游标、FTS 都是 chat 级（阶段 8 做论坛主题隔离）。
 15. **T15（P2）`tool_failures` 表未建**（阶段 8），熔断状态只在进程内存（与 `docs/security.md` §9 一致）。

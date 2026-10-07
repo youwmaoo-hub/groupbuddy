@@ -239,6 +239,31 @@ class RunnerTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("[output truncated: 976 bytes]", result["stdout"])  # type: ignore[operator]
         self.assertEqual([], self.temp_files())
 
+    async def test_cli_failure_exit_codes_map_to_execution_failed(self) -> None:
+        # 125/126/127 是 podman/docker 的保留码：容器没起来，不能把 argv 的退出码当成用户程序的结果（T4）。
+        for code in (125, 126, 127):
+            with self.subTest(exit_code=code):
+                backend = FakeBackend(exit_code=code, stdout="不应到达模型")
+                runner, _ = self.make_runner(backend)
+                with self.assertRaises(SandboxError) as ctx:
+                    await runner.run(chat_id=42, code="print('hello')")
+                self.assertEqual("execution_failed", ctx.exception.code)
+                self.assertIn(str(code), ctx.exception.message)
+                self.assertEqual(1, len(backend.cleaned))
+                self.assertTrue(backend.cleaned[0].startswith("cx-"))
+                self.assertEqual([], self.temp_files())
+
+    async def test_other_non_zero_exit_codes_are_returned_to_the_model(self) -> None:
+        for code in (1, 2, 124, 128, 255):
+            with self.subTest(exit_code=code):
+                backend = FakeBackend(exit_code=code, stdout="boom\n")
+                runner, _ = self.make_runner(backend)
+                result = await runner.run(chat_id=42, code="raise SystemExit(1)")
+                self.assertEqual(code, result["exit_code"])
+                self.assertEqual("boom\n", result["stdout"])
+                self.assertEqual([], backend.cleaned)
+                self.assertEqual([], self.temp_files())
+
     async def test_backend_timeout_destroys_container(self) -> None:
         backend = FakeBackend(timed_out=True)
         runner, _ = self.make_runner(backend)

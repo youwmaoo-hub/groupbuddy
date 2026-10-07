@@ -24,6 +24,10 @@ logger = logging.getLogger(__name__)
 PROBE_TIMEOUT_SECONDS = 5.0
 QUICK_TIMEOUT_SECONDS = 10.0
 
+# podman/docker 保留的退出码：125 = CLI 自身失败（参数/镜像/权限等），126 = 容器内命令不可执行，127 = 命令不存在。
+# runner 用它们区分「容器根本没跑起来」与「程序自己返回了非零码」（docs/tools.md §run_code，技术债 T4）。
+CLI_FAILURE_EXIT_CODES = frozenset({125, 126, 127})
+
 
 @dataclass(frozen=True, slots=True)
 class CommandResult:

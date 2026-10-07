@@ -64,7 +64,9 @@
 - 默认 `timeout_s=15`，上限 30；超时即 kill 并销毁容器并返回 `timeout`。
 - 错误映射：运行时不可用 / Tier B 未验证 → `sandbox_unavailable`；workspace 越界 → `path_outside_workspace`；
   后端调用本身抛异常（`OSError`/`TimeoutError`）→ `execution_failed`。
-  **尚未实现**：CLI 以 125/126/127 之类的非零码退出时，`runner.py` 不会把它映射成 `execution_failed`，argv 结果被原样当工具结果返回（技术债见 `TODO.md`）。
+  容器运行时以保留退出码 **125/126/127** 结束（CLI 自身失败 / 容器内命令不可执行 / 命令不存在）→ 同样 `execution_failed`：
+  `app/sandbox/backends.py` 的 `CLI_FAILURE_EXIT_CODES` 由 `runner.py` 判定，容器当即销毁，argv 的退出码不会当结果返回给模型。
+  这三个码由 podman/docker 保留、无法与「程序自己 `exit 125/126/127`」区分，属已知取舍：要表达失败请用其他退出码。
 
 ### host_info
 
@@ -89,7 +91,7 @@
 | `too_large` | 输入或输出超过上限 |
 | `timeout` | 超时 |
 | `sandbox_unavailable` | 容器运行时不可用（`run_code` 专用） |
-| `execution_failed` | 后端调用失败；目标程序自身的非零退出**不**映射到此码（见 §2 `run_code`） |
+| `execution_failed` | 后端调用失败，或容器运行时以保留退出码 125/126/127 结束；目标程序自身的其他非零退出**不**映射到此码（见 §2 `run_code`） |
 | `cooldown` | 工具处于冷却/熔断 |
 | `internal_error` | 未分类错误（消息只回一句，不泄露细节） |
 

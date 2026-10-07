@@ -15,7 +15,7 @@ import uuid
 from pathlib import Path
 
 from app.sandbox import preflight
-from app.sandbox.backends import SandboxBackend
+from app.sandbox.backends import CLI_FAILURE_EXIT_CODES, SandboxBackend
 from app.sandbox.spec import CONTAINER_PREFIX, SandboxSpec, build_argv
 from app.tools.registry import ToolError
 from app.tools.workspace import workspace_dir
@@ -134,6 +134,15 @@ class SandboxRunner:
             if result.timed_out:
                 await self._destroy(container)
                 raise SandboxError("timeout", f"执行超过 {timeout} 秒，容器已销毁")
+            if result.exit_code in CLI_FAILURE_EXIT_CODES:
+                # 125/126/127 由 podman/docker 保留：容器没起来或容器内命令没能启动，
+                # 不能把 argv 的退出码当成用户程序的正常结果返回（docs/tools.md §run_code，T4）。
+                await self._destroy(container)
+                logger.warning("沙箱容器未能运行 chat_id=%s exit=%s", chat_id, result.exit_code)
+                raise SandboxError(
+                    "execution_failed",
+                    f"容器运行时以退出码 {result.exit_code} 结束，代码很可能没有执行；请改用其他退出码重试",
+                )
             stdout, stdout_cut, stdout_dropped = self._read_capped(stdout_path)
             stderr, stderr_cut, stderr_dropped = self._read_capped(stderr_path)
             if stdout_cut:

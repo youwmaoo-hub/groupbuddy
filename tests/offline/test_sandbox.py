@@ -58,12 +58,14 @@ class ArgvTests(unittest.TestCase):
             "--tmpfs /tmp:rw,noexec,nosuid,size=16m",
             "--ulimit nofile=64:64",
             "--ulimit fsize=8388608:8388608",
-            "--workdir /workspace",
             "--label groupbuddy=1",
         ):
             self.assertIn(flag, joined)
         self.assertIn("--rm", argv)
         self.assertNotIn("-v", argv)
+        # 无挂载时绝不设置工作目录：容器内没有 /workspace，Podman 会拒绝启动（exit 126）。
+        self.assertNotIn("--workdir", argv)
+        self.assertNotIn("/workspace", joined)
         self.assertNotIn("--userns=keep-id", argv)
         self.assertNotIn("--privileged", joined)
         self.assertEqual("65534:65534", argv[argv.index("--user") + 1])
@@ -82,6 +84,10 @@ class ArgvTests(unittest.TestCase):
         )
         self.assertIn("--userns=keep-id", argv)
         self.assertIn(f"{Path('/srv/ws/42')}:/workspace:rw", argv)
+        # 有挂载时工作目录必须跟着挂载点一起出现
+        self.assertIn("--workdir", argv)
+        self.assertEqual("/workspace", argv[argv.index("--workdir") + 1])
+        self.assertEqual(1, sum(1 for item in argv if item == "--workdir"))
         self.assertEqual("1001:1001", argv[argv.index("--user") + 1])
         self.assertIn("--network=none", argv)
         self.assertIn("--read-only", argv)

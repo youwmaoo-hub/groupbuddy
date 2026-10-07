@@ -47,7 +47,12 @@ def build_argv(
     keep_id: bool = False,
     host_user: str | None = None,
 ) -> list[str]:
-    """固定顺序的 argv 白名单；code 作为单个参数传入，永不经过 shell。"""
+    """固定顺序的 argv 白名单；code 作为单个参数传入，永不经过 shell。
+
+    `--workdir /workspace` 只在真的挂载了 workspace_dir 时出现：无挂载的 Tier A 容器里
+    没有该路径，Podman 会因 --workdir 指向不存在的目录而拒绝启动（exit 126），
+    根本不会执行探针代码。
+    """
     argv: list[str] = [
         binary,
         "run",
@@ -75,13 +80,12 @@ def build_argv(
         f"nofile={NOFILE}",
         "--ulimit",
         f"fsize={spec.fsize_bytes}:{spec.fsize_bytes}",
-        "--workdir",
-        WORKSPACE_MOUNT,
     ]
     if keep_id:
         argv.append("--userns=keep-id")
     if workspace_dir is not None:
-        argv += ["-v", f"{workspace_dir}:{WORKSPACE_MOUNT}:rw"]
+        # 挂载与工作目录必须同时出现：先挂 -v，再把容器工作目录设成挂载点。
+        argv += ["-v", f"{workspace_dir}:{WORKSPACE_MOUNT}:rw", "--workdir", WORKSPACE_MOUNT]
     argv += ["--user", host_user or spec.user]
     argv += [spec.image, "python", "-I", "-c", code]
     return argv

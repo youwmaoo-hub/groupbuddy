@@ -9,7 +9,7 @@
 **当前事实只有一个来源：`docs/status.md`**（commit、已完成能力、本机与真机测试、真机验收证据、技术债摘要、下一步）。本节只保留阶段进度。
 
 - 阶段 0–7：**已完成**。阶段 0 含部署约束增补（Windows 开发 / Linux VPS 24/7 生产，同一份代码，见 `docs/deployment.md`）；阶段 1 曾通过真实 Telegram + DeepSeek 端到端验收；阶段 7 的 Linux/Podman 真机验收**已完成**（13/13 PASS，commit 与日志路径见 `docs/status.md`）。
-- 阶段 8（权限、配额与运维）：**进行中** —— 已完成群主命令最小闭环（管理员判定 + `/settings` 回显与写入 + 非管理员被拒，见 `docs/security.md` §2.1）、日/月 token 配额（见 `docs/token.md` §4.1）、运行指标 `/stats` + `/health`（与 `storage/health.json` 同一状态，见 `docs/deployment.md` §7）、`host_info`（F4.7）以及 T12/T15；**四模式待做**。阶段 9（部署与 24/7 运行）、阶段 10（Web 控制面板与多实例）：**未开始**。阶段 10 仅完成架构预留（`docs/domain.md`、`docs/architecture.md` §10），未开发面板、未建控制面表。
+- 阶段 8（权限、配额与运维）：**代码已完成（阶段 8 交付范围全部落地，待用户封板）** —— 群主命令最小闭环（管理员判定 + `/settings` 回显与写入 + 非管理员被拒，见 `docs/security.md` §2.1）、日/月 token 配额（见 `docs/token.md` §4.1）、运行指标 `/stats` + `/health`（与 `storage/health.json` 同一状态，见 `docs/deployment.md` §7）、`host_info`（F4.7）、四模式完整生效（`docs/token.md` §5）以及 T12/T15；阶段 8 内明确留到后续的只有 `/clear`、链 3 轮次分档与模型档位路由。阶段 9（部署与 24/7 运行）、阶段 10（Web 控制面板与多实例）：**未开始**。阶段 10 仅完成架构预留（`docs/domain.md`、`docs/architecture.md` §10），未开发面板、未建控制面表。
 - 一次只推进一个阶段；不得跳阶段。
 
 ## 阶段表
@@ -101,10 +101,11 @@
 - 交付：F5.1–F5.4、`host_info`（F4.7）、四种模式（`docs/token.md` §5）、`/health`（实现属本阶段；24/7 托管与自愈属阶段 9）
 - 验收：群主可开关工具等级；非管理员被拒；配额打满后优雅拒绝。
 - 已完成（`7382639` F5.2、`c49fdc5` F5.1）：群主命令通道 —— `app/ops/admin.py` 管理员判定（只认 `getChatAdministrators`、进程内缓存、失败 fail-closed）、`app/ops/commands.py` `/settings` 回显与 `/settings <字段> <值>` 写入（字段白名单：模式、6 个工具开关、贴纸冷却；非法输入不写库；改完当轮生效）、命令不进模型不写 messages 0 token、未知命令静默、非管理员固定文案；`chat_settings.upsert` 改为单条原子写入（T12）。
-- 待做：四模式（窗口/输出上限/工具档位）生效。
 - 已完成（`1d649b8` F5.3）：日/月 token 配额 —— `app/ops/quota.py` `QuotaGuard`（`QUOTA_DAILY_TOKENS` / `QUOTA_MONTHLY_TOKENS`，按 `chat_id` 分别统计，`0` 或未配置 = 不限额）、调用模型前判定（`>=` 上限即拒绝）、超额本轮不调模型不记账只回一句提示、命令不消耗配额；统计复用 `usage.tokens_used`（`input_tokens + output_tokens`，缓存命中不重复计入）。契约见 `docs/token.md` §4.1。
 - 已完成（`101c26c` F5.4）：运行指标 —— `app/ops/metrics.py` `/stats`（复用 `usage.summary_for_day` + `tool_failures.count`，按群当日 token 用量、工具调用/失败与错误率、配额余量；读取失败只回固定短句）、`app/ops/health.py` `/health` 与 `storage/health.json` 心跳**共用同一个 `HealthState`**（60 秒周期、原子写、快照无路径/堆栈/凭据）；`tool_failures` 表随 migration 4 建立（`app/storage/repo/tool_failures.py`，计入熔断的失败留痕、按群区间计数、7 天清理即 T15），命令仍走管理员判定、0 token、不进模型。契约见 `docs/security.md` §2.1、`docs/deployment.md` §7、`docs/database.md` §2/§4。
 - 已完成（`de73b57` F4.7）：`host_info` —— `app/tools/builtin/host_info.py`（L4、`allow_host_info` 默认关、`build_registry` 始终注册），只暴露 `cpu`/`memory`/`disk_free`/`python`/`uptime_s`，`fields` 可选（去重、未知字段 `invalid_arguments`）；不读环境变量、不列进程、不查网络接口，不含主机名/用户名/IP/路径；取不到的字段返回 `null`。契约见 `docs/tools.md` §host_info、`docs/requirements.md` F4.7。
+- 已完成（`78ae9cf` 四模式，阶段 8 收尾）：`app/modes.py` 作为 `docs/token.md` §5 的唯一权威表 —— economy（窗口 10、只 L0、输出 256、贴纸关）、normal（意图分档 10/20/50、群开关、配置输出）、smart（窗口 50 + 额外 L0 只读）、unrestricted（窗口 50 + 全部已注册工具 + 输出不限）；`app/session/context.py` 按模式定窗口、`app/session/runner.py` 按模式定输出上限、`app/tools/policy.py` 按模式定工具档位、`app/ops/commands.py` 的 `MODES` 指向同一来源；模式只能由管理员 `/settings mode <值>` 修改，未知值按 normal，默认（normal）行为与升级前一致。契约见 `docs/token.md` §5、`docs/security.md` §2.2。
+- 待做（阶段 8 内明确留到后续）：`/clear`（群主清理本群消息原文）、链 3 工具轮次按意图分档（`TOOL_MAX_ROUNDS` 仍为全局 2）、模型档位路由（未决问题 #2）。
 
 ### 阶段 9 · 部署与 24/7 运行
 

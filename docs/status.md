@@ -8,9 +8,9 @@
 
 | 项 | 值 |
 |---|---|
-| 代码 commit | `de73b57a12d16cfb669fe720a1ffa5a8f27247f6`（短 `de73b57`，分支 `main`；阶段 8 F4.7 代码 + 契约文档） |
-| 跟踪文件数 | 130（`git ls-files`） |
-| 提交数 | 25（阶段提交 + 文档治理 `b529741` + A1–A3 修复 `f7f34b5` + 文档同步 `3347301` + 部署记录 + 阶段 8 F5.2 `7382639` + F5.1 `c49fdc5` + F5.3 `1d649b8` + F5.4 `101c26c` + 基线 `ad560f4` + F4.7 `de73b57` + 本次状态更新） |
+| 代码 commit | `78ae9cff6f733f87ab5b0c63d6cc8d1294ff3b4e`（短 `78ae9cf`，分支 `main`；阶段 8 四模式代码 + 契约文档） |
+| 跟踪文件数 | 132（`git ls-files`） |
+| 提交数 | 27（阶段提交 + 文档治理 `b529741` + A1–A3 修复 `f7f34b5` + 文档同步 `3347301` + 部署记录 + 阶段 8 F5.2 `7382639` + F5.1 `c49fdc5` + F5.3 `1d649b8` + F5.4 `101c26c` + 基线 `ad560f4` + F4.7 `de73b57` + 四模式 `78ae9cf` + 本次状态更新） |
 | 本机工作树 | 干净（`git status --porcelain` 无输出） |
 | 真机仓库 | `/home/bot/app` = detached HEAD @ `3347301`，工作树干净，属主 `bot:bot`；**代码基线落后于本机**：本机其后的 `07a9288`（部署记录，纯文档）与阶段 8 F5.2 提交均未上真机 |
 | 真机远端 | `origin` = VPS `/tmp/dsh_deploy_3347301.bundle`（文件存在，可 `git fetch`；仍未配置正式远端，未建 GitHub remote、未 push） |
@@ -28,14 +28,14 @@
 | 5 | 已完成 | 贴纸：`stickers` 表、情绪匹配、冷却、出站媒体通道 |
 | 6 | 已完成 | 记忆：分档窗口 + 字符预算、噪声标记、模板化摘要、FTS5 检索 |
 | 7 | 已完成 | 沙箱 `run_code`：固定 argv、rootless Podman / Docker、Tier A/B、fail-closed；真机部署与验收已完成 |
-| 8 | 进行中 | 权限/配额/运维：**已完成群主命令最小闭环、群设定写入、日/月配额与运行指标**（`app/ops/admin.py` 管理员判定 + `/settings` 回显/写入 + `app/ops/quota.py` 配额判定 + `app/ops/metrics.py` `/stats` + `app/ops/health.py` `/health` 与 `storage/health.json` 同一状态，见 `docs/security.md` §2.1、`docs/token.md` §4.1、`docs/deployment.md` §7；F5.1/F5.2/F5.3/F5.4 + T12 + T15）；**F4.7 `host_info` 已实现**（`app/tools/builtin/host_info.py`，L4 + `allow_host_info` 默认关，见 `docs/tools.md` §host_info）；token 四模式生效待做 |
+| 8 | 已完成 | 权限/配额/运维：**群主命令最小闭环、群设定写入、日/月配额与运行指标**（`app/ops/admin.py` 管理员判定 + `/settings` 回显/写入 + `app/ops/quota.py` 配额判定 + `app/ops/metrics.py` `/stats` + `app/ops/health.py` `/health` 与 `storage/health.json` 同一状态，见 `docs/security.md` §2.1、`docs/token.md` §4.1、`docs/deployment.md` §7；F5.1/F5.2/F5.3/F5.4 + T12 + T15）；**F4.7 `host_info` 已实现**（`app/tools/builtin/host_info.py`，L4 + `allow_host_info` 默认关，见 `docs/tools.md` §host_info）；**token 四模式完整生效**（`app/modes.py` 唯一权威表：economy 10 条窗口 / 只 L0 / 256 输出 / 贴纸关；normal 意图分档 + 群开关；smart 50 条 + 额外 L0 只读；unrestricted 50 条 + 全部工具 + 输出不限；模式只由管理员 `/settings mode` 修改，见 `docs/token.md` §5、`docs/security.md` §2.2） |
 | 9 / 10 | 未开始 | 部署与 24/7；控制面板与多实例（仅架构预留） |
 
 ## 3. 本机验证（Windows，开发环境）
 
 - 解释器：Python 3.13.15（仓库内 `.venv`）；`openai 3.24.0`；**沙箱走 FakeBackend，不跑真实容器**。
 - 命令：`python -m unittest discover -s tests -t .`
-- 结果：`Ran 397 tests` / `OK (skipped=2)` / 退出码 0（293 原有 + 22 条 F5.2 + 11 条 F5.1 + 20 条 F5.3 + 32 条 F5.4 + 19 条 F4.7：`host_info` 冻结字段集与 schema、L4 默认关与群开关、不可得字段与 `/proc` 缺失回退、不泄露环境变量/主机名/路径）。
+- 结果：`Ran 416 tests` / `OK (skipped=2)` / 退出码 0（293 原有 + 22 条 F5.2 + 11 条 F5.1 + 20 条 F5.3 + 32 条 F5.4 + 19 条 F4.7：`host_info` 冻结字段集与 schema、L4 默认关与群开关、不可得字段与 `/proc` 缺失回退、不泄露环境变量/主机名/路径；19 条四模式：档位表逐列、economy/smart/unrestricted 的工具档位、模式窗口与 normal 意图分档、输出上限透传，含 3 条端到端：`/settings mode` 改完立即影响下一条消息的输出上限与工具清单、smart 解锁只读工具、economy 与 smart 的历史窗口差异体现在发给模型的上下文里）。
 - 2 条 skip 为平台条件跳过（Windows 上软/硬链接相关用例，见 `TODO.md` T28）。
 - 覆盖缺口（已知）：`app/main.py`、`app/logging_setup.py`、`app/telegram/handlers.py`、`app/telegram/sender.py` 无测试（见 `TODO.md` T25）。
 
@@ -71,7 +71,8 @@ Tier B 4/4：本群 workspace 读写（非 root）、宿主侧可见、其他群
 - **Bot 未启动**：真机没有 `app.main` 进程、没有 systemd 单元、没有容器；阶段 7 只到「沙箱能力验收」。
 - **没有真实 `.env`**：仓库只有 `.env.example`；本文件与所有文档都不记录任何凭据值。
 - **未配置正式远端**：代码同步通过临时 git bundle + SSH 完成，`origin` 不可用。
-- 备份/恢复任务、`PRAGMA optimize` / `VACUUM`、人群托管（systemd/容器 restart）：属阶段 8/9，尚未实现（阶段 8 已完成群主命令、群设定写入、配额、运行指标 `/stats`/`/health` 与 `host_info`，见 §2）。
+- 备份/恢复任务、`PRAGMA optimize` / `VACUUM`、人群托管（systemd/容器 restart）：属阶段 8/9，尚未实现（阶段 8 已完成群主命令、群设定写入、配额、运行指标 `/stats`/`/health`、`host_info` 与四模式生效，见 §2）。
+- 阶段 8 内明确留到后续的项：`/clear`（群主清理本群消息原文）、链 3 的工具轮次按意图分档（`TOOL_MAX_ROUNDS` 仍为全局 2）、模型档位路由（未决问题 #2）。
 - 未引入 CI、lint、类型检查、锁文件（见 `TODO.md` T27）。
 
 ## 6. 技术债摘要
@@ -90,8 +91,8 @@ Tier B 4/4：本群 workspace 读写（非 root）、宿主侧可见、其他群
 
 ## 7. 下一步
 
-1. **阶段 8（进行中）**：已完成 F5.2（管理员判定 + 命令通道 + T12）、F5.1（`/settings <字段> <值>` 写入、即时生效）、F5.3（日/月配额）、F5.4（`/stats` + `/health`，`tool_failures` 留痕与 7 天清理，与 `storage/health.json` 同一内部状态）与 F4.7（`host_info`：`cpu`/`memory`/`disk_free`/`python`/`uptime_s`，L4 + `allow_host_info` 默认关）。**下一项 = `docs/token.md` §5 四模式**（economy/normal/smart/unrestricted 对窗口、输出上限与工具档位的完整影响），这是阶段 8 的最后一项。
-2. 是否把阶段 8 提交（`7382639`、`c49fdc5`、`1d649b8`、`101c26c`、`de73b57`）同步到真机并在真机重跑测试（本机 397 条，真机仍为 `3347301` 的 293 条）。
+1. **阶段 8 代码已全部完成（待用户封板）**：F5.2（管理员判定 + 命令通道 + T12）、F5.1（`/settings <字段> <值>` 写入、即时生效）、F5.3（日/月配额）、F5.4（`/stats` + `/health`，`tool_failures` 留痕与 7 天清理，与 `storage/health.json` 同一内部状态）、F4.7（`host_info`：`cpu`/`memory`/`disk_free`/`python`/`uptime_s`，L4 + `allow_host_info` 默认关）与四模式（`78ae9cf`：窗口 / 输出上限 / 工具档位，`docs/token.md` §5）。
+2. 是否把阶段 8 提交（`7382639`、`c49fdc5`、`1d649b8`、`101c26c`、`de73b57`、`78ae9cf`）同步到真机并在真机重跑测试（本机 416 条，真机仍为 `3347301` 的 293 条）。
 3. 是否立项修 B 组技术债（`TODO.md` T4 / T7 / T9 / T10 / T25 等；T1–T3 已随 `f7f34b5`、T12 已随 `7382639`、T15 已随 `101c26c` 修复）。
 4. 是否配置正式远端（GitHub），以便后续换 Agent 维护。
 

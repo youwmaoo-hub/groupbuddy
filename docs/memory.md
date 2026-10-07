@@ -16,7 +16,7 @@
 | 普通问题 | 20 | 包含 Bot 自己的发言，按时间升序；实现见 `app/session/context.py` 的 `window_size()` |
 | 复杂问题 | 最多 50 | 触发条件：出现长文本、代码块、或用户明确追问上文 |
 | 纯闲聊 | 10 | 只保证不"失忆"，不追求连续性 |
-| 硬约束 | 约 6000 字符（`HISTORY_BUDGET_CHARS`，字符近似，不引入 tokenizer） | 超预算从最旧的消息开始丢；本轮用户消息永不丢；被裁条数可用 `ContextBuilder.consume_trimmed()` 观测。**当前实现缺陷**：当本轮文本自身超过预算时，裁剪循环会把本轮消息一并裁掉，违反本行约束（见 `TODO.md`） |
+| 硬约束 | 约 6000 字符（`HISTORY_BUDGET_CHARS`，字符近似，不引入 tokenizer） | 超预算从最旧的消息开始丢；本轮用户消息永不丢（`ContextBuilder._trim` 保留本轮 `message_id` 集合，即使本轮自身超预算也不裁，见 `TODO.md` T3）；被裁条数可用 `ContextBuilder.consume_trimmed()` 观测 |
 
 - 窗口按 `chat_id`（未来 `thread_id`）过滤，绝不跨群（`messages.recent()` 已排除 `noise=1`）。
   `thread_id` 是**预留**：schema 有列、`messages.recent()` 支持该参数，但当前没有调用方传入，摘要、游标与 FTS 检索都是 chat 级（阶段 8 再做论坛主题隔离）。
@@ -38,7 +38,7 @@
 
 - 自上次摘要以来新增消息 ≥ `SUMMARY_MIN_MESSAGES`（默认 40）条；
 - 自上次摘要以来新增字符 ≥ `HISTORY_BUDGET_CHARS`（默认 6000）**且**消息数 ≥ `10`（避免长消息连发把摘要打成碎片）；
-- 群内静默 ≥ `SUMMARY_QUIET_SECONDS`（默认 120 秒）且期间有新消息 —— **当前恒不成立**：比较的是 `time.monotonic()`（`app/session/summary.py`，`app/main.py` 也传 monotonic）与 `created_at`（Unix 秒），差值约 -1.7e9；离线测试用同域假时钟因此掩盖了该缺陷（技术债见 `TODO.md`）。
+- 群内静默 ≥ `SUMMARY_QUIET_SECONDS`（默认 120 秒）且期间有新消息（`SummaryService` 默认时钟为 `time.time`，与库内 `created_at` 同为 Unix 秒；`app/main.py` 不再注入时钟）。
 
 固定模板（模型只填空，不自由发挥）：
 

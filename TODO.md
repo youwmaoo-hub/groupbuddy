@@ -128,19 +128,18 @@
 ## 技术债与已知缺陷（只登记，不在文档治理任务中修复）
 
 > 等级：**P0** = 功能静默失效或导致无法启动；**P1** = 正确性/一致性风险；**P2** = 质量与可维护性。
-> 全部条目都在 commit `434f2f8` 上核实过（含 `文件:行号`）。**登记不等于已批准修复**：修复需单独开任务，并按 `AGENTS.md` 的变更分级处理。
+> 全部条目都在 commit `434f2f8` 上核实过（含 `文件:行号`）；其中 T1/T2/T3 已于 `f7f34b5` 修复（见下）。**登记不等于已批准修复**：修复需单独开任务，并按 `AGENTS.md` 的变更分级处理。
 
-### 高危（建议优先立项）
+### 高危（T1–T3 已修复，保留历史）
 
-1. **T1（P0）摘要「静默 ≥ 120 秒」触发恒不成立** — `app/session/summary.py:78,96` 用 `time.monotonic()`（`app/main.py:167` 也显式传 monotonic），
-   而 `pending.last_at` 是 `MAX(created_at)`＝Unix 秒（`app/storage/repo/messages.py:92,118`），差值约 −1.7e9，条件永不满足；
-   离线测试用同域假时钟（`tests/offline/test_summary.py:75-79`、`tests/offline/helpers.py:19-29`）掩盖了它。
-   影响：只剩「≥40 条消息」「≥6000 字符且 ≥10 条」两条触发路径，小群/长尾群可能长期不产生摘要（记忆能力下降，不影响回复链路）。契约见 `docs/memory.md` §4。
-2. **T2（P0）迁移失败不可恢复** — `app/storage/db.py:72-76` 没有 `BEGIN`/`rollback`，而 migration 3 的 `ALTER TABLE usage ADD COLUMN purpose`（`app/storage/schema.sql:83`）不幂等。
-   若迁移中途失败或进程被杀，`user_version` 停在 2 而列已存在，重跑报 `OperationalError: duplicate column name: purpose`，**Bot 永久无法启动**。
-   已用内存 SQLite 复现；当前本机与真机的 3 个迁移块都已成功应用，尚未触发。契约见 `docs/database.md` §1/§6。
-3. **T3（P1）本轮用户消息可能被裁光** — `app/session/context.py:56-57,60-61,102-105`：当本轮文本自身超过 `HISTORY_BUDGET_CHARS` 时，
-   裁剪循环把本轮消息一并丢弃，违反 `docs/memory.md` §2 与 F3.1 的「本轮永不丢」。
+1. **T1（P0）摘要「静默 ≥ 120 秒」触发恒不成立 — 已修复（commit `f7f34b5`）**：原实现 `app/session/summary.py` 默认 `time.monotonic()`（`app/main.py:167` 也显式传 monotonic），
+   与 `pending.last_at`（`MAX(created_at)`＝Unix 秒，`app/storage/repo/messages.py:92,118`）差值约 −1.7e9，条件永不满足；离线测试用同域假时钟（`tests/offline/test_summary.py:75-79`、`tests/offline/helpers.py:19-29`）掩盖了它。
+   修复：`SummaryService` 默认时钟改 `time.time`，`app/main.py` 不再注入时钟；新增 `tests/offline/test_summary.py` 的 `ClockDomainTests` 2 条（不注入假时钟）。原影响：只剩「≥40 条消息」「≥6000 字符且 ≥10 条」两条触发路径。契约见 `docs/memory.md` §4。
+2. **T2（P0）迁移失败不可恢复 — 已修复（commit `f7f34b5`）**：原实现 `app/storage/db.py:72-76` 没有 `BEGIN`/`rollback`，而 migration 3 的 `ALTER TABLE usage ADD COLUMN purpose`（`app/storage/schema.sql:83`）不幂等；
+   若迁移中途失败或进程被杀，`user_version` 停在 2 而列已存在，重跑报 `OperationalError: duplicate column name: purpose`，**Bot 永久无法启动**（已用内存 SQLite 复现；本机与真机的迁移块都已成功应用，未触发）。
+   修复：每块 `BEGIN IMMEDIATE` + 失败 `rollback`（不推进 `user_version`），仅对 `("usage", "purpose")` 这一历史半升级形态做严格限定的兼容跳过，其他重复 DDL 仍抛真实错误；新增 `MigrationAtomicityTests` 7 条。契约见 `docs/database.md` §1/§6。
+3. **T3（P1）本轮用户消息可能被裁光 — 已修复（commit `f7f34b5`）**：原 `app/session/context.py` 在 `reserved` 已超预算时会把本轮消息一并 pop，违反 `docs/memory.md` §2 与 F3.1 的「本轮永不丢」。
+   修复：`build()` 生成 `keep = frozenset(item.message_id for item in batch.items)` 并传入两处 `_trim(..., keep=keep)`，`_trim` 循环遇 `keep` 即停；新增 `test_oversized_batch_survives_budget_trim`。
 
 ### 安全与沙箱
 
@@ -182,6 +181,7 @@
 ### 测试与工程
 
 25. **T25（P1）关键路径零覆盖**：`app/main.py`、`app/logging_setup.py`、`app/telegram/handlers.py`、`app/telegram/sender.py` 没有任何测试；`CliBackend.run` 与 `DeepSeekClient` 的类体从未执行；`SecretFilter` 无测试。
+    A1–A3 修复期间正是这个缺口让 `app/main.py` 引用 `time.monotonic` 却未 `import time` 的装配缺陷（后台摘要任务一启动即 `NameError`）躲过了全部离线测试，直到改时钟域时才暴露——该覆盖缺口有实际价值，仍待补。
 26. **T26（P2）分层测试缺口**：`tests/offline/test_layering.py` 只锁 5 条规则，未覆盖「适配器不得直连 SQLite/workspace/执行器/沙箱」，也不禁止 T24 的反向 import；`test_layering.py:118` 的断言文案 `config/tools/config` 疑似笔误。
 27. **T27（P2）依赖无上限**：`requirements.txt` 全用 `>=`，本机 openai 3.24.0 / 真机 3.26.0 已漂移；无锁文件、无 CI、无 lint/类型检查。
 28. **T28（P2）平台条件跳过**：Windows 上软/硬链接相关 3 条用例 `skipTest`（`tests/offline/test_files.py:90,103,127`），本机全绿不代表 Linux 行为（真机已跑同一套测试，见 `docs/status.md`）。
@@ -192,5 +192,5 @@
 
 - 未见 SQL 注入点：值全部走 `?` 占位符，动态 SQL 只拼固定列名/条件；FTS `MATCH` 串参数化且词表受正则限制（实测 `near` 与小写 `or/and/not` 在 FTS5 中按普通 token 处理）。
 - 未见跨群越权读取路径：messages / summaries / notes / stickers / usage / chat_settings 的查询都带 `chat_id` 条件。
-- 摘要的模板、游标、失败不推进语义与 `docs/memory.md` §4、`docs/database.md` §3 一致（例外是 T1 的静默触发）。
+- 摘要的模板、游标、失败不推进语义与 `docs/memory.md` §4、`docs/database.md` §3 一致。
 - 沙箱 argv 的 12 项固定参数在 `app/sandbox/spec.py` 内一致，模型无法影响镜像/挂载/runtime。

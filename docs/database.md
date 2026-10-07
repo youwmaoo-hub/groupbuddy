@@ -13,6 +13,7 @@
 - 时间语义：内部一律 UTC；展示与"按天"归集再按 `TIMEZONE` 配置转换（默认 `Asia/Shanghai`，见 `docs/deployment.md` §4）。
 - 迁移：使用 `PRAGMA user_version` + 代码内有序迁移列表（`app/storage/db.py`）；
   每次启动比对版本并逐条应用，迁移脚本只追加不修改。
+- **每个迁移块在显式事务中应用**（`BEGIN IMMEDIATE` … `commit()`）：块内任一句失败即 `rollback`，`user_version` 不推进；对历史半升级形态（`usage.purpose` 列已存在但版本未推进）做**严格限定**的兼容跳过，其他重复 `ADD COLUMN` / `CREATE TABLE` 仍按真实错误抛出。
 
 ## 2. 表结构
 
@@ -158,7 +159,7 @@ CREATE VIRTUAL TABLE notes_fts     USING fts5(tokens, content='notes',     conte
 ## 6. 写入规则
 
 - 所有写入在事务中完成；同一事务内不做网络或工具调用。
-  **当前偏差（技术债）**：没有显式 `BEGIN`/`rollback`，各 repo 自己 `commit()`；多语句写（主表 + FTS）可能半提交，迁移中途失败也无法回滚。
+  **当前偏差（技术债）**：迁移已按块原子（见 §1）；各 repo 仍自己 `commit()`，主表 + FTS 的多语句写可能半提交、无 `rollback`（`TODO.md` T9）。
 - 工具执行与 LLM 调用**不**持有数据库写锁（先算后写）。
 - 记账失败不得影响回复；`usage` 写入异常只记日志。
 

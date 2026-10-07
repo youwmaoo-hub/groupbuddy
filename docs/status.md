@@ -8,11 +8,11 @@
 
 | 项 | 值 |
 |---|---|
-| 代码 commit | `434f2f8b56a7b411f2e4da9cc7353665099b6d3b`（短 `434f2f8`，分支 `main`） |
-| 跟踪文件数 | 104（`git ls-files`） |
-| 提交数 | 11（一个阶段一次提交） |
+| 代码 commit | `f7f34b5b2cf5438efd4742ae47e0544728a1e94c`（短 `f7f34b5`，分支 `main`） |
+| 跟踪文件数 | 116（`git ls-files`） |
+| 提交数 | 13（阶段提交 + 文档治理 `b529741` + A1–A3 修复 `f7f34b5`） |
 | 本机工作树 | 干净（`git status --porcelain` 无输出） |
-| 真机仓库 | `/home/bot/app` = detached HEAD @ `434f2f8`，工作树干净，属主 `bot:bot` |
+| 真机仓库 | `/home/bot/app` = detached HEAD @ `434f2f8`，工作树干净，属主 `bot:bot`；**尚未同步本机 `f7f34b5`**（本轮未连接 VPS） |
 | 真机远端 | `origin` 仍指向已删除的临时 bundle，**fetch/push 不可用**；尚未配置正式远端（未建 GitHub remote、未 push） |
 | 运行时目录 | 真机 `storage/` 当前不存在（验收后已清空，下次启动自动重建） |
 
@@ -34,7 +34,7 @@
 
 - 解释器：Python 3.13.15（仓库内 `.venv`）；`openai 3.24.0`；**沙箱走 FakeBackend，不跑真实容器**。
 - 命令：`python -m unittest discover -s tests -t .`
-- 结果：`Ran 283 tests` / `OK (skipped=2)` / 退出码 0。
+- 结果：`Ran 293 tests` / `OK (skipped=2)` / 退出码 0（283 原有 + 10 条 A1–A3 回归测试，见 `TODO.md` T1–T3）。
 - 2 条 skip 为平台条件跳过（Windows 上软/硬链接相关用例，见 `TODO.md` T28）。
 - 覆盖缺口（已知）：`app/main.py`、`app/logging_setup.py`、`app/telegram/handlers.py`、`app/telegram/sender.py` 无测试（见 `TODO.md` T25）。
 
@@ -54,7 +54,7 @@
 
 | 检查 | 命令 | 结果 |
 |---|---|---|
-| 全量离线测试 | `sudo -u bot bash -lc "cd /home/bot/app && .venv/bin/python -m unittest discover -s tests -t ."` | `Ran 283 tests` / `OK` / 退出码 0（Linux 上无 skip） |
+| 全量离线测试 | `sudo -u bot bash -lc "cd /home/bot/app && .venv/bin/python -m unittest discover -s tests -t ."` | `Ran 283 tests` / `OK` / 退出码 0（Linux 上无 skip；对应真机 checkout `434f2f8`，A1–A3 新增的 10 条回归尚未在真机跑过） |
 | 沙箱真机验收 | `sudo -u bot bash -lc "cd /home/bot/app && .venv/bin/python scripts/verify_sandbox.py"` | **13 项全 PASS，失败 0 项**，退出码 0；`Tier A：PASS`、`Tier B：PASS` |
 | 验收日志 | 保留在 VPS `/tmp/dsh_verify_434f2f8.log`（26 行） | 执行后容器数 0；`storage/sandbox` 与 `storage/workspaces/{999001,999002}` 已清空 |
 | 验收时间 | 2026-10-07（VPS 时间） | — |
@@ -74,18 +74,22 @@ Tier B 4/4：本群 workspace 读写（非 root）、宿主侧可见、其他群
 
 ## 6. 技术债摘要
 
-完整清单（T1–T29，含等级与 `文件:行号`）在 `TODO.md` §技术债与已知缺陷。两条最严重：
+完整清单（T1–T30，含等级与 `文件:行号`）在 `TODO.md` §技术债与已知缺陷。`f7f34b5` 已修复其中 3 条：
 
-- **T1（P0）**：摘要「静默 ≥120 秒」触发恒不成立（`time.monotonic()` 与 Unix 秒比较）——记忆能力静默退化，不影响回复链路。
-- **T2（P0）**：迁移无事务 + `ALTER TABLE` 不幂等——迁移中途失败会让 Bot **永久无法启动**（当前两台机器的迁移都已成功，尚未触发）。
+- **T1（P0，已修复）**：摘要「静默 ≥120 秒」触发恒不成立（`time.monotonic()` 与 Unix 秒比较）——记忆能力静默退化。
+- **T2（P0，已修复）**：迁移无事务 + `ALTER TABLE` 不幂等——迁移中途失败会让 Bot **永久无法启动**。
+- **T3（P1，已修复）**：本轮消息在超出字符预算时被 history 裁剪丢弃。
 
-其余分类：安全与沙箱（T4–T8）、数据与记忆（T9–T16）、工具契约（T17–T20）、代码质量（T21–T24）、测试与工程（T25–T29）。
+当前最严重的是尚未修复的 B 组：repo 层无 `rollback`（T9）、`verify_sandbox.py` 判定口径弱（T7）、CLI 非零退出不映射 `execution_failed`（T4）、关键路径零覆盖（T25；A1–A3 期间发现的 `app/main.py` 装配缺陷印证了它的价值）。
+
+其余分类：安全与沙箱（T4–T8）、数据与记忆（T9–T16）、工具契约（T17–T20）、代码质量（T21–T24）、测试与工程（T25–T30）。
 
 ## 7. 下一步（待用户决定）
 
-1. 是否先立项修 T1 / T2（两条 P0；都属普通 bug fix，但 T2 触及迁移，按 `AGENTS.md` §3 变更分级评估）。
+1. 是否立项修 B 组技术债（`TODO.md` T4 / T7 / T9 / T10 / T25 等；T1–T3 已随 `f7f34b5` 修复）。
 2. 是否推进阶段 8（权限、配额、运维：群主命令、`host_info`、`/stats`、`/health`）。
 3. 是否配置正式远端（GitHub），以便后续换 Agent 维护。
+4. 是否把 `b529741` 与 `f7f34b5` 同步到 VPS（真机当前仍停在 `434f2f8`）。
 
 ## 8. 如何重新生成这些证据
 

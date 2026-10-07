@@ -26,13 +26,23 @@ class FakeTools:
         self._payload = payload if payload is not None else {"value": "2"}
         self._specs = SPECS if specs is None else specs
         self.executed: list[tuple[str, str]] = []
+        self.spec_calls = 0
 
     def specs_for(self, context: object) -> list[dict[str, object]]:
+        self.spec_calls += 1
         return self._specs
 
     async def execute(self, context: object, name: str, arguments: str) -> dict[str, object]:
         self.executed.append((name, arguments))
         return self._payload
+
+
+class VanishingTools(FakeTools):
+    """模拟 executor：工具本轮被禁用后 spec 不再出现（`failed_this_round`）。"""
+
+    async def execute(self, context: object, name: str, arguments: str) -> dict[str, object]:
+        self._specs = []
+        return await super().execute(context, name, arguments)
 
 
 def _settings(**overrides: object):
@@ -98,6 +108,24 @@ class ResponderTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(outcome.text, "最终答案")
         self.assertEqual(client.tool_names, [["calc"], None])
         self.assertEqual(outcome.tool_calls, 1)
+
+    async def test_each_round_re_lists_tools_so_disabled_tools_disappear(self) -> None:
+        """F4.8：本轮被禁用的工具不再下发，模型不会被引到必然 `cooldown` 的调用上。
+
+        模型第 2 次仍然要求调用同一个工具；因为清单在每轮重新取（此时已空），
+        这一轮不带工具下发，调用被忽略、不再执行，也不会有第 3 次模型调用。
+        """
+        client = FakeLLMClient(tool_reply("calc", "{}"), tool_reply("calc", "{}", call_id="call-2"))
+        tools = VanishingTools()
+        outcome = await Responder(client, _settings(), tools).reply(
+            [{"role": "user", "content": "?"}], context=_ctx()
+        )
+        self.assertIsNone(outcome.text)  # 第 2 次脚本是工具调用，因未下发工具而被忽略
+        self.assertEqual(tools.spec_calls, 2)  # 第 2 轮重新取清单，而不是沿用第 1 轮快照
+        self.assertEqual(client.tool_names, [["calc"], None])  # 已禁用 → 不再带工具
+        self.assertEqual(outcome.tool_calls, 1)  # 没有第二次实际执行
+        self.assertEqual(len(tools.executed), 1)
+        self.assertEqual(len(client.calls), 2)  # 不会为了死工具再花一轮
 
     async def test_tools_stop_when_round_cap_reached(self) -> None:
         client = FakeLLMClient(tool_reply("calc", "{}"), tool_reply("calc", "{}", call_id="call-2"))

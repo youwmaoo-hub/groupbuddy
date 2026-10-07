@@ -108,7 +108,7 @@ class ToolExecutor:
     def _blocked_reason(self, context: ToolContext, name: str) -> str | None:
         now = self._clock()
         if name in context.failed_this_round:
-            return "本轮该工具已失败 2 次，已禁用"
+            return f"本轮该工具已失败 {self._config.round_failures} 次，已禁用"
         if self._breaker_until.get((context.chat_id, name), 0.0) > now:
             return "该工具暂时熔断，稍后再试"
         return None

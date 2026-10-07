@@ -97,7 +97,10 @@ class Responder:
         tool_ms = 0
         model = self._settings.llm_model
         for index in range(rounds + 1):
-            allow_tools = specs if index < rounds else None  # 最后一轮不带工具，强制给答案
+            # 每轮重新取清单：本轮已失败/已熔断的工具不再出现（executor.specs_for 会过滤），
+            # 否则模型会继续调用必然返回 cooldown 的工具，白花一轮与一次模型调用。
+            available = specs if index == 0 else self._specs(context)
+            allow_tools = available if index < rounds else None  # 最后一轮不带工具，强制给答案
             try:
                 reply = await self._client.complete(
                     history,

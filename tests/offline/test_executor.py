@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict
 
 from app.tools.builtin.calc import CalcTool
 from app.tools.builtin.search_web import FakeSearchBackend, SearchWebTool
-from app.tools.executor import ToolExecutor
+from app.tools.executor import BreakerConfig, ToolExecutor
 from app.tools.policy import Policy
 from app.tools.registry import ToolContext, ToolError, ToolRegistry, ToolSpec
 from tests.offline.helpers import FakeClock
@@ -54,12 +54,12 @@ class _BigTool:
         return {"text": "x" * 5000}
 
 
-def _build(*tools: object) -> tuple[ToolExecutor, FakeClock]:
+def _build(*tools: object, config: BreakerConfig | None = None) -> tuple[ToolExecutor, FakeClock]:
     registry = ToolRegistry()
     for tool in tools:
         registry.register(tool)  # type: ignore[arg-type]
     clock = FakeClock()
-    return ToolExecutor(registry, Policy(registry), clock=clock.monotonic), clock
+    return ToolExecutor(registry, Policy(registry), config=config, clock=clock.monotonic), clock
 
 
 def _ctx(chat_id: int = 1, **group: object) -> ToolContext:
@@ -162,7 +162,17 @@ class BreakerTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(first["error"], "execution_failed")
         self.assertEqual(second["error"], "execution_failed")
         self.assertEqual(third["error"], "cooldown")
+        self.assertEqual(third["message"], "本轮该工具已失败 2 次，已禁用")
         self.assertEqual(executor.specs_for(context), [])
+
+    async def test_round_disable_message_follows_the_configured_limit(self) -> None:
+        executor, _ = _build(_FailingTool(), config=BreakerConfig(round_failures=1))
+        context = _ctx()
+        first = await executor.execute(context, "read_file", "{}")
+        second = await executor.execute(context, "read_file", "{}")
+        self.assertEqual(first["error"], "execution_failed")
+        self.assertEqual(second["error"], "cooldown")
+        self.assertEqual(second["message"], "本轮该工具已失败 1 次，已禁用")
 
     async def test_breaker_opens_after_eight_failures_then_recovers(self) -> None:
         executor, clock = _build(_FailingTool())

@@ -70,6 +70,7 @@ Prompt 结构固定为"固定段在前、动态段在后"：
   任何易变内容不得插入固定段；当前情绪等易变内容放在动态段末条（见 `docs/persona.md` §2）。
 - 高峰时段为周一至周五 01:00–04:00 与 06:00–10:00 UTC（其余时间含周末为半价）。
 - 不可缓存的正确性依赖：工具清单顺序、群设定渲染顺序、摘要插入位置都要稳定。
+- 例外：工具清单在本轮内可能变短——某工具本轮被禁用或熔断后，下一次模型调用不再下发它（见 `docs/tools.md` §1）。那一轮会失去前缀缓存，但省下一整轮模型调用，且只在已经出现工具失败后才会发生。
 
 来源：[DeepSeek Models & Pricing](https://api-docs.deepseek.com/quick_start/pricing)。模型名：`deepseek-flash`、`deepseek-v4-pro`（旧名 `deepseek-v4-flash` 已映射到同一模型）。
 

@@ -9,7 +9,7 @@
 **当前事实只有一个来源：`docs/status.md`**（commit、已完成能力、本机与真机测试、真机验收证据、技术债摘要、下一步）。本节只保留阶段进度。
 
 - 阶段 0–7：**已完成**。阶段 0 含部署约束增补（Windows 开发 / Linux VPS 24/7 生产，同一份代码，见 `docs/deployment.md`）；阶段 1 曾通过真实 Telegram + DeepSeek 端到端验收；阶段 7 的 Linux/Podman 真机验收**已完成**（13/13 PASS，commit 与日志路径见 `docs/status.md`）。
-- 阶段 8（权限、配额与运维）：**已完成并通过真机验收**（真机 checkout `88531d2` = 本机 `main` HEAD：416 条全量 OK、沙箱 13 项全 PASS、migration 4 与 `host_info` Linux 行为符合契约，见 `docs/status.md` §4.2）—— 群主命令最小闭环（管理员判定 + `/settings` 回显与写入 + 非管理员被拒，见 `docs/security.md` §2.1）、日/月 token 配额（见 `docs/token.md` §4.1）、运行指标 `/stats` + `/health`（与 `storage/health.json` 同一状态，见 `docs/deployment.md` §7）、`host_info`（F4.7）、四模式完整生效（`docs/token.md` §5）以及 T12/T15；阶段 8 内明确留到后续的只有链 3 轮次分档与模型档位路由（`/clear` 作为阶段 8 留后项已于 `8b14aab` 补做、群级人设 Persona 已由 `c29ecac` 补做、长期笔记 `/note` 已由 `495389b` 补做（记忆体验优化第一项），工具体验优化 T31 已由 `e1dcb6a` 修复（工具清单逐轮重取），见 §阶段 8）。阶段 9（部署与 24/7 运行）：**进行中 —— 最小生产闭环已完成并通过真机实测**（systemd 用户级单元 `groupbuddy.service`、真实 `.env` 600、启动时 migration、`storage/health.json` 心跳、Telegram 真机收发、stop/start/restart 与 `SIGKILL` 自动重启；证据见 `docs/status.md` §4.3、契约见 `docs/deployment.md` §12.9），**备份/恢复与更新/回滚演练也已完成并真机验证**（`scripts/backup_db.py` + §8.1 bundle 流程，真机当前 `26e946d`（= `bafe096`；真机直接相关 65 条 OK），证据见 `docs/status.md` §4.4），未完成部分见 §阶段 9 的「待做」。B 组技术债：T25 关键路径补测已完成（`6b93fd6`，只加测试，见 §技术债与已知缺陷），T7/T9 待做。阶段 10（Web 控制面板与多实例）：**未开始**。阶段 10 仅完成架构预留（`docs/domain.md`、`docs/architecture.md` §10），未开发面板、未建控制面表。
+- 阶段 8（权限、配额与运维）：**已完成并通过真机验收**（真机 checkout `88531d2` = 本机 `main` HEAD：416 条全量 OK、沙箱 13 项全 PASS、migration 4 与 `host_info` Linux 行为符合契约，见 `docs/status.md` §4.2）—— 群主命令最小闭环（管理员判定 + `/settings` 回显与写入 + 非管理员被拒，见 `docs/security.md` §2.1）、日/月 token 配额（见 `docs/token.md` §4.1）、运行指标 `/stats` + `/health`（与 `storage/health.json` 同一状态，见 `docs/deployment.md` §7）、`host_info`（F4.7）、四模式完整生效（`docs/token.md` §5）以及 T12/T15；阶段 8 内明确留到后续的只有链 3 轮次分档与模型档位路由（`/clear` 作为阶段 8 留后项已于 `8b14aab` 补做、群级人设 Persona 已由 `c29ecac` 补做、长期笔记 `/note` 已由 `495389b` 补做（记忆体验优化第一项），工具体验优化 T31 已由 `e1dcb6a` 修复（工具清单逐轮重取），见 §阶段 8）。阶段 9（部署与 24/7 运行）：**进行中 —— 最小生产闭环已完成并通过真机实测**（systemd 用户级单元 `groupbuddy.service`、真实 `.env` 600、启动时 migration、`storage/health.json` 心跳、Telegram 真机收发、stop/start/restart 与 `SIGKILL` 自动重启；证据见 `docs/status.md` §4.3、契约见 `docs/deployment.md` §12.9），**备份/恢复与更新/回滚演练也已完成并真机验证**（`scripts/backup_db.py` + §8.1 bundle 流程，真机当前 `26e946d`（= `bafe096`；真机直接相关 65 条 OK），证据见 `docs/status.md` §4.4），未完成部分见 §阶段 9 的「待做」。B 组技术债：T25 关键路径补测已完成（`6b93fd6`，只加测试），T7 验收脚本判定口径已修复（`4ea2326`，含 4 条离线测试），T9 待做。阶段 10（Web 控制面板与多实例）：**未开始**。阶段 10 仅完成架构预留（`docs/domain.md`、`docs/architecture.md` §10），未开发面板、未建控制面表。
 - 一次只推进一个阶段；不得跳阶段。
 
 ## 阶段表
@@ -93,7 +93,7 @@
 - 验收：容器内无网络、越界写失败、超时被 kill 且容器销毁；离线覆盖 `tests/offline/test_sandbox.py`（26 条）；
   真实验收由目标机（Linux + rootless Podman）执行 `scripts/verify_sandbox.py`（上线清单与判读口径见 `docs/deployment.md` §12.6）。
   **真机结果**：已完成，13 项全 PASS（Tier A 7/7、Tier B 4/4），证据见 `docs/status.md`；Tier B 未全 PASS 时应设为 `SANDBOX_TIER_B=off`。
-  该脚本的判定口径偏弱（见下方技术债 T7）。
+  该脚本的判定口径曾偏弱，已于 `4ea2326` 修复（探针标记 + 错误签名 + 显式 tier 聚合 + 4 条离线测试，见下方技术债 T7）。
 - 明确不做：Tier C、`pip install`、容器联网、自定义镜像、microVM/gVisor/Kata、Redis/K8s、配额与管理员权限。
 
 ### 阶段 8 · 权限、配额与运维
@@ -162,8 +162,9 @@
    「容器没起来」与「程序正常失败」不可区分 —— 阶段 7 首次真机验收的 `--workdir /workspace` 事故正是由此漏报。契约见 `docs/tools.md` §2 `run_code`。
 5. **T5（P2）沙箱 stderr 未清洗** — 容器/CLI 的 stderr 原样进入模型上下文（`runner.py:138,146-148`），与 `docs/security.md` §3「上下文里不出现宿主机绝对路径」冲突。
 6. **T6（P2）`--cap-drop=ALL` 与 `no-new-privileges` 未被验收覆盖** — 实现在 `app/sandbox/spec.py:68-70`，但 `scripts/verify_sandbox.py` 无对应检查项。
-7. **T7（P2）验收脚本判定口径弱** — `want_ok=False` 的两项（无网络、只读根）任何非零退出都 PASS，区分不出「容器没启动」；
-   `Tier A：PASS` 汇总只聚合 1 项（`scripts/verify_sandbox.py:66,76-77,145-149`）。判读口径见 `docs/deployment.md` §12.6。
+7. **T7（P2，已修复，`4ea2326`）验收脚本判定口径弱** — `want_ok=False` 的两项（无网络、只读根）任何非零退出都 PASS，区分不出「容器没启动」；
+   `Tier A：PASS` 汇总只聚合 1 项（原 `scripts/verify_sandbox.py:66,76-77,145-149`）。判读口径见 `docs/deployment.md` §12.6。
+   **已修复（`4ea2326`）**：两条负向断言先打印探针标记（`PROBE net`/`PROBE rofs`）再触发禁止操作，判定要求「退出码符合预期 + 探针标记出现 + 预期错误签名出现」三者同时成立（`check()` 新增 `error_contains`）；`results` 改为 `(tier, name, ok, detail)` 四元组，逐项输出带 `[A]`/`[B]`/`[AB]` 标记，`Tier A`/`Tier B` 按显式 tier 归属聚合全部相关项（含 2 项全局清理检查），任一项 FAIL 都翻转结论；新增 `tests/offline/test_verify_sandbox.py` 4 条（假后端跑脚本 `main()`：全绿、容器没起来、单项非 root 失败会翻转 `Tier A`、Tier B 未启用 fail-closed），并用旧脚本反向验证过 4 条会失败。真机复跑安排在下一次部署/里程碑。
 8. **T8（P2）`resolve_path` 未复核 base 自身** — `app/tools/workspace.py:45-47` 只对拼接后的目标做 `is_relative_to`，未像 `:63-71` 那样逐段查符号链接；base 目录本身被替换为符号链接时没有保护。
 
 ### 数据与记忆

@@ -190,11 +190,15 @@ cd <项目根>
 ```
 
 - 必须与 Bot 用**同一个用户、同一份配置**执行；脚本只写 `storage/workspaces/999001/`（结束时删除）与沙箱临时目录探针。
-- 输出逐项 `PASS/FAIL`，末尾给出 `Tier A` / `Tier B` 结论与 `合计 N 项，失败 M 项`；退出码 0 = 全部通过。
-- **判读注意（已核实）**：`无网络` 与 `只读根` 是「期望非零退出」的负向断言，只要退出码非零就 PASS，
-  **区分不出「容器根本没启动」与「被正确拒绝」**（阶段 7 首次验收曾因此漏报 7 项 workdir 启动失败）；
-  且正文里 `Tier A：PASS` 只聚合名字以 `Tier A` 开头的 1 个检查项。
-  判读时必须同时看逐项输出、`合计 N 项，失败 M 项` 与失败计数（技术债见 `TODO.md`）。
+- 输出逐项 `PASS/FAIL`，每项带 tier 归属 `[A]`/`[B]`/`[AB]`（`AB` = 两种 tier 都要满足的全局清理检查），末尾给出 `Tier A` / `Tier B` 结论与 `合计 N 项，失败 M 项`；退出码 0 = 全部通过。
+- **判定口径（技术债 T7 已修，2026-10-07）**：`无网络` 与 `只读根` 是「期望非零退出」的负向断言，但不再只看退出码 ——
+  探针先打印标记（`PROBE net` / `PROBE rofs`）再触发被禁止的操作，标记必须出现（证明容器里的解释器确实运行了），
+  且 stderr 必须带预期错误签名（无网络：`TimeoutError`/`ConnectionError`/`OSError`/`gaierror`/`unreachable`；
+  只读根：`Read-only file system`/`PermissionError`/`EROFS`/`Errno 13`/`Errno 30`）。
+  这样「容器根本没启动 / 解释器缺失」与「被正确拒绝」可以区分（阶段 7 首次验收曾因只看退出码漏报 7 项 workdir 启动失败）。
+- `Tier A` / `Tier B` 结论按**显式 tier 归属**聚合（不再按名字前缀）：`Tier A` 覆盖 7 项沙箱检查 + 2 项全局清理检查，`Tier B` 覆盖 4 项 workspace 检查 + 同样的 2 项全局检查；
+  任一项 FAIL 都会翻转对应结论，也会计入 `合计 N 项，失败 M 项` 与退出码。
+  判定逻辑本身由 `tests/offline/test_verify_sandbox.py` 用假后端离线覆盖（脚本无法在 Windows/无 Podman 环境真跑）。
 
 | 结论 | 判定方式 | 后续动作 |
 |---|---|---|

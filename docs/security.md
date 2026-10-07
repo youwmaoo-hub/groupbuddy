@@ -120,8 +120,10 @@
 - 真实验收：在目标机（Linux + rootless Podman）由**运行 Bot 的同一用户**执行 `scripts/verify_sandbox.py`，逐项验证无网络、非 root、
   只读根、fsize 上限、cgroup 资源上限（256 MB / 0.5 CPU / 64 PIDs）、超时销毁、无残留容器、临时目录已清理、
   其他群 workspace 不可见、宿主目录不可见。上线清单与 Tier A/B 判读见 `docs/deployment.md` §12；
-  判读口径：`无网络` 与 `只读根` 是「期望非零退出」的负向断言，无法区分「容器根本没启动」与「被正确拒绝」，
-  且脚本打印的 `Tier A：PASS` 只聚合名字以 `Tier A` 开头的 1 项 —— 必须同时看逐项结果与失败计数（技术债见 `TODO.md`）。
+  判读口径（技术债 T7 已修，2026-10-07）：`无网络` 与 `只读根` 是「期望非零退出」的负向断言，脚本现在要求探针标记
+  （`PROBE net`/`PROBE rofs`，证明容器里的解释器确实运行了）与预期错误签名同时出现，因此「容器根本没启动 / 解释器缺失」
+  不再算 PASS；`Tier A：PASS` / `Tier B：PASS` 按显式 tier 归属聚合全部相关检查项，任一项 FAIL 都会翻转结论。
+  判定逻辑由 `tests/offline/test_verify_sandbox.py` 离线覆盖。
   Tier B 任一项不 PASS 就把 `SANDBOX_TIER_B=off` 只保留 Tier A。
 - **红线：禁止挂载 docker/podman socket**（等价于宿主机 root 权限），**禁止 privileged / host network / 宿主目录挂载**。
 - 若确需调用容器运行时，只允许由权限受限的独立组件用固定模板调用（白名单参数）；模型无法影响镜像、参数与宿主路径。

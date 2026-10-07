@@ -54,27 +54,52 @@ async def main(argv: list[str]) -> int:
         return 1
 
     runner = SandboxRunner(backend, settings)
-    results: list[tuple[str, bool, str]] = []
+    # tier 是显式归属（"A" Tier A、"B" Tier B、"AB" 两个 tier 都算），不再靠名字前缀猜测；
+    # 这样才能让末尾的 Tier A/Tier B 结论覆盖全部相关检查项（技术债 T7）。
+    results: list[tuple[str, str, bool, str]] = []
 
-    async def check(name: str, code: str, *, workspace: bool = False, timeout: int = 15, want_ok: bool = True, contains: str = "", allow_codes: tuple[str, ...] = ()) -> dict[str, object] | None:
+    def flag_last(detail: str) -> None:
+        """把最后一条结果改判为 FAIL（用于需要人工复核 stdout 的检查项）。"""
+        tier, name, _, _ = results[-1]
+        results[-1] = (tier, name, False, detail)
+
+    async def check(name: str, code: str, *, tier: str = "A", workspace: bool = False, timeout: int = 15, want_ok: bool = True, contains: str = "", error_contains: tuple[str, ...] = (), allow_codes: tuple[str, ...] = ()) -> dict[str, object] | None:
         try:
             payload = await runner.run(chat_id=VERIFY_CHAT_ID, code=code, timeout_s=timeout, workspace=workspace)
         except SandboxError as exc:
-            results.append((name, exc.code in allow_codes, f"{exc.code}: {exc.message}"))
+            results.append((tier, name, exc.code in allow_codes, f"{exc.code}: {exc.message}"))
             return None
         text = f"{payload['stdout']}\n{payload['stderr']}"
         ok = (payload["exit_code"] == 0) is want_ok
         if contains and contains not in text:
             ok = False
-        results.append((name, bool(ok), f"exit={payload['exit_code']} {text.strip()[:200]}"))
+        # 负向断言额外要求出现预期的错误签名：只有退出码非零时，「容器没起来 / 解释器缺失」
+        # 与「被正确拒绝」无法区分（技术债 T7）。
+        if error_contains and not any(marker in text for marker in error_contains):
+            ok = False
+        results.append((tier, name, bool(ok), f"exit={payload['exit_code']} {text.strip()[:200]}"))
         return payload
 
     await check("Tier A 纯计算", "print('hello from sandbox')", contains="hello from sandbox")
     uid_payload = await check("非 root（uid != 0）", "import os; print('UID', os.getuid())", contains="UID ")
     if uid_payload is not None and "UID 0" in str(uid_payload["stdout"]):
-        results[-1] = (results[-1][0], False, "容器内是 root")
-    await check("无网络", "import socket; socket.create_connection(('1.1.1.1', 53), 2)", want_ok=False)
-    await check("只读根", "open('/usr/lib/probe.txt', 'w').write('x')", want_ok=False)
+        flag_last("容器内是 root")
+    # 探针先打印标记再触发被禁止的操作：标记必须出现（证明容器里的解释器确实运行了），
+    # 同时 stderr 必须带预期的错误签名，否则判 FAIL。
+    await check(
+        "无网络",
+        "print('PROBE net')\nimport socket\nsocket.create_connection(('1.1.1.1', 53), 2)\n",
+        want_ok=False,
+        contains="PROBE net",
+        error_contains=("TimeoutError", "ConnectionError", "OSError", "gaierror", "unreachable", "Network is"),
+    )
+    await check(
+        "只读根",
+        "print('PROBE rofs')\nopen('/usr/lib/probe.txt', 'w').write('x')\n",
+        want_ok=False,
+        contains="PROBE rofs",
+        error_contains=("Read-only file system", "PermissionError", "OSError", "EROFS", "Errno 13", "Errno 30"),
+    )
     await check("单文件大小上限", "import resource; print('FSIZE', resource.getrlimit(resource.RLIMIT_FSIZE)[0])", contains="FSIZE 8388608")
     await check(
         "资源上限生效（cgroup）",
@@ -103,47 +128,49 @@ async def main(argv: list[str]) -> int:
             "Tier B 本群 workspace 读写（非 root）",
             "import os; open('/workspace/probe.txt', 'w').write('hi'); "
             "print('READ', open('/workspace/probe.txt').read(), 'UID', os.getuid())",
+            tier="B",
             workspace=True,
             contains="READ hi",
         )
         if tierb is not None and "UID 0" in str(tierb["stdout"]):
-            results[-1] = (results[-1][0], False, "容器内是 root")
+            flag_last("容器内是 root")
         host_file = workspace_root / str(VERIFY_CHAT_ID) / "probe.txt"
-        results.append(("Tier B 宿主侧可见", host_file.is_file(), str(host_file)))
-        listing = await check("Tier B 其他群不可见", "import os; print('LS', sorted(os.listdir('/workspace')))", workspace=True)
+        results.append(("B", "Tier B 宿主侧可见", host_file.is_file(), str(host_file)))
+        listing = await check("Tier B 其他群不可见", "import os; print('LS', sorted(os.listdir('/workspace')))", tier="B", workspace=True)
         if listing is not None and "other.txt" in str(listing["stdout"]):
-            results[-1] = (results[-1][0], False, "看到了其他群的 workspace")
+            flag_last("看到了其他群的 workspace")
         await check(
             "Tier B 宿主目录不可见",
             "import os; print('VIS', os.path.exists('/.env'), os.path.exists('/app'), os.path.exists('/bot.db'))",
+            tier="B",
             workspace=True,
             contains="VIS False False False",
         )
     else:
         try:
             await runner.run(chat_id=VERIFY_CHAT_ID, code="print(1)", workspace=True)
-            results.append(("Tier B 未验证时 fail-closed", False, "居然执行了"))
+            results.append(("B", "Tier B 未验证时 fail-closed", False, "居然执行了"))
         except SandboxError as exc:
-            results.append(("Tier B 未验证时 fail-closed", exc.code == "sandbox_unavailable", exc.code))
+            results.append(("B", "Tier B 未验证时 fail-closed", exc.code == "sandbox_unavailable", exc.code))
 
     stale = await backend.list_containers()
-    results.append(("执行后没有残留容器", not stale, ",".join(stale)))
+    results.append(("AB", "执行后没有残留容器", not stale, ",".join(stale)))
 
     temp_dir = Path(settings.sandbox_temp_dir)
     leftovers = sorted(x.name for x in temp_dir.glob("*")) if temp_dir.exists() else []
-    results.append(("临时输出目录已清理", not leftovers, ",".join(leftovers)))
+    results.append(("AB", "临时输出目录已清理", not leftovers, ",".join(leftovers)))
 
     for path in (workspace_root / str(VERIFY_CHAT_ID) / "probe.txt", other_dir / "other.txt"):
         if path.exists():
             path.unlink()
 
     failed = 0
-    for name, ok, detail in results:
-        print(f"{'PASS' if ok else 'FAIL'} {name} | {detail}")
+    for tier, name, ok, detail in results:
+        print(f"{'PASS' if ok else 'FAIL'} [{tier}] {name} | {detail}")
         if not ok:
             failed += 1
-    tier_a = [ok for name, ok, _ in results if name.startswith("Tier A")]
-    tier_b = [ok for name, ok, _ in results if name.startswith("Tier B")]
+    tier_a = [ok for tier, _, ok, _ in results if "A" in tier]
+    tier_b = [ok for tier, _, ok, _ in results if "B" in tier]
     print(f"Tier A：{'PASS' if tier_a and all(tier_a) else 'FAIL'}")
     if backend.supports_workspace_write():
         print(f"Tier B：{'PASS' if tier_b and all(tier_b) else 'FAIL'}")

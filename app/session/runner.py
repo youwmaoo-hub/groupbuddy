@@ -15,6 +15,7 @@ from app.gate.filters import screen
 from app.gate.limits import ProactiveLimiter
 from app.gate.trigger import TriggerDetector
 from app.llm.loop import Outcome, Responder
+from app.llm.routing import PURPOSE_CHAT, ModelRouter
 from app.ops.commands import Command, CommandService, parse_command
 from app.ops.health import HealthState
 from app.ops.quota import QuotaGuard
@@ -53,6 +54,7 @@ class SessionRunner:
         commands: CommandService | None = None,
         quota: QuotaGuard | None = None,
         health: HealthState | None = None,
+        router: ModelRouter | None = None,
         bot_username: str = "",
     ) -> None:
         self._settings = settings
@@ -69,6 +71,8 @@ class SessionRunner:
         self._commands = commands
         self._quota = quota
         self._health = health
+        # 模型档位路由：默认按配置构造，测试可注入（app/llm/routing.py）
+        self._router = router or ModelRouter(settings)
         self._bot_username = bot_username
 
     async def handle(self, incoming: IncomingMessage) -> None:
@@ -178,10 +182,14 @@ class SessionRunner:
         allowed = self._tools.allowed_names(context) if self._tools is not None else ()
         mood = self._mood.describe(batch.chat_id) if self._mood is not None else None
         payload = await self._context.build(batch, group=group, allowed_tools=allowed, mood=mood)
+        # 模型档位路由（docs/token.md §5）：只按用途 + 纯规则意图选模型名；配额、工具策略、
+        # 沙箱与权限都在路由之前/之外，路由不绕过任何一道约束。
+        model = self._router.choose(intent=self._context.intent(batch), purpose=PURPOSE_CHAT)
         # 输出上限按模式（docs/token.md §5）：economy 短、normal/smart 用配置值、unrestricted 不限
         outcome = await self._responder.reply(
             payload,
             context=context,
+            model=model,
             max_output_tokens=modes.output_limit(profile, self._settings),
         )
         await self._record_usage(batch, outcome)  # 只要调用了模型就记账，哪怕本轮不说话

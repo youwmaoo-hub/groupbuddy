@@ -83,19 +83,24 @@ class Responder:
         context: object | None = None,
         max_rounds: int | None = None,
         max_output_tokens: int | None | object = _DEFAULT_LIMIT,
+        model: str | None = None,
     ) -> Outcome:
-        """`max_output_tokens` 由调用方按模式给出（docs/token.md §5）；None = 不限。"""
+        """`max_output_tokens` 由调用方按模式给出（docs/token.md §5）；None = 不限。
+
+        `model` 由调用方按模型档位路由给出（`app/llm/routing.py`）；不给则用 `LLM_MODEL`。
+        """
         limit = self._settings.llm_max_output_tokens if max_output_tokens is _DEFAULT_LIMIT else max_output_tokens
+        chosen = model or self._settings.llm_model
         specs = self._specs(context)
         if not specs:
-            return await self._single_call(messages, max_tokens=limit)
+            return await self._single_call(messages, max_tokens=limit, model=chosen)
 
         rounds = max(0, self._settings.tool_max_rounds if max_rounds is None else max_rounds)
         history: list[ChatMessage] = list(messages)
         input_tokens = cached_tokens = output_tokens = 0
         tool_calls = 0
         tool_ms = 0
-        model = self._settings.llm_model
+        model = chosen
         for index in range(rounds + 1):
             # 每轮重新取清单：本轮已失败/已熔断的工具不再出现（executor.specs_for 会过滤），
             # 否则模型会继续调用必然返回 cooldown 的工具，白花一轮与一次模型调用。
@@ -104,7 +109,7 @@ class Responder:
             try:
                 reply = await self._client.complete(
                     history,
-                    model=self._settings.llm_model,
+                    model=chosen,
                     max_tokens=limit,
                     tools=allow_tools,
                 )
@@ -143,9 +148,19 @@ class Responder:
             tool_ms=tool_ms,
         )
 
-    async def _single_call(self, messages: list[ChatMessage], *, max_tokens: int | None = None) -> Outcome:
+    async def _single_call(
+        self,
+        messages: list[ChatMessage],
+        *,
+        max_tokens: int | None = None,
+        model: str | None = None,
+    ) -> Outcome:
         try:
-            reply = await self._client.complete(messages, model=self._settings.llm_model, max_tokens=max_tokens)
+            reply = await self._client.complete(
+                messages,
+                model=model or self._settings.llm_model,
+                max_tokens=max_tokens,
+            )
         except LLMError:
             logger.exception("模型调用失败，本轮不回复")
             return Outcome(None)

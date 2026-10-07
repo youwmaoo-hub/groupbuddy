@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import unittest
 
+from app import modes
 from app.config import today_in_timezone
 from app.gate.debounce import Batch, Debouncer
 from app.gate.dedupe import UpdateDeduplicator
@@ -39,6 +40,10 @@ from tests.offline.helpers import (
     make_settings,
     tool_reply,
 )
+
+
+#: 模型档位路由测试用的"更强模型"（`LLM_MODEL_STRONG`）。
+STRONG_MODEL = "deepseek-v4-pro"
 
 
 class PipelineTests(DbTestCase):
@@ -806,6 +811,62 @@ class PipelineTests(DbTestCase):
         memory = str(self.llm.calls[0][1]["content"])
         self.assertIn("相关记录：", memory)
         self.assertIn("[笔记:部署] 生产部署用 systemd 托管", memory)
+
+    async def _usage_rows(self) -> list[tuple[str, str]]:
+        cursor = await self.connection.execute("SELECT model, purpose FROM usage ORDER BY id")
+        rows = await cursor.fetchall()
+        await cursor.close()
+        return [(str(row[0]), str(row[1])) for row in rows]
+
+    async def test_complex_task_routes_to_the_strong_model_and_is_recorded(self) -> None:
+        """模型档位路由：明显复杂的任务升级到配置的强模型，记账记最终实际使用的 model。"""
+        self.settings = make_settings(self.tmp, LLM_MODEL_STRONG=STRONG_MODEL)
+        self._build("好的")
+        await self._send(["@bot 这段代码 ```print(1)``` 怎么改"])
+        await self._flush()
+
+        self.assertEqual(self.llm.models, [STRONG_MODEL])
+        self.assertEqual(self.llm.tool_names[0], ["calc", "read_file"])  # 工具策略不受路由影响
+        self.assertEqual(await self._usage_rows(), [(STRONG_MODEL, "chat")])
+
+    async def test_plain_task_keeps_the_default_model(self) -> None:
+        self.settings = make_settings(self.tmp, LLM_MODEL_STRONG=STRONG_MODEL)
+        self._build("好")
+        await self._send(["@bot 在吗"])
+        await self._flush()
+        self.assertEqual(self.llm.models, ["deepseek-flash"])
+        self.assertEqual(await self._usage_rows(), [("deepseek-flash", "chat")])
+
+    async def test_complex_task_stays_on_the_default_model_without_a_strong_model(self) -> None:
+        self._build("好")  # 未配置 LLM_MODEL_STRONG
+        await self._send(["@bot 这段代码 ```print(1)``` 怎么改"])
+        await self._flush()
+        self.assertEqual(self.llm.models, ["deepseek-flash"])
+
+    async def test_routing_does_not_bypass_quota(self) -> None:
+        """配额在路由之前判定：超额时即便是复杂档也不产生任何模型调用、不记账。"""
+        self.settings = make_settings(self.tmp, QUOTA_DAILY_TOKENS=100, LLM_MODEL_STRONG=STRONG_MODEL)
+        await self._seed_tokens(100)
+        self._build("不该被调用", quota=QuotaGuard(self.connection, self.settings))
+        await self._send(["@bot 这段代码 ```print(1)``` 怎么改"])
+        await self._flush()
+
+        self.assertEqual(self.llm.calls, [])
+        self.assertEqual([item["text"] for item in self.sender.sent], [DAILY_EXHAUSTED_TEXT])
+        self.assertEqual(await self._usage_rows(), [("deepseek-flash", "chat")])  # 只有预置的那次
+
+    async def test_routing_keeps_the_mode_semantics(self) -> None:
+        """路由只换模型名：economy 的输出上限与固定段模式标记仍然按模式生效。"""
+        self.settings = make_settings(self.tmp, LLM_MODEL_STRONG=STRONG_MODEL)
+        self._build("好", commands=self._commands_with(owner=42))
+        await self._command("/settings mode economy", update_id=90, message_id=90)
+        await self._send(["@bot 这段代码 ```print(1)``` 怎么改"], start_update=200, start_message=20)
+        await self._flush()
+
+        self.assertEqual(self.llm.models[0], STRONG_MODEL)  # 路由只看任务复杂度，不看模式
+        self.assertEqual(self.llm.max_tokens[0], modes.ECONOMY_MAX_OUTPUT_TOKENS)  # 模式上限不变
+        self.assertIn("模式：economy", str(self.llm.calls[0][0]["content"]))
+        self.assertNotIn("send_sticker", self.llm.tool_names[0])  # economy 关贴纸
 
 
 if __name__ == "__main__":

@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     # --- 模型 ---
     llm_base_url: str = Field(default="https://api.deepseek.com", alias="LLM_BASE_URL")
     llm_model: str = Field(default="deepseek-flash", alias="LLM_MODEL")
+    #: 更强模型（可选）：留空 = 未配置，复杂任务也走 `llm_model`（docs/token.md §5）。
+    llm_model_strong: str = Field(default="", alias="LLM_MODEL_STRONG")
     llm_timeout_seconds: float = Field(default=60.0, alias="LLM_TIMEOUT_SECONDS")
     llm_temperature: float = Field(default=0.7, alias="LLM_TEMPERATURE")
     llm_max_output_tokens: int = Field(default=1024, alias="LLM_MAX_OUTPUT_TOKENS")
@@ -140,6 +142,7 @@ class Settings(BaseSettings):
             "BOT_INSTANCE_ID": self.instance_id,
             "LLM_BASE_URL": self.llm_base_url,
             "LLM_MODEL": self.llm_model,
+            "LLM_MODEL_STRONG": self.llm_model_strong or "(未配置)",
             "LLM_TIMEOUT_SECONDS": self.llm_timeout_seconds,
             "DB_PATH": str(self.db_path),
             "WORKSPACE_ROOT": str(self.workspace_root),

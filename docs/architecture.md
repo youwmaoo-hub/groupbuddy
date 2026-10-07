@@ -54,6 +54,7 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | 模型 | `app/llm/client.py` | OpenAI 兼容客户端（base_url 可换厂商） |
 | | `app/llm/loop.py` | 工具循环；轮次/时长/成本上限；输出上限可由调用方按模式覆盖（`None` = 不限） |
 | | `app/llm/prompts.py` | 固定段：全局人格（`docs/persona.md`）→ 群设定 → 工具策略 → 输出规则；动态段末条可注入当前情绪 |
+| | `app/llm/routing.py` | 模型档位路由（`ModelRouter.choose`）：用途 + 纯规则意图 → 模型名；默认 `LLM_MODEL`，复杂任务且配了 `LLM_MODEL_STRONG` 才升级，异常 fail-safe 回默认（`docs/token.md` §5.1） |
 | 工具（阶段 3） | `app/tools/registry.py` | name → Tool 实例；按等级裁剪可暴露清单 |
 | | `app/tools/policy.py` | 权限判定唯一出口（等级 → 本群开关 → 模式档位，见 `docs/security.md` §2、`docs/token.md` §5） |
 | | `app/tools/executor.py` | 注册表 → 权限 → schema → 执行 → 结构化结果；失败计数与熔断 |
@@ -138,7 +139,7 @@ Telegram Update
 | 论坛主题 | 所有内容表带 `thread_id`（默认 NULL） | 按主题隔离记忆 |
 | 横向扩展 | 单进程 polling | 需要时改 Webhook（同一 Token 只能一个 polling 进程） |
 | 每群独立 Bot | 单 Token + `chat_id` 租户键 | 多 Token 部署多实例 |
-| 模型档位 | 单模型名可配置 | 按复杂度路由（见 token §运行侧）。**评估（2026-10-07）：暂不做**——真实成本 < $0.01、无质量不足证据、`deepseek-v4-pro` 价格与可得性未核实；缝（`LLM_MODEL` 单键）已够用，见 `docs/requirements.md` 未决问题 #2 |
+| 模型档位 | 单模型名可配置 | **最小规则型路由已实施**（`app/llm/routing.py`）：默认 `LLM_MODEL`，只有纯规则判定为复杂（代码 / 长文 / 链接 / 检索类措辞）且配置了 `LLM_MODEL_STRONG` 才升级，异常 Fail-safe 回默认；不额外调用模型、不绕过 quota/工具档位/沙箱/权限，`usage.model` 记最终实际模型（`docs/token.md` §5.1） |
 | 代码执行强度 | Docker/Podman | gVisor/Kata/Firecracker（仅在确有高风险需求时） |
 | 沙箱隔离强度 | 一次性容器 + rootless Podman（Tier B 用 `keep-id`），Bot 进程不接触容器运行时 socket；
 Docker 只支持 Tier A | 独立沙箱服务 / microVM（确有必要时） |
@@ -156,7 +157,7 @@ Docker 只支持 Tier A | 独立沙箱服务 / microVM（确有必要时） |
 - `tests/offline/` 用标准库 `unittest`，不需要网络、不需要真实 Bot Token、不需要 API Key。
 - 本地开发（Windows）与生产（Linux VPS）跑同一套代码，不维护平台分支。
 - **证据分级**：本地离线 `unittest` 通过只证明本机逻辑；沙箱与平台行为必须由**真机证据**证明（VPS 上跑同一套测试 + `scripts/verify_sandbox.py`）。两类证据分别记录在 `docs/status.md`，不得互相替代（见 `AGENTS.md` 证据纪律）。
-- **覆盖率现状**：568 个测试方法覆盖闸门/会话/工具/沙箱/存储/记忆/命令/运行指标/进程入口。原先零覆盖的关键路径已补齐（T25）：`app/logging_setup.py`（`SecretFilter` 的 msg/tuple/dict 三条脱敏路径 + 根 logger 装配与轮转文件、噪声库降级）、`app/telegram/sender.py`（异常 → `RateLimited`/`SendFailed`、不设 `parse_mode`）、`app/telegram/handlers.py`（update → runner、异常不外抛）、`app/llm/client.py`（请求组装、usage/tool_calls 提取、错误翻译）、`app/main.py`（数据库探测、工具失败留痕、`stop()` 收尾与信号注册、每小时清理）与 `CliBackend.run`（真实子进程的退出码与超时销毁）；对应 `tests/offline/test_logging.py`、`test_telegram_sender.py`、`test_handlers.py`、`test_client.py`、`test_main.py`、`test_sandbox.py::CliBackendRunTests`。真机验收脚本 `scripts/verify_sandbox.py` 的判定逻辑（负向断言的探针标记与错误签名、`Tier A`/`Tier B` 按显式归属聚合）由 `tests/offline/test_verify_sandbox.py` 用假后端离线覆盖（T7）。仍需覆盖的是需要真实 Telegram/容器/真机的路径（由真机证据证明，见本文件本节的证据分级）。写入事务边界（T9，`tests/offline/test_transactions.py`）与 `PRAGMA optimize` 的维护节奏（`tests/offline/test_storage.py`、`tests/offline/test_main.py`）也已有离线覆盖；容器运行时保留退出码 125/126/127 到 `execution_failed` 的映射（T4）由 `tests/offline/test_sandbox.py::RunnerTests` 覆盖；贴纸 `last_used_at` 写 Unix 秒而非进程相对秒（T10）由 `tests/offline/test_stickers.py` 覆盖；验收脚本新增的能力集（`CapBnd`=0）与提权位（`NoNewPrivs`=1）两项检查及其负路径（T6）由 `tests/offline/test_verify_sandbox.py` 覆盖。
+- **覆盖率现状**：585 个测试方法覆盖闸门/会话/工具/沙箱/存储/记忆/命令/运行指标/进程入口/模型档位路由。原先零覆盖的关键路径已补齐（T25）：`app/logging_setup.py`（`SecretFilter` 的 msg/tuple/dict 三条脱敏路径 + 根 logger 装配与轮转文件、噪声库降级）、`app/telegram/sender.py`（异常 → `RateLimited`/`SendFailed`、不设 `parse_mode`）、`app/telegram/handlers.py`（update → runner、异常不外抛）、`app/llm/client.py`（请求组装、usage/tool_calls 提取、错误翻译）、`app/main.py`（数据库探测、工具失败留痕、`stop()` 收尾与信号注册、每小时清理）与 `CliBackend.run`（真实子进程的退出码与超时销毁）；对应 `tests/offline/test_logging.py`、`test_telegram_sender.py`、`test_handlers.py`、`test_client.py`、`test_main.py`、`test_sandbox.py::CliBackendRunTests`。真机验收脚本 `scripts/verify_sandbox.py` 的判定逻辑（负向断言的探针标记与错误签名、`Tier A`/`Tier B` 按显式归属聚合）由 `tests/offline/test_verify_sandbox.py` 用假后端离线覆盖（T7）。仍需覆盖的是需要真实 Telegram/容器/真机的路径（由真机证据证明，见本文件本节的证据分级）。写入事务边界（T9，`tests/offline/test_transactions.py`）与 `PRAGMA optimize` 的维护节奏（`tests/offline/test_storage.py`、`tests/offline/test_main.py`）也已有离线覆盖；容器运行时保留退出码 125/126/127 到 `execution_failed` 的映射（T4）由 `tests/offline/test_sandbox.py::RunnerTests` 覆盖；贴纸 `last_used_at` 写 Unix 秒而非进程相对秒（T10）由 `tests/offline/test_stickers.py` 覆盖；验收脚本新增的能力集（`CapBnd`=0）与提权位（`NoNewPrivs`=1）两项检查及其负路径（T6）由 `tests/offline/test_verify_sandbox.py` 覆盖。模型档位路由（`app/llm/routing.py` 的默认档 / 升级档 / fail-safe，以及 `ContextBuilder.intent` 的复杂度规则）由 `tests/offline/test_routing.py`（12 条）与 `tests/offline/test_pipeline.py` 的 5 条端到端用例（升级并记账、普通任务默认档、无强模型回退、配额优先、模式语义不变）覆盖。
 - Windows 上软链接/硬链接相关用例会 `skipTest`（平台能力差异），因此「拒绝符号链接/硬链接」在 Windows 上是**条件跳过**、在 Linux 真机上才真正执行。
 
 ## 9. 可部署性约束（细节见 `docs/deployment.md`）

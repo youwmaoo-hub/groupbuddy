@@ -7,6 +7,7 @@ import aiosqlite
 from app import modes
 from app.config import Settings
 from app.gate.debounce import Batch
+from app.llm import routing
 from app.llm.prompts import build_messages, build_system_prompt
 from app.ops import persona
 from app.session import retrieval
@@ -79,14 +80,12 @@ class ContextBuilder:
             payload.insert(1, {"role": "system", "content": MEMORY_HEADING + "\n" + "\n".join(memory)})
         return payload
 
-    def window_size(self, batch: Batch, mode: str = modes.NORMAL) -> int:
-        """economy 固定 10、smart/unrestricted 固定 50（docs/token.md §5）；normal 按意图分档。
+    def intent(self, batch: Batch) -> str:
+        """纯规则意图分档（docs/memory.md §2、docs/token.md §3）：复杂 / 闲聊 / 默认。
 
-        normal 的纯规则分档：复杂 50 / 闲聊 10 / 默认 20（docs/memory.md §2）。
+        复杂度只看规则（代码块、长文、链接、检索类措辞），不额外调用模型；无法可靠判断
+        时归 `default`——模型档位路由据此保持默认模型（docs/token.md §5）。
         """
-        fixed = modes.profile_for(mode).window
-        if fixed is not None:
-            return fixed
         texts = [item.text for item in batch.items]
         joined = "\n".join(texts)
         if (
@@ -96,8 +95,23 @@ class ContextBuilder:
             or "https://" in joined
             or retrieval.retrieval_wanted(texts)
         ):
-            return self._settings.history_complex
+            return routing.INTENT_COMPLEX
         if texts and all(len(text) < 10 for text in texts) and not any("?" in text or "？" in text for text in texts):
+            return routing.INTENT_CHITCHAT
+        return routing.INTENT_DEFAULT
+
+    def window_size(self, batch: Batch, mode: str = modes.NORMAL) -> int:
+        """economy 固定 10、smart/unrestricted 固定 50（docs/token.md §5）；normal 按意图分档。
+
+        normal 的纯规则分档：复杂 50 / 闲聊 10 / 默认 20（docs/memory.md §2）。
+        """
+        fixed = modes.profile_for(mode).window
+        if fixed is not None:
+            return fixed
+        intent = self.intent(batch)
+        if intent == routing.INTENT_COMPLEX:
+            return self._settings.history_complex
+        if intent == routing.INTENT_CHITCHAT:
             return self._settings.history_chitchat
         return self._settings.history_default
 

@@ -96,6 +96,14 @@ Prompt 结构固定为"固定段在前、动态段在后"：
 | smart | 最长（50 条） | 允许的等级 + 更多工具 | 正常 | 开 |
 | unrestricted | 最长 | 全部（管理员） | 不限 | 开 |
 
+实现口径（阶段 8 F5.1 已落地，唯一权威表 `app/modes.py`）：
+
+- **窗口**：economy 固定 10 条、smart / unrestricted 固定 50 条；normal 不固定，沿用原有按意图分档（复杂 50 / 闲聊 10 / 默认 20，`docs/memory.md` §2）。模式窗口优先于意图分档，未知模式按 normal 处理。
+- **输出上限**：economy 短（256 tokens），normal / smart 用 `LLM_MAX_OUTPUT_TOKENS`（默认 1024），unrestricted 不发送 `max_tokens`（不限）。
+- **工具档位**：economy 只放 L0（群开关仍然生效）；normal 完全由群开关决定；smart 在群开关之上额外放行 L0 只读工具；unrestricted 放行全部已注册工具、不看群开关。贴纸只有 economy 关。
+- **谁能改模式**：只有群管理员能通过 `/settings mode <值>` 修改（`docs/security.md` §2.1）；改完对下一条消息立即生效，不需要重启。模型不能提升自己的权限：模式决定的是「上限」，注册表、schema 校验、超时、沙箱仍是硬约束。
+- 仍未做：链 3 的工具轮次按意图分档（`TOOL_MAX_ROUNDS` 仍是全局 2；见 §3 链 3）与模型档位路由（未决问题 #2）。
+
 ## 6. 五条判定式
 
 > 不该说的话不进模型。不需要看的内容不进上下文。不需要用的工具不调用。

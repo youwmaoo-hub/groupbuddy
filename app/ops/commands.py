@@ -14,6 +14,7 @@ from dataclasses import dataclass
 
 import aiosqlite
 
+from app import modes
 from app.config import Settings
 from app.ops.admin import AdminRegistry
 from app.ops.health import HealthState
@@ -40,8 +41,8 @@ TOOL_SWITCHES: tuple[tuple[str, str], ...] = (
     ("host_info", "allow_host_info"),
 )
 
-#: 四种模式（docs/token.md §5）；本项只负责写入，模式对窗口/输出上限的影响见阶段 8 后续项。
-MODES: tuple[str, ...] = ("economy", "normal", "smart", "unrestricted")
+#: 四种模式（唯一来源 `app/modes.py`，docs/token.md §5）；模式的实际影响也在那里。
+MODES = modes.MODES
 MODE = "mode"
 STICKER_COOLDOWN = "sticker_cooldown"
 

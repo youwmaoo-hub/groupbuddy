@@ -1,7 +1,8 @@
-"""权限判定唯一出口：等级 → 本群开关 → 可用工具清单（docs/security.md §2）。"""
+"""权限判定唯一出口：等级 → 本群开关 → 模式工具档位 → 可用工具清单（docs/security.md §2）。"""
 
 from __future__ import annotations
 
+from app import modes
 from app.tools.registry import ToolContext, ToolRegistry
 
 # 等级映射的唯一权威表：docs/security.md §2（L0–L4）。None = 无群开关，人人可用。
@@ -25,7 +26,7 @@ class Policy:
         self._registry = registry
 
     def allowed_names(self, context: ToolContext) -> tuple[str, ...]:
-        """已注册 ∩ 本群允许；注入 System3 与 tools 参数的唯一来源。"""
+        """已注册 ∩ 本群允许 ∩ 模式档位；注入 System3 与 tools 参数的唯一来源。"""
         return tuple(name for name in self._registry.names() if self._enabled(name, context))
 
     def check(self, name: str, context: ToolContext) -> str | None:
@@ -36,13 +37,27 @@ class Policy:
             return DENIED
         return None
 
-    @staticmethod
-    def _enabled(name: str, context: ToolContext) -> bool:
-        """第 2 步：该工具等级在本群是否开启；未知工具一律拒绝（fail-closed）。
+    def _enabled(self, name: str, context: ToolContext) -> bool:
+        """第 2 步：该工具在本群是否开启；未知工具一律拒绝（fail-closed）。
 
-        第 3 步（触发者身份）随阶段 8 的群主命令/权限一起落地：阶段 3 只有 L0 工具。
+        模式档位（docs/token.md §5）叠加在本群开关之上：
+        economy 只放 L0 且贴纸关，smart 额外放行 L0 只读，unrestricted 放行全部工具。
+        模式本身只有群管理员能设置（`/settings mode`），模型不能提升自己的权限。
         """
         column = POLICY_COLUMNS.get(name)
+        if column is None and name not in POLICY_COLUMNS:
+            return False
+        profile = modes.profile_for(context.group)
+        tool = self._registry.get(name)
+        level = tool.spec.level if tool is not None else None
+        if not profile.stickers and name == "send_sticker":
+            return False
+        if profile.levels is not None and level not in profile.levels:
+            return False
+        if profile.ignore_switches:
+            return True
         if column is None:
-            return name in POLICY_COLUMNS
-        return bool(int(context.group.get(column, 0) or 0))
+            return True
+        if bool(int(context.group.get(column, 0) or 0)):
+            return True
+        return profile.readonly_regardless_of_switch and level == modes.READONLY_LEVEL

@@ -35,6 +35,11 @@ class LLMError(RuntimeError):
     """调用失败（超时、限流、网络、空响应）。"""
 
 
+#: `max_tokens` 未显式传入时用凭据里的 `LLM_MAX_OUTPUT_TOKENS`；
+#: 显式传 `None` 表示不发送该字段（即不限输出，docs/token.md §5 的 unrestricted）。
+_DEFAULT_MAX_TOKENS = object()
+
+
 class DeepSeekClient:
     def __init__(self, credentials: LLMCredentials, client: AsyncOpenAI | None = None) -> None:
         self._llm = credentials
@@ -50,15 +55,18 @@ class DeepSeekClient:
         *,
         model: str | None = None,
         temperature: float | None = None,
-        max_tokens: int | None = None,
+        max_tokens: int | None | object = _DEFAULT_MAX_TOKENS,
         tools: list[dict[str, object]] | None = None,
     ) -> LLMReply:
         payload: dict[str, object] = {
             "model": model or self._llm.model,
             "messages": messages,
             "temperature": self._llm.temperature if temperature is None else temperature,
-            "max_tokens": self._llm.max_output_tokens if max_tokens is None else max_tokens,
         }
+        if max_tokens is _DEFAULT_MAX_TOKENS:
+            payload["max_tokens"] = self._llm.max_output_tokens
+        elif max_tokens is not None:
+            payload["max_tokens"] = max_tokens
         if tools:
             payload["tools"] = tools
             payload["tool_choice"] = "auto"

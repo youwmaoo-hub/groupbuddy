@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import aiosqlite
 
+from app import modes
 from app.config import Settings
 from app.gate.debounce import Batch
 from app.llm.prompts import build_messages, build_system_prompt
@@ -38,18 +39,20 @@ class ContextBuilder:
 
         group 由调用方传入可避免重复查询；allowed_tools 决定 System3 里可选的工具；
         mood 非空时作为动态段末条注入（docs/persona.md §2、docs/token.md 链 2）。
+        mode 同时决定窗口大小（docs/token.md §5）。
         """
         current = group if group is not None else await chat_settings.get(self._connection, batch.chat_id)
+        mode = modes.normalize(current.get("mode"))
         system_prompt = build_system_prompt(
             persona=self._settings.persona,
-            mode=str(current.get("mode", "normal")),
+            mode=mode,
             allowed_tools=allowed_tools,
         )
         until_id = await messages.max_id(self._connection, chat_id=batch.chat_id)
         history = await messages.recent(
             self._connection,
             chat_id=batch.chat_id,
-            limit=self.window_size(batch),
+            limit=self.window_size(batch, mode=mode),
             until_id=until_id,
         )
         latest = batch.items[-1] if batch.items else None
@@ -75,8 +78,14 @@ class ContextBuilder:
             payload.insert(1, {"role": "system", "content": MEMORY_HEADING + "\n" + "\n".join(memory)})
         return payload
 
-    def window_size(self, batch: Batch) -> int:
-        """纯规则分档：复杂 50 / 闲聊 10 / 默认 20（docs/memory.md §2）。"""
+    def window_size(self, batch: Batch, mode: str = modes.NORMAL) -> int:
+        """economy 固定 10、smart/unrestricted 固定 50（docs/token.md §5）；normal 按意图分档。
+
+        normal 的纯规则分档：复杂 50 / 闲聊 10 / 默认 20（docs/memory.md §2）。
+        """
+        fixed = modes.profile_for(mode).window
+        if fixed is not None:
+            return fixed
         texts = [item.text for item in batch.items]
         joined = "\n".join(texts)
         if (

@@ -7,6 +7,7 @@ import time
 
 import aiosqlite
 
+from app import modes
 from app.config import Settings, today_in_timezone
 from app.gate.debounce import Batch, Debouncer
 from app.gate.dedupe import UpdateDeduplicator
@@ -162,6 +163,7 @@ class SessionRunner:
             )
             return
         group = await chat_settings.get(self._connection, batch.chat_id)
+        profile = modes.profile_for(group)
         context = ToolContext(
             chat_id=batch.chat_id,
             user_id=batch.items[-1].user_id,
@@ -171,7 +173,12 @@ class SessionRunner:
         allowed = self._tools.allowed_names(context) if self._tools is not None else ()
         mood = self._mood.describe(batch.chat_id) if self._mood is not None else None
         payload = await self._context.build(batch, group=group, allowed_tools=allowed, mood=mood)
-        outcome = await self._responder.reply(payload, context=context)
+        # 输出上限按模式（docs/token.md §5）：economy 短、normal/smart 用配置值、unrestricted 不限
+        outcome = await self._responder.reply(
+            payload,
+            context=context,
+            max_output_tokens=modes.output_limit(profile, self._settings),
+        )
         await self._record_usage(batch, outcome)  # 只要调用了模型就记账，哪怕本轮不说话
         if outcome.text is None:
             logger.info("本轮不说话 chat_id=%s", batch.chat_id)

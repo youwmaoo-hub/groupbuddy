@@ -18,6 +18,7 @@
 | 纯闲聊 | 10 | 只保证不"失忆"，不追求连续性 |
 | 硬约束 | 约 6000 字符（`HISTORY_BUDGET_CHARS`，字符近似，不引入 tokenizer） | 超预算从最旧的消息开始丢；本轮用户消息永不丢（`ContextBuilder._trim` 保留本轮 `message_id` 集合，即使本轮自身超预算也不裁，见 `TODO.md` T3）；被裁条数可用 `ContextBuilder.consume_trimmed()` 观测 |
 
+- **模式优先**：`chat_settings.mode` 为 economy / smart / unrestricted 时窗口固定为 10 / 50 / 50，**不再走上面的意图分档**；只有 normal（默认）用上表的三档（`docs/token.md` §5）。
 - 窗口按 `chat_id`（未来 `thread_id`）过滤，绝不跨群（`messages.recent()` 已排除 `noise=1`）。
   `thread_id` 是**预留**：schema 有列、`messages.recent()` 支持该参数，但当前没有调用方传入，摘要、游标与 FTS 检索都是 chat 级（阶段 8 再做论坛主题隔离）。
 - **本轮边界**：窗口只取「处理这一轮时已入库」的消息（`id` 快照）；模型调用期间新到的消息留在库里，合并进下一轮。

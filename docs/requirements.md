@@ -69,7 +69,7 @@ F2.1 只覆盖强触发；"不需要 @ 也能主动回复"（§2.1 第 1 条）�
 
 | 编号 | 需求 | 优先级 | 验收 |
 |---|---|---|---|
-| F5.1 | 群设定（工具开关、贴纸冷却、模式） | P1 | 群主可改且立即生效（`/settings <字段> <值>`；字段白名单、合法值与拒绝行为见 `docs/security.md` §2.1） |
+| F5.1 | 群设定（工具开关、贴纸冷却、模式） | P1 | 群主可改且立即生效（`/settings <字段> <值>`；字段白名单、合法值与拒绝行为见 `docs/security.md` §2.1；四种模式真正影响上下文窗口、输出上限与工具档位，契约见 `docs/token.md` §5） |
 | F5.2 | 群主命令（仅管理员） | P1 | 非管理员被拒 |
 | F5.3 | 日/月配额 | P1 | 超额后优雅拒绝并提示（`QUOTA_DAILY_TOKENS` / `QUOTA_MONTHLY_TOKENS`，按 `chat_id` 统计，`0` 或未配置 = 不限额；语义见 `docs/token.md` §4.1） |
 | F5.4 | 运行指标（/stats、/health） | P2 | 能看 token 用量与错误率（管理员专用命令，0 token、不进模型；`/stats` 复用 `usage` + `tool_failures`（保留 7 天），`/health` 与 `storage/health.json` 共用同一状态；契约见 `docs/security.md` §2.1、`docs/deployment.md` §7） |

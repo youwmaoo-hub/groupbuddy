@@ -45,17 +45,17 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | | `app/gate/limits.py` | 主动发言的冷却与每窗口上限（进程内状态，按 `chat_id` 隔离） |
 | | `app/gate/debounce.py` | 静默窗合并多条消息；批次带"是否全部未点名"标记（`proactive`） |
 | | `app/gate/queue.py` | per-chat 串行 actor；运行期间新消息合并为下一轮一批 |
-| 会话 | `app/session/runner.py` | 一轮编排：群主命令通道 → context → llm → tools → outbound |
-| | `app/session/context.py` | ContextBuilder：预算式历史 + 噪声过滤；窗口按本轮边界（`id` 快照）截断 |
+| 会话 | `app/session/runner.py` | 一轮编排：群主命令通道 → context → llm（输出上限按模式）→ tools → outbound |
+| | `app/session/context.py` | ContextBuilder：预算式历史 + 噪声过滤；窗口按本轮边界（`id` 快照）截断，economy/smart/unrestricted 用模式固定窗口、normal 按意图分档 |
 | | `app/session/mood.py` | 当前情绪：最近一次贴纸的 valence/arousal（进程内存、TTL 10 分钟） |
 | | `app/session/noise.py` | 噪声判定（纯函数）：不进触发、不进上下文、不进摘要输入 |
 | | `app/session/retrieval.py` | 中文分词与 FTS 检索：触发条件、查询构造、≤3 条 / ≤800 字符 |
 | | `app/session/summary.py` | 摘要服务与后台调度（滚动增量、模板、按群串行、可重试幂等） |
 | 模型 | `app/llm/client.py` | OpenAI 兼容客户端（base_url 可换厂商） |
-| | `app/llm/loop.py` | 工具循环；轮次/时长/成本上限 |
+| | `app/llm/loop.py` | 工具循环；轮次/时长/成本上限；输出上限可由调用方按模式覆盖（`None` = 不限） |
 | | `app/llm/prompts.py` | 固定段：全局人格（`docs/persona.md`）→ 群设定 → 工具策略 → 输出规则；动态段末条可注入当前情绪 |
 | 工具（阶段 3） | `app/tools/registry.py` | name → Tool 实例；按等级裁剪可暴露清单 |
-| | `app/tools/policy.py` | 权限判定唯一出口（等级 → 本群开关，见 `docs/security.md` §2） |
+| | `app/tools/policy.py` | 权限判定唯一出口（等级 → 本群开关 → 模式档位，见 `docs/security.md` §2、`docs/token.md` §5） |
 | | `app/tools/executor.py` | 注册表 → 权限 → schema → 执行 → 结构化结果；失败计数与熔断 |
 | | `app/tools/workspace.py` | 路径解析与文件安全（workspace 越界、符号/硬链接、UTF-8、1 MB、原子写 + 单层 `.bak`）——`read_file`/`write_file` 共用的唯一实现 |
 | | `app/tools/builtin/*.py` | 已实现 `calc`、`search_web`（接口）、`read_file`、`write_file`、`send_sticker`、`run_code`、`host_info`（L4，阶段 8 F4.7） |
@@ -66,6 +66,7 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | 存储 | `app/storage/db.py` | aiosqlite 连接、WAL、`user_version` 迁移 |
 | | `app/storage/repo/*.py` | messages / chat_settings / usage / stickers / summaries / notes / updates / tool_failures 读写（同名模块逐表一个文件） |
 | 领域 | `app/domain/bot_instance.py` | 领域对象：`BotInstance` 与 `LLMCredentials`（凭据唯一归属，见 `docs/domain.md` §1、§4） |
+| 模式（阶段 8） | `app/modes.py` | 四模式档位唯一权威表：窗口 / 输出上限 / 工具档位 / 贴纸（`docs/token.md` §5）；未知值按 normal |
 | 运维/权限（阶段 8） | `app/ops/admin.py` | 本群管理员判定唯一入口：Telegram 管理员 + 进程内缓存，查询失败 fail-closed |
 | | `app/ops/commands.py` | 群主命令通道：解析、管理员判定、读写本群设置与只读运行指标（`/settings`、`/stats`、`/health`；不进模型、0 token） |
 | | `app/ops/quota.py` | 配额判定：调用模型前按 `chat_id` 检查日/月已用 token；`0` 或未配置 = 不限额 |
@@ -91,8 +92,8 @@ Telegram Update
   → debounce（静默窗合并，上限条数）
   → per-chat 队列（同群串行；运行期间新消息合并为下一轮一批）
   → 配额判定（`chat_id` 日/月用量达到上限：只回提示并结束，本轮不调用模型、不记账）
-  → ContextBuilder（本轮边界快照 + 全局人格 + 群设定 + 工具策略 + 动态历史 + 摘要/检索）
-  → LLM 循环（可选 tool call）
+  → ContextBuilder（本轮边界快照 + 全局人格 + 群设定 + 工具策略 + 动态历史 + 摘要/检索；窗口 = 模式固定值，normal 按意图分档）
+  → LLM 循环（可选 tool call；输出上限 = 模式档位：economy 短 / normal·smart 配置值 / unrestricted 不限）
         → registry 裁剪清单 → policy 判定 → executor 执行（sandbox 必要时）
         → 计入熔断的失败写 tool_failures（供 `/stats`；调用前拒绝不写）
   → 结果写入 messages

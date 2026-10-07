@@ -36,7 +36,7 @@
 |---|---|---|---|---|---|---|---|
 | 开关列 | — | `allow_search` | `allow_read` | `allow_write` | `allow_sticker` | `allow_code` | `allow_host_info` |
 
-工具可用 = 已注册 ∩ 本群开关；未注册、或注册但未登记等级的工具一律拒绝（fail-closed）。第 3 步的身份判定由 `app/ops/admin.py`（`AdminRegistry`）提供：目前只有群主命令用它；将来某个等级要求管理员时，工具侧复用同一个判定，不另起一套。当前已注册的等级是 L0–L4：L0–L3 为 `calc`/`search_web`/`read_file`/`write_file`/`send_sticker`/`run_code`，L4 为 `host_info`（阶段 8 F4.7；始终注册，能否调用只看 `allow_host_info`，默认关；等级本身不要求管理员）。
+工具可用 = 已注册 ∩ 本群开关 ∩ **模式档位**（`docs/token.md` §5）：economy 只放 L0 且贴纸关、normal 只看群开关、smart 额外放行 L0 只读工具、unrestricted 放行全部已注册工具且不看群开关。未注册、或注册但未登记等级的工具一律拒绝（fail-closed）。第 3 步的身份判定由 `app/ops/admin.py`（`AdminRegistry`）提供：目前只有群主命令用它；将来某个等级要求管理员时，工具侧复用同一个判定，不另起一套。当前已注册的等级是 L0–L4：L0–L3 为 `calc`/`search_web`/`read_file`/`write_file`/`send_sticker`/`run_code`，L4 为 `host_info`（阶段 8 F4.7；始终注册，能否调用只看 `allow_host_info`，默认关；等级本身不要求管理员）。
 
 系统提示（System3）只能注入**已裁剪**的工具清单；模型永远不能提升自己的权限。
 - **授权只由后端判定**：前端隐藏按钮、前端参数、面板传入的身份都不构成授权；面板改设置走同一条判定（`docs/domain.md` §3）。
@@ -54,13 +54,18 @@
   `persona_override` 与 `owner_user_id` **不在**命令可写范围内（不采用 `owner_user_id` 自举）。
 - 写入只经 `chat_settings.upsert` 的单条原子 `INSERT … ON CONFLICT DO UPDATE`，**只写这一列**，绝不整行覆盖（T12）。
 - 非法字段、非法值、参数个数不对：只回一条提示（未知字段时附带可用字段），**不写库**；写入失败只回一句固定文案，不回显 SQLite 细节。
-- 立即生效：每轮都重新读取群设置——工具开关当轮改变可用清单，`mode` 当轮进入固定段。非管理员在任何情况下都只看到固定拒绝文案，**连字段列表都不下发**。
+- 立即生效：每轮都重新读取群设置——工具开关当轮改变可用清单，`mode` 当轮改变上下文窗口、LLM 输出上限与工具档位（见 §2.2），不需要重启。非管理员在任何情况下都只看到固定拒绝文案，**连字段列表都不下发**。
 - **配额（F5.3）**：调用模型之前按 `chat_id` 检查日/月 token 用量（`app/ops/quota.py`）；达到或超过上限时本轮不调用模型、不记账、不写入 Bot 发言，只回一句固定提示。`0` 或未配置 = 不限额；统计口径与提示文案见 `docs/token.md` §4.1。
 - **运行指标（F5.4）**：`/stats` 与 `/health` 同样只走命令通道（管理员限定、0 token、不进模型），**只读**：
   `/stats` 用 `usage.summary_for_day` + `tool_failures.count` 汇总本群当日 token 用量、工具调用/失败（错误率）与配额余量；
   `/health` 与 `storage/health.json` 心跳**共用同一个内部状态**（`app/ops/health.py`，快照在内存，不含路径、异常堆栈、环境变量或凭据）。
   文案只出现计数、时长与上限；读取失败时只回一句固定短句，不回显数据库错误、路径或堆栈（§7、§11 第 4 条）。
-- 尚未实现（阶段 8 后续）：模式对窗口 / 输出上限 / 工具档位的完整影响（`docs/token.md` §5）。
+### 2.2 模式对权限的影响（阶段 8，`docs/token.md` §5）
+
+- 唯一权威表 `app/modes.py`（`PROFILES`）；`app/tools/policy.py` 按它叠加档位，`app/session/context.py` 按它定窗口，`app/session/runner.py` 按它定输出上限。
+- **模式只能由群管理员设置**（`/settings mode <值>`，见 §2.1）；模型与普通成员都不能改。默认值是 `normal`，与阶段 7 之前的行为一致；未知值按 `normal` 处理（fail-safe，不放大权限）。
+- 模式放大的是**工具档位**，不是绕过：`unrestricted` 放行全部已注册工具但仍受注册表、schema 校验、超时、沙箱与路径校验约束；`economy` 只放 L0、不因模式获得更高等级。
+- 非管理员改模式仍被拒（同 §2.1 的固定拒绝文案）；`/settings` 的字段校验不因模式变化。
 
 ## 3. 工作区与路径
 

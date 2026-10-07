@@ -699,6 +699,62 @@ class PipelineTests(DbTestCase):
 
         self.assertIsNotNone((await health.snapshot())["last_update_at"])
 
+    async def test_settings_mode_takes_effect_on_the_next_message(self) -> None:
+        """F5.1 + §5：管理员改 mode 后，下一条普通消息按新模式执行，不用重启。"""
+        self._build("好", "好", commands=self._commands_with())
+        await self._command("/settings mode economy")
+        self.assertIn("mode = economy", str(self.sender.sent[-1]["text"]))
+        self.assertEqual(self.llm.calls, [])  # 命令 0 token，不进模型
+
+        await self._send(["@bot 在吗"], start_update=200, start_message=20)
+        await self._flush()
+        self.assertEqual(self.llm.max_tokens, [256])  # economy：短
+        self.assertEqual(self.llm.tool_names[-1], ["calc"])  # economy：只 L0
+
+        await self._command("/settings mode unrestricted", update_id=501, message_id=501)
+        self.assertEqual(len(self.llm.calls), 1)  # 命令仍然不进模型
+        group = await chat_settings.get(self.connection, 1)
+        self.assertEqual(group["mode"], "unrestricted")
+
+        await self._send(["@bot 在吗"], start_update=300, start_message=30)
+        await self._flush()
+        self.assertIsNone(self.llm.max_tokens[-1])  # unrestricted：不限
+        tools = self.llm.tool_names[-1]
+        self.assertIn("write_file", tools)  # unrestricted：全部已注册工具（不看群开关）
+        self.assertIn("host_info", tools)
+
+    async def test_smart_mode_offers_readonly_tools_without_the_group_switch(self) -> None:
+        """§5：smart＝允许的等级 + 更多工具（只读档不受群开关限制）。"""
+        await chat_settings.upsert(self.connection, 1, allow_search=0)
+        self._build("好", "好", search_backend="fake")
+        await self._send(["@bot 在吗"], start_update=200, start_message=20)
+        await self._flush()
+        self.assertNotIn("search_web", self.llm.tool_names[-1])  # normal：开关关着就不给
+
+        await chat_settings.upsert(self.connection, 1, mode="smart")
+        await self._send(["@bot 在吗"], start_update=300, start_message=30)
+        await self._flush()
+        self.assertIn("search_web", self.llm.tool_names[-1])  # smart：只读档额外放行
+
+    async def test_economy_and_smart_change_the_history_window(self) -> None:
+        """窗口差异要体现在发给模型的上下文里，而不是只看「模式：xxx」文本。"""
+        for index in range(15):
+            await messages.insert(
+                self.connection, chat_id=1, message_id=100 + index, user_id=8, role="user", text=f"旧历史{index}"
+            )
+        await chat_settings.upsert(self.connection, 1, mode="economy")
+        self._build("好", "好")
+        await self._send(["@bot 在吗"], start_update=200, start_message=200)
+        await self._flush()
+        economy_payload = " ".join(str(item.get("content", "")) for item in self.llm.calls[0])
+        self.assertEqual(economy_payload.count("旧历史"), 9)  # 窗口 10：9 条历史 + 本轮
+
+        await chat_settings.upsert(self.connection, 1, mode="smart")
+        await self._send(["@bot 在吗"], start_update=300, start_message=300)
+        await self._flush()
+        smart_payload = " ".join(str(item.get("content", "")) for item in self.llm.calls[1])
+        self.assertEqual(smart_payload.count("旧历史"), 15)  # 窗口 50：全部历史都在
+
 
 if __name__ == "__main__":
     unittest.main()

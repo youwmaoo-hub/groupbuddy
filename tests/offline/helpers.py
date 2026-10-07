@@ -54,6 +54,7 @@ class FakeLLMClient:
         self.calls: list[list[dict[str, object]]] = []
         self.models: list[str] = []
         self.tools: list[list[dict[str, object]] | None] = []
+        self.max_tokens: list[int | None] = []
         self._replies = list(replies) or ["好的"]
         self._fail = fail
         self._on_complete = on_complete
@@ -70,6 +71,7 @@ class FakeLLMClient:
         self.calls.append(messages)
         self.models.append(model or "")
         self.tools.append(tools)
+        self.max_tokens.append(max_tokens)
         if self._fail:
             raise LLMError("模拟失败")
         if self._on_complete is not None:

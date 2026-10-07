@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 BACKTICK = chr(96)
 _WRAPPERS = ('"', "'", BACKTICK, BACKTICK * 3, " ", "\n", "。", ".")
 
+#: `max_output_tokens` 未显式传入时用 `LLM_MAX_OUTPUT_TOKENS`；
+#: 显式传 `None` = 不限输出（docs/token.md §5 的 unrestricted）。
+_DEFAULT_LIMIT = object()
+
 
 class Outcome:
     """一次回复的结果；text 为 None 表示本轮不说话。"""
@@ -78,10 +82,13 @@ class Responder:
         *,
         context: object | None = None,
         max_rounds: int | None = None,
+        max_output_tokens: int | None | object = _DEFAULT_LIMIT,
     ) -> Outcome:
+        """`max_output_tokens` 由调用方按模式给出（docs/token.md §5）；None = 不限。"""
+        limit = self._settings.llm_max_output_tokens if max_output_tokens is _DEFAULT_LIMIT else max_output_tokens
         specs = self._specs(context)
         if not specs:
-            return await self._single_call(messages)
+            return await self._single_call(messages, max_tokens=limit)
 
         rounds = max(0, self._settings.tool_max_rounds if max_rounds is None else max_rounds)
         history: list[ChatMessage] = list(messages)
@@ -92,7 +99,12 @@ class Responder:
         for index in range(rounds + 1):
             allow_tools = specs if index < rounds else None  # 最后一轮不带工具，强制给答案
             try:
-                reply = await self._client.complete(history, model=self._settings.llm_model, tools=allow_tools)
+                reply = await self._client.complete(
+                    history,
+                    model=self._settings.llm_model,
+                    max_tokens=limit,
+                    tools=allow_tools,
+                )
             except LLMError:
                 logger.exception("模型调用失败，本轮不回复")
                 return Outcome(
@@ -128,9 +140,9 @@ class Responder:
             tool_ms=tool_ms,
         )
 
-    async def _single_call(self, messages: list[ChatMessage]) -> Outcome:
+    async def _single_call(self, messages: list[ChatMessage], *, max_tokens: int | None = None) -> Outcome:
         try:
-            reply = await self._client.complete(messages, model=self._settings.llm_model)
+            reply = await self._client.complete(messages, model=self._settings.llm_model, max_tokens=max_tokens)
         except LLMError:
             logger.exception("模型调用失败，本轮不回复")
             return Outcome(None)

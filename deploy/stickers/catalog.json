@@ -1,30 +1,1413 @@
 {
-  "version": 1,
-  "note": "情绪槽位定义，不含素材本体。素材由部署方按 deploy/stickers/README.md 的规格与许可政策自行准备；source/license 未填写会在导入时被警告。",
+  "version": 2,
+  "note": "DeepSeek 大肥鱼贴纸 catalog：与 Telegram 贴纸包 deepseek_whale_girl 逐张对齐（同源仓库 DejavuMoe/deepseek_wale_girl 的 telegram_webm/，MIT）；条目顺序 = 贴纸包顺序，emoji 取自该贴纸包自身，供 import_sticker_set.py 按 emoji 精确回填 file_id。asset 指向同源仓库的 WebM 文件名（素材不入库，deploy/stickers/assets/ 已 gitignore）。",
   "stickers": [
-    {"key": "happy", "emotion": "开心", "emoji": "😄", "tags": ["开心", "高兴", "好耶", "太棒"], "valence": 0.8, "arousal": 0.6, "asset": "happy.webm"},
-    {"key": "laugh", "emotion": "笑", "emoji": "😆", "tags": ["笑", "好笑", "笑死", "哈哈"], "valence": 0.9, "arousal": 0.8, "asset": "laugh.webm"},
-    {"key": "shy", "emotion": "害羞", "emoji": "😳", "tags": ["害羞", "不好意思", "脸红"], "valence": 0.4, "arousal": 0.6, "asset": "shy.webm"},
-    {"key": "angry", "emotion": "生气", "emoji": "😠", "tags": ["生气", "气死", "火大"], "valence": -0.7, "arousal": 0.8, "asset": "angry.webm"},
-    {"key": "confused", "emotion": "疑惑", "emoji": "🤔", "tags": ["疑惑", "不懂", "问号"], "valence": -0.1, "arousal": 0.4, "asset": "confused.webm"},
-    {"key": "speechless", "emotion": "无语", "emoji": "😑", "tags": ["无语", "服了", "尴尬"], "valence": -0.3, "arousal": 0.3, "asset": "speechless.webm"},
-    {"key": "cry", "emotion": "哭", "emoji": "😭", "tags": ["哭", "难受", "泪目"], "valence": -0.8, "arousal": 0.7, "asset": "cry.webm"},
-    {"key": "wronged", "emotion": "委屈", "emoji": "🥺", "tags": ["委屈", "可怜", "求求"], "valence": -0.5, "arousal": 0.5, "asset": "wronged.webm"},
-    {"key": "cute", "emotion": "卖萌", "emoji": "🐳", "tags": ["卖萌", "可爱", "贴贴"], "valence": 0.7, "arousal": 0.6, "asset": "cute.webm"},
-    {"key": "thumbsup", "emotion": "点赞", "emoji": "👍", "tags": ["点赞", "厉害", "赞同", "牛"], "valence": 0.7, "arousal": 0.5, "asset": "thumbsup.webm"},
-    {"key": "thanks", "emotion": "谢谢", "emoji": "🙏", "tags": ["谢谢", "感谢", "多谢"], "valence": 0.6, "arousal": 0.4, "asset": "thanks.webm"},
-    {"key": "hug", "emotion": "抱抱", "emoji": "🤗", "tags": ["抱抱", "安慰", "抱"], "valence": 0.7, "arousal": 0.5, "asset": "hug.webm"},
-    {"key": "morning", "emotion": "早安", "emoji": "🌅", "tags": ["早安", "早上好"], "valence": 0.6, "arousal": 0.4, "asset": "morning.webm"},
-    {"key": "night", "emotion": "晚安", "emoji": "🌙", "tags": ["晚安", "睡了"], "valence": 0.5, "arousal": 0.2, "asset": "night.webm"},
-    {"key": "sleepy", "emotion": "困", "emoji": "😴", "tags": ["困", "睡觉", "好累"], "valence": 0.0, "arousal": 0.2, "asset": "sleepy.webm"},
-    {"key": "eat", "emotion": "吃饭", "emoji": "🍚", "tags": ["吃饭", "白饭", "饿了", "干饭"], "valence": 0.6, "arousal": 0.4, "asset": "eat.webm"},
-    {"key": "slack", "emotion": "摸鱼", "emoji": "🐟", "tags": ["摸鱼", "偷懒", "摆烂"], "valence": 0.4, "arousal": 0.3, "asset": "slack.webm"},
-    {"key": "cheer", "emotion": "加油", "emoji": "💪", "tags": ["加油", "冲", "支持"], "valence": 0.7, "arousal": 0.7, "asset": "cheer.webm"},
-    {"key": "fail", "emotion": "失败", "emoji": "💥", "tags": ["失败", "寄了", "完了", "崩了"], "valence": -0.6, "arousal": 0.7, "asset": "fail.webm"},
-    {"key": "think", "emotion": "思考", "emoji": "🧠", "tags": ["思考", "想想", "大脑宕机"], "valence": 0.1, "arousal": 0.5, "asset": "think.webm"},
-    {"key": "fear", "emotion": "惊恐", "emoji": "😱", "tags": ["惊恐", "吓人", "害怕"], "valence": -0.6, "arousal": 0.9, "asset": "fear.webm"},
-    {"key": "proud", "emotion": "得意", "emoji": "😎", "tags": ["得意", "骄傲", "本大肥鱼"], "valence": 0.7, "arousal": 0.6, "asset": "proud.webm"},
-    {"key": "wow", "emotion": "震惊", "emoji": "😲", "tags": ["震惊", "离谱", "真的假的"], "valence": -0.1, "arousal": 0.8, "asset": "wow.webm"},
-    {"key": "broke", "emotion": "破防", "emoji": "🫠", "tags": ["破防", "绷不住", "顶不住"], "valence": -0.5, "arousal": 0.8, "asset": "broke.webm"}
+    {
+      "key": "002_haha",
+      "emotion": "laugh",
+      "emoji": "😂",
+      "tags": [
+        "笑死",
+        "开心"
+      ],
+      "valence": 0.9,
+      "arousal": 0.8,
+      "asset": "002_haha.webm",
+      "source": "telegram:deepseek_whale_girl/002_haha.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "003_shy",
+      "emotion": "shy",
+      "emoji": "😳",
+      "tags": [
+        "害羞"
+      ],
+      "valence": 0.4,
+      "arousal": 0.6,
+      "asset": "003_shy.webm",
+      "source": "telegram:deepseek_whale_girl/003_shy.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "004_cry",
+      "emotion": "cry",
+      "emoji": "😢",
+      "tags": [
+        "呜呜",
+        "难过"
+      ],
+      "valence": -0.7,
+      "arousal": 0.5,
+      "asset": "004_cry.webm",
+      "source": "telegram:deepseek_whale_girl/004_cry.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "005_bawl",
+      "emotion": "cry",
+      "emoji": "😭",
+      "tags": [
+        "大哭",
+        "难过"
+      ],
+      "valence": -0.8,
+      "arousal": 0.8,
+      "asset": "005_bawl.webm",
+      "source": "telegram:deepseek_whale_girl/005_bawl.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "006_angry",
+      "emotion": "angry",
+      "emoji": "😠",
+      "tags": [
+        "生气"
+      ],
+      "valence": -0.7,
+      "arousal": 0.8,
+      "asset": "006_angry.webm",
+      "source": "telegram:deepseek_whale_girl/006_angry.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "007_rage",
+      "emotion": "angry",
+      "emoji": "🤬",
+      "tags": [
+        "暴怒",
+        "超气"
+      ],
+      "valence": -0.8,
+      "arousal": 0.9,
+      "asset": "007_rage.webm",
+      "source": "telegram:deepseek_whale_girl/007_rage.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "008_speechless",
+      "emotion": "speechless",
+      "emoji": "😑",
+      "tags": [
+        "无语"
+      ],
+      "valence": -0.3,
+      "arousal": 0.3,
+      "asset": "008_speechless.webm",
+      "source": "telegram:deepseek_whale_girl/008_speechless.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "009_shock",
+      "emotion": "wow",
+      "emoji": "😮",
+      "tags": [
+        "震惊",
+        "啊"
+      ],
+      "valence": -0.1,
+      "arousal": 0.8,
+      "asset": "009_shock.webm",
+      "source": "telegram:deepseek_whale_girl/009_shock.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "010_scared",
+      "emotion": "fear",
+      "emoji": "😨",
+      "tags": [
+        "害怕"
+      ],
+      "valence": -0.6,
+      "arousal": 0.9,
+      "asset": "010_scared.webm",
+      "source": "telegram:deepseek_whale_girl/010_scared.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "011_sleepy",
+      "emotion": "sleepy",
+      "emoji": "😴",
+      "tags": [
+        "困困"
+      ],
+      "valence": 0.0,
+      "arousal": 0.2,
+      "asset": "011_sleepy.webm",
+      "source": "telegram:deepseek_whale_girl/011_sleepy.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "012_smug",
+      "emotion": "proud",
+      "emoji": "😏",
+      "tags": [
+        "得意"
+      ],
+      "valence": 0.7,
+      "arousal": 0.6,
+      "asset": "012_smug.webm",
+      "source": "telegram:deepseek_whale_girl/012_smug.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "013_act-cute",
+      "emotion": "cute",
+      "emoji": "🥺",
+      "tags": [
+        "卖萌",
+        "求求啦"
+      ],
+      "valence": 0.6,
+      "arousal": 0.5,
+      "asset": "013_act-cute.webm",
+      "source": "telegram:deepseek_whale_girl/013_act-cute.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "014_heart-hands",
+      "emotion": "love",
+      "emoji": "🫶",
+      "tags": [
+        "比心",
+        "喜欢"
+      ],
+      "valence": 0.8,
+      "arousal": 0.5,
+      "asset": "014_heart-hands.webm",
+      "source": "telegram:deepseek_whale_girl/014_heart-hands.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "015_like",
+      "emotion": "thumbsup",
+      "emoji": "👍",
+      "tags": [
+        "点赞"
+      ],
+      "valence": 0.7,
+      "arousal": 0.4,
+      "asset": "015_like.webm",
+      "source": "telegram:deepseek_whale_girl/015_like.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "016_nope",
+      "emotion": "refuse",
+      "emoji": "🙅",
+      "tags": [
+        "不可以",
+        "拒绝"
+      ],
+      "valence": -0.2,
+      "arousal": 0.4,
+      "asset": "016_nope.webm",
+      "source": "telegram:deepseek_whale_girl/016_nope.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "017_yes",
+      "emotion": "yes",
+      "emoji": "✅",
+      "tags": [
+        "好哒",
+        "同意"
+      ],
+      "valence": 0.6,
+      "arousal": 0.3,
+      "asset": "017_yes.webm",
+      "source": "telegram:deepseek_whale_girl/017_yes.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "018_wave",
+      "emotion": "bye",
+      "emoji": "👋",
+      "tags": [
+        "拜拜"
+      ],
+      "valence": 0.3,
+      "arousal": 0.3,
+      "asset": "018_wave.webm",
+      "source": "telegram:deepseek_whale_girl/018_wave.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "019_kneel",
+      "emotion": "kneel",
+      "emoji": "🙇",
+      "tags": [
+        "跪了",
+        "认输"
+      ],
+      "valence": -0.4,
+      "arousal": 0.6,
+      "asset": "019_kneel.webm",
+      "source": "telegram:deepseek_whale_girl/019_kneel.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "020_hug",
+      "emotion": "hug",
+      "emoji": "🤗",
+      "tags": [
+        "抱抱",
+        "安慰"
+      ],
+      "valence": 0.7,
+      "arousal": 0.4,
+      "asset": "020_hug.webm",
+      "source": "telegram:deepseek_whale_girl/020_hug.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "021_kiss",
+      "emotion": "love",
+      "emoji": "😘",
+      "tags": [
+        "飞吻",
+        "亲亲"
+      ],
+      "valence": 0.8,
+      "arousal": 0.5,
+      "asset": "021_kiss.webm",
+      "source": "telegram:deepseek_whale_girl/021_kiss.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "022_eat",
+      "emotion": "eat",
+      "emoji": "🍚",
+      "tags": [
+        "干饭",
+        "吃饭"
+      ],
+      "valence": 0.6,
+      "arousal": 0.4,
+      "asset": "022_eat.webm",
+      "source": "telegram:deepseek_whale_girl/022_eat.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "023_milk-tea",
+      "emotion": "eat",
+      "emoji": "🧋",
+      "tags": [
+        "奶茶",
+        "续命"
+      ],
+      "valence": 0.6,
+      "arousal": 0.3,
+      "asset": "023_milk-tea.webm",
+      "source": "telegram:deepseek_whale_girl/023_milk-tea.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "024_fighting",
+      "emotion": "cheer",
+      "emoji": "💪",
+      "tags": [
+        "加油"
+      ],
+      "valence": 0.7,
+      "arousal": 0.8,
+      "asset": "024_fighting.webm",
+      "source": "telegram:deepseek_whale_girl/024_fighting.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "025_thanks",
+      "emotion": "thanks",
+      "emoji": "🙏",
+      "tags": [
+        "谢谢"
+      ],
+      "valence": 0.7,
+      "arousal": 0.4,
+      "asset": "025_thanks.webm",
+      "source": "telegram:deepseek_whale_girl/025_thanks.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "026_sorry",
+      "emotion": "sorry",
+      "emoji": "😔",
+      "tags": [
+        "对不起",
+        "道歉"
+      ],
+      "valence": -0.3,
+      "arousal": 0.4,
+      "asset": "026_sorry.webm",
+      "source": "telegram:deepseek_whale_girl/026_sorry.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "027_good-night",
+      "emotion": "night",
+      "emoji": "🌙",
+      "tags": [
+        "晚安"
+      ],
+      "valence": 0.5,
+      "arousal": 0.2,
+      "asset": "027_good-night.webm",
+      "source": "telegram:deepseek_whale_girl/027_good-night.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "028_good-morning",
+      "emotion": "morning",
+      "emoji": "☀️",
+      "tags": [
+        "早安"
+      ],
+      "valence": 0.6,
+      "arousal": 0.3,
+      "asset": "028_good-morning.webm",
+      "source": "telegram:deepseek_whale_girl/028_good-morning.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "029_overtime",
+      "emotion": "overtime",
+      "emoji": "💻",
+      "tags": [
+        "加班",
+        "累"
+      ],
+      "valence": -0.4,
+      "arousal": 0.5,
+      "asset": "029_overtime.webm",
+      "source": "telegram:deepseek_whale_girl/029_overtime.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "030_fish",
+      "emotion": "slack",
+      "emoji": "🐟",
+      "tags": [
+        "摸鱼"
+      ],
+      "valence": 0.4,
+      "arousal": 0.3,
+      "asset": "030_fish.webm",
+      "source": "telegram:deepseek_whale_girl/030_fish.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "031_gg",
+      "emotion": "fail",
+      "emoji": "💀",
+      "tags": [
+        "寄了",
+        "失败"
+      ],
+      "valence": -0.6,
+      "arousal": 0.6,
+      "asset": "031_gg.webm",
+      "source": "telegram:deepseek_whale_girl/031_gg.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "032_rot",
+      "emotion": "slack",
+      "emoji": "🛌",
+      "tags": [
+        "摆烂"
+      ],
+      "valence": -0.3,
+      "arousal": 0.3,
+      "asset": "032_rot.webm",
+      "source": "telegram:deepseek_whale_girl/032_rot.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "033_juan",
+      "emotion": "work",
+      "emoji": "🔥",
+      "tags": [
+        "卷",
+        "卷到了"
+      ],
+      "valence": -0.2,
+      "arousal": 0.6,
+      "asset": "033_juan.webm",
+      "source": "telegram:deepseek_whale_girl/033_juan.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "034_lie-flat",
+      "emotion": "slack",
+      "emoji": "🛏️",
+      "tags": [
+        "躺平"
+      ],
+      "valence": 0.0,
+      "arousal": 0.1,
+      "asset": "034_lie-flat.webm",
+      "source": "telegram:deepseek_whale_girl/034_lie-flat.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "035_xiang",
+      "emotion": "wow",
+      "emoji": "😋",
+      "tags": [
+        "真香"
+      ],
+      "valence": 0.7,
+      "arousal": 0.6,
+      "asset": "035_xiang.webm",
+      "source": "telegram:deepseek_whale_girl/035_xiang.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "036_tears",
+      "emotion": "cry",
+      "emoji": "🥹",
+      "tags": [
+        "泪目",
+        "感动"
+      ],
+      "valence": 0.2,
+      "arousal": 0.5,
+      "asset": "036_tears.webm",
+      "source": "telegram:deepseek_whale_girl/036_tears.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "037_broken",
+      "emotion": "broke",
+      "emoji": "💔",
+      "tags": [
+        "破防"
+      ],
+      "valence": -0.5,
+      "arousal": 0.8,
+      "asset": "037_broken.webm",
+      "source": "telegram:deepseek_whale_girl/037_broken.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "038_nice",
+      "emotion": "cheer",
+      "emoji": "🎉",
+      "tags": [
+        "好耶",
+        "开心"
+      ],
+      "valence": 0.9,
+      "arousal": 0.8,
+      "asset": "038_nice.webm",
+      "source": "telegram:deepseek_whale_girl/038_nice.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "039_yeah-yeah",
+      "emotion": "speechless",
+      "emoji": "🙃",
+      "tags": [
+        "啊对对对",
+        "敷衍"
+      ],
+      "valence": -0.1,
+      "arousal": 0.4,
+      "asset": "039_yeah-yeah.webm",
+      "source": "telegram:deepseek_whale_girl/039_yeah-yeah.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "040_zundun",
+      "emotion": "confused",
+      "emoji": "🤔",
+      "tags": [
+        "尊嘟假嘟",
+        "疑惑"
+      ],
+      "valence": 0.1,
+      "arousal": 0.5,
+      "asset": "040_zundun.webm",
+      "source": "telegram:deepseek_whale_girl/040_zundun.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "041_cool",
+      "emotion": "proud",
+      "emoji": "😎",
+      "tags": [
+        "泰裤辣",
+        "酷"
+      ],
+      "valence": 0.7,
+      "arousal": 0.6,
+      "asset": "041_cool.webm",
+      "source": "telegram:deepseek_whale_girl/041_cool.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "042_thanks-q",
+      "emotion": "speechless",
+      "emoji": "🙏",
+      "tags": [
+        "栓Q",
+        "无语"
+      ],
+      "valence": -0.4,
+      "arousal": 0.5,
+      "asset": "042_thanks-q.webm",
+      "source": "telegram:deepseek_whale_girl/042_thanks-q.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "043_yyds",
+      "emotion": "wow",
+      "emoji": "🏆",
+      "tags": [
+        "YYDS",
+        "厉害"
+      ],
+      "valence": 0.9,
+      "arousal": 0.7,
+      "asset": "043_yyds.webm",
+      "source": "telegram:deepseek_whale_girl/043_yyds.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "044_juejuezi",
+      "emotion": "wow",
+      "emoji": "✨",
+      "tags": [
+        "绝绝子",
+        "绝了"
+      ],
+      "valence": 0.8,
+      "arousal": 0.7,
+      "asset": "044_juejuezi.webm",
+      "source": "telegram:deepseek_whale_girl/044_juejuezi.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "045_bbq",
+      "emotion": "fail",
+      "emoji": "🤯",
+      "tags": [
+        "芭比Q",
+        "完了"
+      ],
+      "valence": -0.7,
+      "arousal": 0.8,
+      "asset": "045_bbq.webm",
+      "source": "telegram:deepseek_whale_girl/045_bbq.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "046_cracked",
+      "emotion": "broke",
+      "emoji": "💥",
+      "tags": [
+        "裂开",
+        "崩溃"
+      ],
+      "valence": -0.7,
+      "arousal": 0.8,
+      "asset": "046_cracked.webm",
+      "source": "telegram:deepseek_whale_girl/046_cracked.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "047_ahead",
+      "emotion": "proud",
+      "emoji": "🚀",
+      "tags": [
+        "遥遥领先",
+        "领先"
+      ],
+      "valence": 0.8,
+      "arousal": 0.6,
+      "asset": "047_ahead.webm",
+      "source": "telegram:deepseek_whale_girl/047_ahead.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "048_cpu",
+      "emotion": "confused",
+      "emoji": "🔥",
+      "tags": [
+        "CPU烧了",
+        "懵"
+      ],
+      "valence": -0.3,
+      "arousal": 0.8,
+      "asset": "048_cpu.webm",
+      "source": "telegram:deepseek_whale_girl/048_cpu.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "049_hallucinate",
+      "emotion": "think",
+      "emoji": "🤥",
+      "tags": [
+        "一本正经胡说",
+        "幻觉"
+      ],
+      "valence": -0.2,
+      "arousal": 0.5,
+      "asset": "049_hallucinate.webm",
+      "source": "telegram:deepseek_whale_girl/049_hallucinate.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "050_context",
+      "emotion": "fail",
+      "emoji": "📚",
+      "tags": [
+        "上下文爆了"
+      ],
+      "valence": -0.5,
+      "arousal": 0.7,
+      "asset": "050_context.webm",
+      "source": "telegram:deepseek_whale_girl/050_context.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "051_token",
+      "emotion": "fail",
+      "emoji": "🪙",
+      "tags": [
+        "Token不够"
+      ],
+      "valence": -0.4,
+      "arousal": 0.5,
+      "asset": "051_token.webm",
+      "source": "telegram:deepseek_whale_girl/051_token.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "052_queue",
+      "emotion": "wait",
+      "emoji": "⏳",
+      "tags": [
+        "排队中"
+      ],
+      "valence": -0.1,
+      "arousal": 0.3,
+      "asset": "052_queue.webm",
+      "source": "telegram:deepseek_whale_girl/052_queue.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "053_thinking",
+      "emotion": "think",
+      "emoji": "🤔",
+      "tags": [
+        "思考中"
+      ],
+      "valence": 0.1,
+      "arousal": 0.5,
+      "asset": "053_thinking.webm",
+      "source": "telegram:deepseek_whale_girl/053_thinking.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "054_deepseek",
+      "emotion": "think",
+      "emoji": "🐳",
+      "tags": [
+        "深度求索",
+        "DeepSeek"
+      ],
+      "valence": 0.2,
+      "arousal": 0.4,
+      "asset": "054_deepseek.webm",
+      "source": "telegram:deepseek_whale_girl/054_deepseek.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "055_whale-spout",
+      "emotion": "cute",
+      "emoji": "💦",
+      "tags": [
+        "喷水"
+      ],
+      "valence": 0.6,
+      "arousal": 0.6,
+      "asset": "055_whale-spout.webm",
+      "source": "telegram:deepseek_whale_girl/055_whale-spout.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "056_saved",
+      "emotion": "happy",
+      "emoji": "🛟",
+      "tags": [
+        "被捞了",
+        "幸运"
+      ],
+      "valence": 0.6,
+      "arousal": 0.5,
+      "asset": "056_saved.webm",
+      "source": "telegram:deepseek_whale_girl/056_saved.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "057_lurk",
+      "emotion": "slack",
+      "emoji": "👀",
+      "tags": [
+        "潜水"
+      ],
+      "valence": 0.1,
+      "arousal": 0.2,
+      "asset": "057_lurk.webm",
+      "source": "telegram:deepseek_whale_girl/057_lurk.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "058_eat-fish",
+      "emotion": "eat",
+      "emoji": "🐟",
+      "tags": [
+        "吃鱼"
+      ],
+      "valence": 0.5,
+      "arousal": 0.4,
+      "asset": "058_eat-fish.webm",
+      "source": "telegram:deepseek_whale_girl/058_eat-fish.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "059_wag",
+      "emotion": "cute",
+      "emoji": "🐋",
+      "tags": [
+        "摇尾巴"
+      ],
+      "valence": 0.7,
+      "arousal": 0.5,
+      "asset": "059_wag.webm",
+      "source": "telegram:deepseek_whale_girl/059_wag.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "060_seabed",
+      "emotion": "slack",
+      "emoji": "🐟",
+      "tags": [
+        "海底摸鱼"
+      ],
+      "valence": 0.3,
+      "arousal": 0.2,
+      "asset": "060_seabed.webm",
+      "source": "telegram:deepseek_whale_girl/060_seabed.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "061_req-change",
+      "emotion": "angry",
+      "emoji": "🔄",
+      "tags": [
+        "需求又改",
+        "崩溃"
+      ],
+      "valence": -0.6,
+      "arousal": 0.6,
+      "asset": "061_req-change.webm",
+      "source": "telegram:deepseek_whale_girl/061_req-change.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "062_ship",
+      "emotion": "ship",
+      "emoji": "🚀",
+      "tags": [
+        "上线啦",
+        "成功"
+      ],
+      "valence": 0.8,
+      "arousal": 0.8,
+      "asset": "062_ship.webm",
+      "source": "telegram:deepseek_whale_girl/062_ship.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "063_rollback",
+      "emotion": "fail",
+      "emoji": "↩️",
+      "tags": [
+        "回滚"
+      ],
+      "valence": -0.5,
+      "arousal": 0.6,
+      "asset": "063_rollback.webm",
+      "source": "telegram:deepseek_whale_girl/063_rollback.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "064_blame",
+      "emotion": "wronged",
+      "emoji": "🥲",
+      "tags": [
+        "背锅",
+        "委屈"
+      ],
+      "valence": -0.6,
+      "arousal": 0.5,
+      "asset": "064_blame.webm",
+      "source": "telegram:deepseek_whale_girl/064_blame.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "065_paddle",
+      "emotion": "slack",
+      "emoji": "🛶",
+      "tags": [
+        "划水"
+      ],
+      "valence": 0.3,
+      "arousal": 0.3,
+      "asset": "065_paddle.webm",
+      "source": "telegram:deepseek_whale_girl/065_paddle.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "066_coffee",
+      "emotion": "eat",
+      "emoji": "☕",
+      "tags": [
+        "咖啡续命"
+      ],
+      "valence": 0.4,
+      "arousal": 0.4,
+      "asset": "066_coffee.webm",
+      "source": "telegram:deepseek_whale_girl/066_coffee.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "067_boss",
+      "emotion": "work",
+      "emoji": "👏",
+      "tags": [
+        "老板英明"
+      ],
+      "valence": 0.3,
+      "arousal": 0.4,
+      "asset": "067_boss.webm",
+      "source": "telegram:deepseek_whale_girl/067_boss.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "068_pay",
+      "emotion": "money",
+      "emoji": "💰",
+      "tags": [
+        "打钱"
+      ],
+      "valence": 0.4,
+      "arousal": 0.5,
+      "asset": "068_pay.webm",
+      "source": "telegram:deepseek_whale_girl/068_pay.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "069_free",
+      "emotion": "money",
+      "emoji": "🆓",
+      "tags": [
+        "白嫖"
+      ],
+      "valence": 0.5,
+      "arousal": 0.4,
+      "asset": "069_free.webm",
+      "source": "telegram:deepseek_whale_girl/069_free.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "070_bug",
+      "emotion": "work",
+      "emoji": "🐛",
+      "tags": [
+        "改Bug"
+      ],
+      "valence": -0.2,
+      "arousal": 0.5,
+      "asset": "070_bug.webm",
+      "source": "telegram:deepseek_whale_girl/070_bug.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "071_triple",
+      "emotion": "thanks",
+      "emoji": "👍",
+      "tags": [
+        "一键三连"
+      ],
+      "valence": 0.8,
+      "arousal": 0.6,
+      "asset": "071_triple.webm",
+      "source": "telegram:deepseek_whale_girl/071_triple.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "072_follow",
+      "emotion": "thanks",
+      "emoji": "💙",
+      "tags": [
+        "关注了"
+      ],
+      "valence": 0.7,
+      "arousal": 0.4,
+      "asset": "072_follow.webm",
+      "source": "telegram:deepseek_whale_girl/072_follow.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "073_liked-it",
+      "emotion": "thanks",
+      "emoji": "👍",
+      "tags": [
+        "点了"
+      ],
+      "valence": 0.7,
+      "arousal": 0.4,
+      "asset": "073_liked-it.webm",
+      "source": "telegram:deepseek_whale_girl/073_liked-it.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "074_share",
+      "emotion": "share",
+      "emoji": "🔁",
+      "tags": [
+        "转发"
+      ],
+      "valence": 0.4,
+      "arousal": 0.4,
+      "asset": "074_share.webm",
+      "source": "telegram:deepseek_whale_girl/074_share.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "075_fav",
+      "emotion": "share",
+      "emoji": "⭐",
+      "tags": [
+        "收藏"
+      ],
+      "valence": 0.6,
+      "arousal": 0.3,
+      "asset": "075_fav.webm",
+      "source": "telegram:deepseek_whale_girl/075_fav.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "076_watching",
+      "emotion": "observe",
+      "emoji": "👀",
+      "tags": [
+        "在看"
+      ],
+      "valence": 0.3,
+      "arousal": 0.3,
+      "asset": "076_watching.webm",
+      "source": "telegram:deepseek_whale_girl/076_watching.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "077_coin",
+      "emotion": "thanks",
+      "emoji": "🪙",
+      "tags": [
+        "投币"
+      ],
+      "valence": 0.7,
+      "arousal": 0.5,
+      "asset": "077_coin.webm",
+      "source": "telegram:deepseek_whale_girl/077_coin.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "078_ship-it",
+      "emotion": "love",
+      "emoji": "💕",
+      "tags": [
+        "磕到了",
+        "甜"
+      ],
+      "valence": 0.8,
+      "arousal": 0.7,
+      "asset": "078_ship-it.webm",
+      "source": "telegram:deepseek_whale_girl/078_ship-it.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "079_locked",
+      "emotion": "love",
+      "emoji": "🔒",
+      "tags": [
+        "锁死",
+        "CP"
+      ],
+      "valence": 0.8,
+      "arousal": 0.8,
+      "asset": "079_locked.webm",
+      "source": "telegram:deepseek_whale_girl/079_locked.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "080_be",
+      "emotion": "cry",
+      "emoji": "💔",
+      "tags": [
+        "BE了",
+        "难过"
+      ],
+      "valence": -0.7,
+      "arousal": 0.6,
+      "asset": "080_be.webm",
+      "source": "telegram:deepseek_whale_girl/080_be.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "081_he",
+      "emotion": "cheer",
+      "emoji": "❤️",
+      "tags": [
+        "HE万岁",
+        "开心"
+      ],
+      "valence": 0.9,
+      "arousal": 0.7,
+      "asset": "081_he.webm",
+      "source": "telegram:deepseek_whale_girl/081_he.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "082_sweet",
+      "emotion": "love",
+      "emoji": "🍬",
+      "tags": [
+        "好甜"
+      ],
+      "valence": 0.8,
+      "arousal": 0.5,
+      "asset": "082_sweet.webm",
+      "source": "telegram:deepseek_whale_girl/082_sweet.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "083_yingying",
+      "emotion": "wronged",
+      "emoji": "🥺",
+      "tags": [
+        "嘤嘤嘤",
+        "委屈"
+      ],
+      "valence": -0.3,
+      "arousal": 0.5,
+      "asset": "083_yingying.webm",
+      "source": "telegram:deepseek_whale_girl/083_yingying.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "084_what",
+      "emotion": "confused",
+      "emoji": "❓",
+      "tags": [
+        "哈？",
+        "疑惑"
+      ],
+      "valence": -0.1,
+      "arousal": 0.6,
+      "asset": "084_what.webm",
+      "source": "telegram:deepseek_whale_girl/084_what.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "085_master",
+      "emotion": "cute",
+      "emoji": "🙇",
+      "tags": [
+        "好的主人"
+      ],
+      "valence": 0.5,
+      "arousal": 0.4,
+      "asset": "085_master.webm",
+      "source": "telegram:deepseek_whale_girl/085_master.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "086_dress",
+      "emotion": "cute",
+      "emoji": "👗",
+      "tags": [
+        "女仆装"
+      ],
+      "valence": 0.7,
+      "arousal": 0.6,
+      "asset": "086_dress.webm",
+      "source": "telegram:deepseek_whale_girl/086_dress.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "087_sandwich",
+      "emotion": "eat",
+      "emoji": "🍚",
+      "tags": [
+        "干饭人"
+      ],
+      "valence": 0.6,
+      "arousal": 0.5,
+      "asset": "087_sandwich.webm",
+      "source": "telegram:deepseek_whale_girl/087_sandwich.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "088_float",
+      "emotion": "cute",
+      "emoji": "🫧",
+      "tags": [
+        "浮起来了",
+        "飘"
+      ],
+      "valence": 0.6,
+      "arousal": 0.4,
+      "asset": "088_float.webm",
+      "source": "telegram:deepseek_whale_girl/088_float.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "089_offwork",
+      "emotion": "happy",
+      "emoji": "🎉",
+      "tags": [
+        "下班",
+        "开心"
+      ],
+      "valence": 0.9,
+      "arousal": 0.7,
+      "asset": "089_offwork.webm",
+      "source": "telegram:deepseek_whale_girl/089_offwork.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "090_weekend",
+      "emotion": "happy",
+      "emoji": "🎊",
+      "tags": [
+        "周末快乐"
+      ],
+      "valence": 0.8,
+      "arousal": 0.5,
+      "asset": "090_weekend.webm",
+      "source": "telegram:deepseek_whale_girl/090_weekend.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "091_whale-fall",
+      "emotion": "sad",
+      "emoji": "🐋",
+      "tags": [
+        "鲸落",
+        "感动"
+      ],
+      "valence": -0.2,
+      "arousal": 0.3,
+      "asset": "091_whale-fall.webm",
+      "source": "telegram:deepseek_whale_girl/091_whale-fall.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "092_shore",
+      "emotion": "ship",
+      "emoji": "🏖️",
+      "tags": [
+        "上岸",
+        "成功"
+      ],
+      "valence": 0.7,
+      "arousal": 0.6,
+      "asset": "092_shore.webm",
+      "source": "telegram:deepseek_whale_girl/092_shore.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "093_dive-go",
+      "emotion": "go",
+      "emoji": "🌊",
+      "tags": [
+        "下海",
+        "冲"
+      ],
+      "valence": 0.4,
+      "arousal": 0.6,
+      "asset": "093_dive-go.webm",
+      "source": "telegram:deepseek_whale_girl/093_dive-go.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "094_go-go",
+      "emotion": "cheer",
+      "emoji": "🚀",
+      "tags": [
+        "冲鸭",
+        "加油"
+      ],
+      "valence": 0.8,
+      "arousal": 0.9,
+      "asset": "094_go-go.webm",
+      "source": "telegram:deepseek_whale_girl/094_go-go.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "095_wuhu",
+      "emotion": "cheer",
+      "emoji": "🛫",
+      "tags": [
+        "芜湖起飞",
+        "起飞"
+      ],
+      "valence": 0.9,
+      "arousal": 0.9,
+      "asset": "095_wuhu.webm",
+      "source": "telegram:deepseek_whale_girl/095_wuhu.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "096_peace",
+      "emotion": "happy",
+      "emoji": "✌️",
+      "tags": [
+        "比个耶"
+      ],
+      "valence": 0.7,
+      "arousal": 0.5,
+      "asset": "096_peace.webm",
+      "source": "telegram:deepseek_whale_girl/096_peace.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "097_upup",
+      "emotion": "cute",
+      "emoji": "🙌",
+      "tags": [
+        "举高高"
+      ],
+      "valence": 0.8,
+      "arousal": 0.6,
+      "asset": "097_upup.webm",
+      "source": "telegram:deepseek_whale_girl/097_upup.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "098_spin",
+      "emotion": "cute",
+      "emoji": "🌀",
+      "tags": [
+        "转圈圈"
+      ],
+      "valence": 0.7,
+      "arousal": 0.6,
+      "asset": "098_spin.webm",
+      "source": "telegram:deepseek_whale_girl/098_spin.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "099_ok-fine",
+      "emotion": "speechless",
+      "emoji": "🤷",
+      "tags": [
+        "随便吧",
+        "无奈"
+      ],
+      "valence": -0.2,
+      "arousal": 0.3,
+      "asset": "099_ok-fine.webm",
+      "source": "telegram:deepseek_whale_girl/099_ok-fine.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "100_hello",
+      "emotion": "hello",
+      "emoji": "👋",
+      "tags": [
+        "来啦",
+        "打招呼"
+      ],
+      "valence": 0.6,
+      "arousal": 0.5,
+      "asset": "100_hello.webm",
+      "source": "telegram:deepseek_whale_girl/100_hello.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "101_rice",
+      "emotion": "eat",
+      "emoji": "🍚",
+      "tags": [
+        "我去吃饭",
+        "白饭"
+      ],
+      "valence": 0.5,
+      "arousal": 0.3,
+      "asset": "101_rice.webm",
+      "source": "telegram:deepseek_whale_girl/101_rice.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "102_token",
+      "emotion": "fail",
+      "emoji": "🪙",
+      "tags": [
+        "Token吃光"
+      ],
+      "valence": -0.3,
+      "arousal": 0.5,
+      "asset": "102_token.webm",
+      "source": "telegram:deepseek_whale_girl/102_token.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "103_cheap",
+      "emotion": "angry",
+      "emoji": "😤",
+      "tags": [
+        "便宜货",
+        "生气"
+      ],
+      "valence": -0.5,
+      "arousal": 0.7,
+      "asset": "103_cheap.webm",
+      "source": "telegram:deepseek_whale_girl/103_cheap.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "104_deepsleep",
+      "emotion": "sleepy",
+      "emoji": "😴",
+      "tags": [
+        "深度睡眠",
+        "睡觉"
+      ],
+      "valence": 0.1,
+      "arousal": 0.1,
+      "asset": "104_deepsleep.webm",
+      "source": "telegram:deepseek_whale_girl/104_deepsleep.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    },
+    {
+      "key": "001_hehe",
+      "emotion": "happy",
+      "emoji": "😊",
+      "tags": [
+        "嘿嘿",
+        "开心"
+      ],
+      "valence": 0.7,
+      "arousal": 0.4,
+      "asset": "001_hehe.webm",
+      "source": "telegram:deepseek_whale_girl/001_hehe.webm",
+      "license": "MIT (c) 2026 Dejavu Moe / DejavuMoe/deepseek_wale_girl"
+    }
   ]
 }

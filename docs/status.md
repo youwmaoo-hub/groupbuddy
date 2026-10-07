@@ -8,13 +8,13 @@
 
 | 项 | 值 |
 |---|---|
-| 代码 commit | `78ae9cff6f733f87ab5b0c63d6cc8d1294ff3b4e`（短 `78ae9cf`，分支 `main`；阶段 8 四模式代码 + 契约文档） |
+| 代码 commit | `78ae9cff6f733f87ab5b0c63d6cc8d1294ff3b4e`（短 `78ae9cf`，分支 `main`；阶段 8 四模式代码 + 契约文档。**阶段 9 最小生产闭环未改任何代码**，只改部署与状态文档） |
 | 跟踪文件数 | 132（`git ls-files`） |
-| 提交数 | 28（阶段提交 + 文档治理 `b529741` + A1–A3 修复 `f7f34b5` + 文档同步 `3347301` + 部署记录 + 阶段 8 F5.2 `7382639` + F5.1 `c49fdc5` + F5.3 `1d649b8` + F5.4 `101c26c` + 基线 `ad560f4` + F4.7 `de73b57` + 四模式 `78ae9cf` + 四模式基线 `88531d2` + 本次真机验收记录） |
-| 本机工作树 | 干净（`git status --porcelain` 无输出）；本机 `main` HEAD 在此验收之后只有一个纯文档记录提交（本次 `docs:` 提交），代码内容与真机 `88531d2` 一致 |
-| 真机仓库 | `/home/bot/app` = detached HEAD @ `88531d2`（本次验收实际运行的 checkout；**代码内容 = 本机 `78ae9cf`**，与本机一致），工作树干净，属主 `bot:bot`，跟踪文件 132 |
+| 提交数 | 30（阶段提交 + 文档治理 `b529741` + A1–A3 修复 `f7f34b5` + 文档同步 `3347301` + 部署记录 + 阶段 8 F5.2 `7382639` + F5.1 `c49fdc5` + F5.3 `1d649b8` + F5.4 `101c26c` + 基线 `ad560f4` + F4.7 `de73b57` + 四模式 `78ae9cf` + 四模式基线 `88531d2` + 真机验收记录 `d5e48f0` + 阶段 9 托管文档 `5a5b6d5` + 本次阶段 9 基线记录） |
+| 本机工作树 | 干净（`git status --porcelain` 无输出）；本机 `main` HEAD 为本次阶段 9 基线记录提交，代码内容与真机 `88531d2` 一致（阶段 9 无代码改动） |
+| 真机仓库 | `/home/bot/app` = detached HEAD @ `88531d2`（**代码内容 = 本机 `78ae9cf`**，与本机一致），工作树干净，属主 `bot:bot`，跟踪文件 132；**Bot 已在真机运行**：systemd 用户级单元 `groupbuddy.service`（`ActiveState=active`、`Restart=always`，见 §4.3） |
 | 真机远端 | `origin` = VPS `/tmp/dsh_deploy_88531d2.bundle`（文件存在，可 `git fetch`；仍未配置正式远端，未建 GitHub remote、未 push） |
-| 运行时目录 | 真机 `storage/` 存在（本轮沙箱验收自动创建）：`logs/`、`sandbox/`、`workspaces/{999001,999002}` 均为空目录，属主 `bot:bot` |
+| 运行时目录 | 真机 `storage/`：`bot.db`（118784 字节，`user_version`=4）、`logs/bot.log`、`health.json`（60 秒心跳）、`sandbox/`、`workspaces/`，属主 `bot:bot`；真实 `.env` 在 `/home/bot/app/.env`（`600`、`bot:bot`，**内容与凭据值一律不记录**） |
 
 ## 2. 已完成阶段与能力
 
@@ -29,7 +29,8 @@
 | 6 | 已完成 | 记忆：分档窗口 + 字符预算、噪声标记、模板化摘要、FTS5 检索 |
 | 7 | 已完成 | 沙箱 `run_code`：固定 argv、rootless Podman / Docker、Tier A/B、fail-closed；真机部署与验收已完成 |
 | 8 | 已完成 | 权限/配额/运维：**群主命令最小闭环、群设定写入、日/月配额与运行指标**（`app/ops/admin.py` 管理员判定 + `/settings` 回显/写入 + `app/ops/quota.py` 配额判定 + `app/ops/metrics.py` `/stats` + `app/ops/health.py` `/health` 与 `storage/health.json` 同一状态，见 `docs/security.md` §2.1、`docs/token.md` §4.1、`docs/deployment.md` §7；F5.1/F5.2/F5.3/F5.4 + T12 + T15）；**F4.7 `host_info` 已实现**（`app/tools/builtin/host_info.py`，L4 + `allow_host_info` 默认关，见 `docs/tools.md` §host_info）；**token 四模式完整生效**（`app/modes.py` 唯一权威表：economy 10 条窗口 / 只 L0 / 256 输出 / 贴纸关；normal 意图分档 + 群开关；smart 50 条 + 额外 L0 只读；unrestricted 50 条 + 全部工具 + 输出不限；模式只由管理员 `/settings mode` 修改，见 `docs/token.md` §5、`docs/security.md` §2.2） |
-| 9 / 10 | 未开始 | 部署与 24/7；控制面板与多实例（仅架构预留） |
+| 9 | 进行中（**最小生产闭环已完成并真机验证**） | 部署与 24/7：systemd **用户级单元** `groupbuddy.service`（`Restart=always`，开机自启，见 `docs/deployment.md` §12.9）、真实 `.env`（`600`）、启动时 migration（`user_version`=4）、`storage/health.json` 心跳、Telegram 真机收发、stop/start/restart 与 `SIGKILL` 自动重启均已实测通过（见 §4.3）；**剩**备份/恢复演练与更新回滚流程（`TODO.md` §阶段 9 待做），未采用容器托管 |
+| 10 | 未开始 | 控制面板与多实例（仅架构预留） |
 
 ## 3. 本机验证（Windows，开发环境）
 
@@ -69,12 +70,32 @@ Tier B 4/4：本群 workspace 读写（非 root）、宿主侧可见、其他群
 
 **判读注意（重要）**：`verify_sandbox.py` 的「无网络」「只读根」是期望非零退出的负向断言，任何非零退出都算 PASS，区分不出「容器没启动」；脚本正文的 `Tier A：PASS` 汇总只聚合 1 项。判读时必须看逐项输出与「合计 N 项，失败 M 项」（见 `docs/deployment.md` §12.6、`TODO.md` T7）。
 
+### 4.3 阶段 9 最小生产闭环（2026-10-07，真机实测）
+
+运行方式：systemd **用户级**单元（不引入新组件、不开新端口、不动 root 级配置），单元路径、模板与命令见 `docs/deployment.md` §12.9；`is-enabled`=`enabled`、`loginctl show-user bot` 的 `Linger=yes`、`default.target.wants/groupbuddy.service` 符号链接存在 → VPS 重启后自动拉起。阶段 9 未改任何代码。
+
+| 检查 | 命令/手段 | 结果 |
+|---|---|---|
+| 真实 `.env` | 部署阶段按白名单合并 `BOT_TOKEN`/`LLM_API_KEY`/`LLM_BASE_URL`/`LLM_MODEL`，临时凭据文件用后 `shred -u` | `-rw------- bot bot`（997 字节）、占位符 0 个；**本文档与所有文档不记录任何凭据值** |
+| 启动核对 | 读取 `.env` → `get_me` → 沙箱探测 → 后台任务 | `配置加载完成`（`BOT_TOKEN=[redacted]`，SecretFilter 生效）→ `Bot 就绪 username=… bot_id=… model=deepseek-flash` → `沙箱后端就绪 backend=podman version=podman version 4.3.1 workspace=True` → `沙箱状态 {'backend': 'podman', 'available': 'True', 'workspace_write': 'True', 'image': 'python:3.12-slim', 'max_concurrent': '2'}` → `启动完成 data_dir=… db=…` |
+| 启动时 migration | 启动后直接查 `storage/bot.db` | `user_version`=4；表 `chat_settings`/`messages`/`notes`(+fts)/`stickers`/`summaries`(+fts)/`tool_failures`/`updates`/`usage` 齐全 |
+| health 心跳 | `storage/health.json` | `ok=true`、`db_ok=true`、`outbound_pending=0`、`instance=default`；`checked_at` 每 60 秒推进（实测 1791376036→1791376199、`uptime_s` 120.06）；重启后 `started_at` 重置、`uptime_s` 归零 |
+| Telegram 真机收发 | 用户在测试群 @ Bot 发一条消息 | `updates`=2、`messages`=2（用户消息 + Bot 回复）、`usage`=2 行（`purpose=chat`：`model=deepseek-flash`、input 952 / output 44；静默 ≥120 秒后摘要任务按设计追加 `purpose=summary`：input 174 / output 109，东八区日键 `2026-10-07`）、`summaries`=1（`msg_from`=1 → `msg_to`=2，119 字）；`health.json` 的 `last_update_at` 由 `null` 变为非空；日志 `WARNING`/`ERROR`/`Traceback` 计数 0；`chat_settings`=0（`/settings` 回显不写库，符合设计）、`tool_failures`=0 |
+| 管理员命令通路 | 真机 `get_chat_administrators` 探针 | 触发者确认为该群管理员（`is_admin=True`）→ `/settings` 走回显分支（成功回显不打日志、不写 `messages`/`chat_settings`）；非管理员拒绝分支与「不泄露内部信息」由离线测试覆盖（`tests/offline/test_commands.py`、`test_metrics.py`） |
+| 优雅停止 | `systemctl --user stop groupbuddy.service` | 日志 `收到信号 signum=15` → `已关闭`，进程消失、`is-active`=`inactive`（走 SIGTERM，未 `kill -9`） |
+| 重启恢复 | 随后 `start` / `restart` | 恢复 `active`，`Bot 就绪`/`启动完成` 重新打印；`bot.db` 保留（118784 字节、`user_version`=4），health 心跳恢复 |
+| 异常自动重启 | `kill -9 <MainPID>` | `MainPID` 换新 PID、**`NRestarts` 0→1**、`ActiveState=active`，重新输出 `配置加载完成`/`Bot 就绪`/`启动完成`；日志仍无 `WARNING`/`ERROR`/`Traceback` |
+
+排查注意：目标机用户级 `journalctl --user` 无 journal 文件（`No journal files were found`），运行日志以 `storage/logs/bot.log` 为准。`/settings` 的回显文案由用户目视确认（非阻塞项）。
+
+本阶段明确未做：容器托管（`Dockerfile`/`compose.yaml`）、正式远端（GitHub）、备份/恢复演练、更新回滚流程、T25/T9/T7、任何架构重构。
+
 ## 5. 尚未做 / 尚未上线（重要）
 
-- **Bot 未启动**：真机没有 `app.main` 进程、没有 systemd 单元、没有容器；阶段 7 只到「沙箱能力验收」。
-- **没有真实 `.env`**：仓库只有 `.env.example`；本文件与所有文档都不记录任何凭据值。
+- **Bot 已在真机 24/7 运行**：systemd 用户级单元 `groupbuddy.service`（`Restart=always`、`RestartSec=5`，配合 `Linger=yes` 开机自启），真机证据见 §4.3，部署契约见 `docs/deployment.md` §12.9。
+- **真实 `.env` 已就位**：`/home/bot/app/.env`（`600`、`bot:bot`，只写覆盖项，绝对路径）；仓库内仍只有 `.env.example`，本文件与所有文档都不记录任何凭据值。
 - **未配置正式远端**：代码同步通过临时 git bundle + SSH 完成，`origin` 不可用。
-- 备份/恢复任务、`PRAGMA optimize` / `VACUUM`、人群托管（systemd/容器 restart）：属阶段 8/9，尚未实现（阶段 8 已完成群主命令、群设定写入、配额、运行指标 `/stats`/`/health`、`host_info` 与四模式生效，见 §2）。
+- 备份/恢复任务与恢复演练、更新回滚流程、`PRAGMA optimize` / `VACUUM`：属阶段 9 的未完成部分，尚未实现（阶段 8 的能力见 §2）。
 - 阶段 8 内明确留到后续的项：`/clear`（群主清理本群消息原文）、链 3 的工具轮次按意图分档（`TOOL_MAX_ROUNDS` 仍为全局 2）、模型档位路由（未决问题 #2）。
 - 未引入 CI、lint、类型检查、锁文件（见 `TODO.md` T27）。
 
@@ -95,7 +116,7 @@ Tier B 4/4：本群 workspace 读写（非 root）、宿主侧可见、其他群
 ## 7. 下一步
 
 1. **阶段 8 已全部完成并通过真机验收**（真机 `88531d2`：416 条全量 OK、沙箱 13 项全 PASS、migration 4 与 `host_info` Linux 行为符合契约）：F5.2（管理员判定 + 命令通道 + T12）、F5.1（`/settings <字段> <值>` 写入、即时生效）、F5.3（日/月配额）、F5.4（`/stats` + `/health`，`tool_failures` 留痕与 7 天清理，与 `storage/health.json` 同一内部状态）、F4.7（`host_info`：`cpu`/`memory`/`disk_free`/`python`/`uptime_s`，L4 + `allow_host_info` 默认关）与四模式（`78ae9cf`：窗口 / 输出上限 / 工具档位，`docs/token.md` §5）。阶段 8 内明确留到后续的只有 `/clear`、链 3 轮次分档、模型档位路由。
-2. 阶段 9（部署与 24/7 运行：`BOT_TOKEN` 落 `.env`、systemd/容器托管、备份恢复）需用户授权后开工；真机当前仍无 `.env`、未启动 Bot、未配 systemd。
+2. **阶段 9（部署与 24/7）进行中**：最小生产闭环已完成并真机验证（systemd 用户级单元、真实 `.env`、启动时 migration、health 心跳、Telegram 真机收发、stop/start/restart 与 `SIGKILL` 自动重启，见 §4.3 与 `docs/deployment.md` §12.9）。阶段 9 未完成部分：备份与恢复演练、更新回滚流程、容器托管（`Dockerfile`/`compose.yaml`，可选路径）。
 3. 是否立项修 B 组技术债（`TODO.md` T4 / T7 / T9 / T10 / T25 等；T1–T3 已随 `f7f34b5`、T12 已随 `7382639`、T15 已随 `101c26c` 修复）。
 4. 是否配置正式远端（GitHub），以便后续换 Agent 维护。
 
@@ -108,6 +129,17 @@ python -m unittest discover -s tests -t .
 # 真机（Linux VPS，bot 用户；注意用单引号包住 bash -lc 的内容）
 sudo -u bot bash -lc 'cd /home/bot/app && .venv/bin/python -m unittest discover -s tests -t .'
 sudo -u bot bash -lc 'cd /home/bot/app && .venv/bin/python scripts/verify_sandbox.py'   # 需要容器运行时
+```
+
+生产托管（阶段 9，systemd 用户级单元；root 操作 bot 的 `--user` 实例必须显式给 `XDG_RUNTIME_DIR`）：
+
+```bash
+U=bot; R=/run/user/$(id -u "$U")
+sudo -u "$U" env XDG_RUNTIME_DIR=$R systemctl --user is-enabled groupbuddy.service
+sudo -u "$U" env XDG_RUNTIME_DIR=$R systemctl --user show -p MainPID -p NRestarts -p ActiveState -p ExecMainStartTimestamp groupbuddy.service
+sudo -u "$U" env XDG_RUNTIME_DIR=$R systemctl --user start|stop|restart groupbuddy.service
+cat /home/bot/app/storage/health.json          # checked_at 每 60 秒推进
+tail -n 20 /home/bot/app/storage/logs/bot.log # 用户级 journalctl 在目标机无 journal 文件
 ```
 
 代码同步（无正式远端时的临时通道，替换 `<sha>`）：
@@ -126,4 +158,5 @@ sudo -u bot bash -lc 'cd /home/bot/app && git bundle verify /tmp/dsh_deploy_<sha
 
 约束：`/home/bot/app` 属主是 `bot`，root 直接执行 git 会报 `dubious ownership`，所有 git 操作必须经 `sudo -u bot bash -lc '…'`；
 `podman images` / `podman ps` 必须在 `bot` 用户可读的目录（如 `/home/bot/app`）里执行，否则会因 `cannot chdir to /root` 而失败；
-**`bash -lc` 的内容必须用单引号，不要用双引号**：双引号会让外层 shell 先展开 `$(…)` / `$?` / `$HOME`，实测导致 `cd` 未生效（留在 `/root`，报 `.venv/bin/python: No such file or directory`）且重定向文件变成 root 所有（`bot` 再写就 `Permission denied`）。
+**`bash -lc` 的内容必须用单引号，不要用双引号**：双引号会让外层 shell 先展开 `$(…)` / `$?` / `$HOME`，实测导致 `cd` 未生效（留在 `/root`，报 `.venv/bin/python: No such file or directory`）且重定向文件变成 root 所有（`bot` 再写就 `Permission denied`）；
+`systemctl --user` 在 root 会话下必须带 `XDG_RUNTIME_DIR=/run/user/<uid>`（否则 `Failed to connect to bus: No medium found`），且**必须给单元名**（`systemctl --user is-active` 不带名字会报 `Too few arguments.`）。

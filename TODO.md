@@ -9,7 +9,7 @@
 **当前事实只有一个来源：`docs/status.md`**（commit、已完成能力、本机与真机测试、真机验收证据、技术债摘要、下一步）。本节只保留阶段进度。
 
 - 阶段 0–7：**已完成**。阶段 0 含部署约束增补（Windows 开发 / Linux VPS 24/7 生产，同一份代码，见 `docs/deployment.md`）；阶段 1 曾通过真实 Telegram + DeepSeek 端到端验收；阶段 7 的 Linux/Podman 真机验收**已完成**（13/13 PASS，commit 与日志路径见 `docs/status.md`）。
-- 阶段 8（权限、配额与运维）：**已完成并通过真机验收**（真机 checkout `88531d2` = 本机 `main` HEAD：416 条全量 OK、沙箱 13 项全 PASS、migration 4 与 `host_info` Linux 行为符合契约，见 `docs/status.md` §4.2）—— 群主命令最小闭环（管理员判定 + `/settings` 回显与写入 + 非管理员被拒，见 `docs/security.md` §2.1）、日/月 token 配额（见 `docs/token.md` §4.1）、运行指标 `/stats` + `/health`（与 `storage/health.json` 同一状态，见 `docs/deployment.md` §7）、`host_info`（F4.7）、四模式完整生效（`docs/token.md` §5）以及 T12/T15；阶段 8 内明确留到后续的只有 `/clear`、链 3 轮次分档与模型档位路由。阶段 9（部署与 24/7 运行）、阶段 10（Web 控制面板与多实例）：**未开始**。阶段 10 仅完成架构预留（`docs/domain.md`、`docs/architecture.md` §10），未开发面板、未建控制面表。
+- 阶段 8（权限、配额与运维）：**已完成并通过真机验收**（真机 checkout `88531d2` = 本机 `main` HEAD：416 条全量 OK、沙箱 13 项全 PASS、migration 4 与 `host_info` Linux 行为符合契约，见 `docs/status.md` §4.2）—— 群主命令最小闭环（管理员判定 + `/settings` 回显与写入 + 非管理员被拒，见 `docs/security.md` §2.1）、日/月 token 配额（见 `docs/token.md` §4.1）、运行指标 `/stats` + `/health`（与 `storage/health.json` 同一状态，见 `docs/deployment.md` §7）、`host_info`（F4.7）、四模式完整生效（`docs/token.md` §5）以及 T12/T15；阶段 8 内明确留到后续的只有 `/clear`、链 3 轮次分档与模型档位路由。阶段 9（部署与 24/7 运行）：**进行中 —— 最小生产闭环已完成并通过真机实测**（systemd 用户级单元 `groupbuddy.service`、真实 `.env` 600、启动时 migration、`storage/health.json` 心跳、Telegram 真机收发、stop/start/restart 与 `SIGKILL` 自动重启；证据见 `docs/status.md` §4.3、契约见 `docs/deployment.md` §12.9），未完成部分见 §阶段 9 的「待做」。阶段 10（Web 控制面板与多实例）：**未开始**。阶段 10 仅完成架构预留（`docs/domain.md`、`docs/architecture.md` §10），未开发面板、未建控制面表。
 - 一次只推进一个阶段；不得跳阶段。
 
 ## 阶段表
@@ -115,6 +115,8 @@
 - 前置：阶段 7 沙箱可用（需要容器运行时）。
 - 验收：容器/VPS 重建后数据仍在（`bot.db` 与 workspace 未丢）；程序重启后自动恢复运行；
   SIGTERM 能优雅退出；上一份备份能恢复出可用数据库；日志与错误消息中无 Secret。
+- 已完成（最小生产闭环，2026-10-07 真机实测，证据见 `docs/status.md` §4.3）：采用 **systemd 用户级单元** `groupbuddy.service`（`/home/bot/.config/systemd/user/`，`Restart=always` + `RestartSec=5` + `KillSignal=SIGTERM` + `TimeoutStopSec=30` + `NoNewPrivileges=yes`，配合 `Linger=yes` 开机自启；模板与命令见 `docs/deployment.md` §12.9），**不引入容器编排、不开新端口、不改代码**；真实 `.env`（`600`、`bot:bot`、绝对路径）就位；启动时 migration 到 `user_version`=4；`storage/health.json` 60 秒心跳；Telegram 真机收发（`updates`/`messages`/`usage` 落库、`last_update_at` 更新、日志无 WARNING/ERROR）；`systemctl --user stop` 走 SIGTERM 优雅关闭（`收到信号 signum=15` → `已关闭`）、`start`/`restart` 恢复、`kill -9` 后 `NRestarts` 0→1 自动拉起。
+- 待做（阶段 9 剩余）：备份与恢复演练（`sqlite3 .backup` + 恢复验证）、更新回滚流程落地、容器托管（`Dockerfile`/`compose.yaml`，可选路径）、`PRAGMA optimize`/`VACUUM` 例行化。
 
 ### 阶段 10 · Web 控制面板与多实例（暂不开发，仅预留）
 

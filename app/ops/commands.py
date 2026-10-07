@@ -5,6 +5,7 @@
 `/settings <字段> <值>` 只允许 F5.1 列出的字段（模式、工具开关、贴纸冷却），
 非法字段/非法值一律只回一条提示且**不写库**（docs/requirements.md F5.1）。
 `/stats` 与 `/health` 只读：文案由 `app/ops/metrics.py` 渲染，不含路径、堆栈与凭据。
+`/clear` 只删本群 `messages` 原文（`docs/database.md` §4）：摘要、用量与统计数据保留，其他群不受影响。
 """
 
 from __future__ import annotations
@@ -19,7 +20,7 @@ from app.config import Settings
 from app.ops.admin import AdminRegistry
 from app.ops.health import HealthState
 from app.ops.metrics import render_health, render_stats
-from app.storage.repo import chat_settings
+from app.storage.repo import chat_settings, messages
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ PREFIX = "/"
 SETTINGS = "settings"
 STATS = "stats"
 HEALTH = "health"
+CLEAR = "clear"
 
 #: 非管理员只看到这一句：不泄露设置内容，也不透露内部判定原因。
 DENIED_TEXT = "这个命令只有群管理员能用。"
@@ -54,6 +56,10 @@ BOOL_FALSE = frozenset({"off", "关"})
 
 #: 写入失败只回这一句：不把 SQLite 细节暴露到聊天里。
 WRITE_FAILED_TEXT = "写入失败，请稍后重试。"
+
+#: `/clear` 的用法与失败文案（同样不泄露数据库细节）。
+CLEAR_USAGE = "用法：/clear"
+CLEAR_FAILED_TEXT = "清理失败，请稍后重试。"
 
 
 @dataclass(frozen=True, slots=True)
@@ -170,7 +176,7 @@ class CommandService:
 
     async def reply_text(self, *, chat_id: int, user_id: int, command: Command) -> str | None:
         """返回要发送的文本；None 表示静默丢弃（未知命令或未装配的数据源）。"""
-        if command.name not in (SETTINGS, STATS, HEALTH):
+        if command.name not in (SETTINGS, STATS, HEALTH, CLEAR):
             logger.debug("未实现的命令 chat_id=%s name=%s", chat_id, command.name)
             return None
         if not await self._admins.is_admin(chat_id, user_id):
@@ -178,6 +184,8 @@ class CommandService:
                 "命令被拒 chat_id=%s user_id=%s name=%s 原因=not_admin", chat_id, user_id, command.name
             )
             return DENIED_TEXT
+        if command.name == CLEAR:
+            return await self._clear(chat_id=chat_id, user_id=user_id, args=command.args)
         if command.name == STATS:
             if self._settings is None:
                 logger.warning("未装配配置，/stats 不可用 chat_id=%s", chat_id)
@@ -205,3 +213,15 @@ class CommandService:
             return WRITE_FAILED_TEXT
         logger.info("群设置已更新 chat_id=%s user_id=%s 字段=%s", chat_id, user_id, field.column)
         return f"已更新：{field.name} = {render_value(field, value)}"
+
+    async def _clear(self, *, chat_id: int, user_id: int, args: tuple[str, ...]) -> str:
+        """`/clear`：只删本群消息原文（`docs/database.md` §4）；摘要、用量与统计保留。"""
+        if args:
+            return CLEAR_USAGE
+        try:
+            deleted = await messages.clear_chat(self._connection, chat_id)
+        except aiosqlite.Error:
+            logger.exception("群消息清理失败 chat_id=%s", chat_id)
+            return CLEAR_FAILED_TEXT
+        logger.info("群消息已清理 chat_id=%s user_id=%s rows=%s", chat_id, user_id, deleted)
+        return f"已清理本群消息原文 {deleted} 条；群摘要保留。"

@@ -14,6 +14,8 @@ from app.gate.trigger import TriggerDetector
 from app.llm.loop import Responder
 from app.ops.admin import AdminRegistry
 from app.ops.commands import (
+    CLEAR_FAILED_TEXT,
+    CLEAR_USAGE,
     COOLDOWN_MAX_SECONDS,
     DENIED_TEXT,
     FIELD_NAMES,
@@ -25,7 +27,7 @@ from app.ops.commands import (
 )
 from app.session.context import ContextBuilder
 from app.session.runner import SessionRunner
-from app.storage.repo import chat_settings, messages
+from app.storage.repo import chat_settings, messages, summaries
 from tests.offline.helpers import DbTestCase, FakeClock, FakeLLMClient, make_incoming
 
 
@@ -236,7 +238,7 @@ class RunnerCommandTests(DbTestCase):
             commands=make_service(self.connection, {7}),
         )
         await runner.handle(
-            make_incoming(update_id=3, chat_id=-100, message_id=7, user_id=7, text="/clear")
+            make_incoming(update_id=3, chat_id=-100, message_id=7, user_id=7, text="/nosuch")
         )
         self.assertEqual(outbound.sent, [])
 
@@ -387,6 +389,77 @@ class SettingCommandTests(DbTestCase):
         assert text is not None
         self.assertNotIn("locked", text)
         self.assertEqual(await self._row_count(-100), 0)
+
+
+class ClearCommandTests(DbTestCase):
+    """`/clear`：群主清理本群消息原文；摘要保留，其他群与统计不受影响。"""
+
+    async def _reply(self, service: CommandService, text: str, *, user_id: int = 7) -> str | None:
+        command = parse_command(text)
+        assert command is not None
+        return await service.reply_text(chat_id=-100, user_id=user_id, command=command)
+
+    async def _seed(self, chat_id: int, count: int = 3) -> None:
+        for index in range(count):
+            await messages.insert(
+                self.connection,
+                chat_id=chat_id,
+                message_id=100 + index,
+                user_id=7,
+                role="user",
+                text=f"第 {index} 条",
+            )
+
+    async def _stored(self, chat_id: int) -> int:
+        cursor = await self.connection.execute(
+            "SELECT COUNT(*) FROM messages WHERE chat_id = ?", (chat_id,)
+        )
+        row = await cursor.fetchone()
+        await cursor.close()
+        assert row is not None
+        return int(row[0])
+
+    async def test_admin_clears_only_this_chat_and_keeps_summaries(self) -> None:
+        await self._seed(-100)
+        await self._seed(-200, count=2)
+        await summaries.insert(self.connection, chat_id=-100, text="摘要正文", tokens="摘要 正文")
+        service = make_service(self.connection, {7})
+        text = await self._reply(service, "/clear")
+        self.assertEqual(text, "已清理本群消息原文 3 条；群摘要保留。")
+        self.assertEqual(await self._stored(-100), 0)
+        self.assertEqual(await self._stored(-200), 2)
+        self.assertIsNotNone(await summaries.latest(self.connection, chat_id=-100))
+
+    async def test_clear_on_an_empty_chat_reports_zero(self) -> None:
+        service = make_service(self.connection, {7})
+        self.assertEqual(await self._reply(service, "/clear"), "已清理本群消息原文 0 条；群摘要保留。")
+
+    async def test_non_admin_cannot_clear(self) -> None:
+        await self._seed(-100)
+        service = make_service(self.connection, {7})
+        text = await self._reply(service, "/clear", user_id=9)
+        self.assertEqual(text, DENIED_TEXT)
+        assert text is not None
+        self.assertNotIn("清理", text)
+        self.assertEqual(await self._stored(-100), 3)
+
+    async def test_arguments_show_usage_without_clearing(self) -> None:
+        await self._seed(-100)
+        service = make_service(self.connection, {7})
+        self.assertEqual(await self._reply(service, "/clear now"), CLEAR_USAGE)
+        self.assertEqual(await self._stored(-100), 3)
+
+    async def test_clear_failure_is_reported_without_leaking_details(self) -> None:
+        await self._seed(-100)
+        service = make_service(self.connection, {7})
+        with mock.patch.object(
+            messages, "clear_chat", side_effect=aiosqlite.Error("database is locked")
+        ):
+            text = await self._reply(service, "/clear")
+        self.assertEqual(text, CLEAR_FAILED_TEXT)
+        assert text is not None
+        self.assertNotIn("locked", text)
+        self.assertEqual(await self._stored(-100), 3)
 
 
 if __name__ == "__main__":

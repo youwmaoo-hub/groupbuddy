@@ -69,7 +69,7 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | 领域 | `app/domain/bot_instance.py` | 领域对象：`BotInstance` 与 `LLMCredentials`（凭据唯一归属，见 `docs/domain.md` §1、§4） |
 | 模式（阶段 8） | `app/modes.py` | 四模式档位唯一权威表：窗口 / 输出上限 / 工具档位 / 贴纸（`docs/token.md` §5）；未知值按 normal |
 | 运维/权限（阶段 8） | `app/ops/admin.py` | 本群管理员判定唯一入口：Telegram 管理员 + 进程内缓存，查询失败 fail-closed |
-| | `app/ops/commands.py` | 群主命令通道：解析、管理员判定、读写本群设置与只读运行指标（`/settings`、`/stats`、`/health`；不进模型、0 token） |
+| | `app/ops/commands.py` | 群主命令通道：解析、管理员判定、读写本群设置、只读运行指标与清理本群消息（`/settings`、`/stats`、`/health`、`/clear`；不进模型、0 token） |
 | | `app/ops/quota.py` | 配额判定：调用模型前按 `chat_id` 检查日/月已用 token；`0` 或未配置 = 不限额 |
 | | `app/ops/health.py` | 健康状态唯一来源：`HealthState` 快照 + `storage/health.json` 心跳 + `/health` 共用；只读、原子写 |
 | | `app/ops/metrics.py` | `/stats` 文案渲染：当日 token 用量、工具调用/失败（错误率）、配额余量；只读不新建统计体系 |
@@ -86,7 +86,7 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 Telegram Update
   → parse（→ IncomingMessage）
   → dedupe（update_id 幂等；重复直接丢弃）
-  → 群主命令（`/settings` / `/stats` / `/health`：解析 → 管理员判定 → 读写本群设置或只读指标 → 出站；不进模型、不写 messages；未知命令静默丢弃）
+  → 群主命令（`/settings` / `/stats` / `/health` / `/clear`：解析 → 管理员判定 → 读写本群设置、只读指标或清理本群消息原文 → 出站；不进模型、不写 messages；未知命令静默丢弃）
   → filters（自身消息 / 服务消息 / 无文本 / 私聊默认 / 未分发的命令 → 丢弃）
   → 落库 messages
   → trigger（RESPOND | WAIT | IGNORE；冷却/窗口闸门是程序侧判定）

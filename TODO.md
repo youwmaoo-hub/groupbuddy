@@ -9,7 +9,7 @@
 **当前事实只有一个来源：`docs/status.md`**（commit、已完成能力、本机与真机测试、真机验收证据、技术债摘要、下一步）。本节只保留阶段进度。
 
 - 阶段 0–7：**已完成**。阶段 0 含部署约束增补（Windows 开发 / Linux VPS 24/7 生产，同一份代码，见 `docs/deployment.md`）；阶段 1 曾通过真实 Telegram + DeepSeek 端到端验收；阶段 7 的 Linux/Podman 真机验收**已完成**（13/13 PASS，commit 与日志路径见 `docs/status.md`）。
-- 阶段 8（权限、配额与运维）：**进行中** —— 已完成群主命令最小闭环（管理员判定 + `/settings` 回显与写入 + 非管理员被拒，见 `docs/security.md` §2.1）、日/月 token 配额（见 `docs/token.md` §4.1）与 T12；`/stats`、`/health` + `storage/health.json`、`host_info`、四模式待做。阶段 9（部署与 24/7 运行）、阶段 10（Web 控制面板与多实例）：**未开始**。阶段 10 仅完成架构预留（`docs/domain.md`、`docs/architecture.md` §10），未开发面板、未建控制面表。
+- 阶段 8（权限、配额与运维）：**进行中** —— 已完成群主命令最小闭环（管理员判定 + `/settings` 回显与写入 + 非管理员被拒，见 `docs/security.md` §2.1）、日/月 token 配额（见 `docs/token.md` §4.1）、运行指标 `/stats` + `/health`（与 `storage/health.json` 同一状态，见 `docs/deployment.md` §7）以及 T12/T15；`host_info`、四模式待做。阶段 9（部署与 24/7 运行）、阶段 10（Web 控制面板与多实例）：**未开始**。阶段 10 仅完成架构预留（`docs/domain.md`、`docs/architecture.md` §10），未开发面板、未建控制面表。
 - 一次只推进一个阶段；不得跳阶段。
 
 ## 阶段表
@@ -101,8 +101,9 @@
 - 交付：F5.1–F5.4、`host_info`（F4.7）、四种模式（`docs/token.md` §5）、`/health`（实现属本阶段；24/7 托管与自愈属阶段 9）
 - 验收：群主可开关工具等级；非管理员被拒；配额打满后优雅拒绝。
 - 已完成（`7382639` F5.2、`c49fdc5` F5.1）：群主命令通道 —— `app/ops/admin.py` 管理员判定（只认 `getChatAdministrators`、进程内缓存、失败 fail-closed）、`app/ops/commands.py` `/settings` 回显与 `/settings <字段> <值>` 写入（字段白名单：模式、6 个工具开关、贴纸冷却；非法输入不写库；改完当轮生效）、命令不进模型不写 messages 0 token、未知命令静默、非管理员固定文案；`chat_settings.upsert` 改为单条原子写入（T12）。
-- 待做：F5.4 `/stats` + `/health` + `storage/health.json`、F4.7 `host_info`、四模式（窗口/输出上限/工具档位）生效；`tool_failures` 表（T15）与 7 天清理。
+- 待做：F4.7 `host_info`、四模式（窗口/输出上限/工具档位）生效。
 - 已完成（`1d649b8` F5.3）：日/月 token 配额 —— `app/ops/quota.py` `QuotaGuard`（`QUOTA_DAILY_TOKENS` / `QUOTA_MONTHLY_TOKENS`，按 `chat_id` 分别统计，`0` 或未配置 = 不限额）、调用模型前判定（`>=` 上限即拒绝）、超额本轮不调模型不记账只回一句提示、命令不消耗配额；统计复用 `usage.tokens_used`（`input_tokens + output_tokens`，缓存命中不重复计入）。契约见 `docs/token.md` §4.1。
+- 已完成（`101c26c` F5.4）：运行指标 —— `app/ops/metrics.py` `/stats`（复用 `usage.summary_for_day` + `tool_failures.count`，按群当日 token 用量、工具调用/失败与错误率、配额余量；读取失败只回固定短句）、`app/ops/health.py` `/health` 与 `storage/health.json` 心跳**共用同一个 `HealthState`**（60 秒周期、原子写、快照无路径/堆栈/凭据）；`tool_failures` 表随 migration 4 建立（`app/storage/repo/tool_failures.py`，计入熔断的失败留痕、按群区间计数、7 天清理即 T15），命令仍走管理员判定、0 token、不进模型。契约见 `docs/security.md` §2.1、`docs/deployment.md` §7、`docs/database.md` §2/§4。
 
 ### 阶段 9 · 部署与 24/7 运行
 
@@ -164,7 +165,7 @@
 12. **T12（P2，已修复，`7382639`）`chat_settings.upsert` 读-改-写无锁**（`app/storage/repo/chat_settings.py`）：两次 await 之间可被改写，存在丢更新 —— 阶段 8 F5.2 改为单条原子 `INSERT … ON CONFLICT DO UPDATE`，只写调用方给出的列（离线测试用 `mock` 断言不再读取当前设置）。
 13. **T13（P2）`notes` 没有运行时写入路径** — 只有运维脚本 `scripts/register_note.py`；500 字上限也只在脚本里校验（`app/storage/repo/notes.py` 层无约束）。
 14. **T14（P2）`thread_id` 恒为 NULL** — `messages.recent()` 支持该参数（`app/storage/repo/messages.py:69-71`）但没有调用方传入；摘要、游标、FTS 都是 chat 级（阶段 8 做论坛主题隔离）。
-15. **T15（P2）`tool_failures` 表未建**（阶段 8），熔断状态只在进程内存（与 `docs/security.md` §9 一致）。
+15. **T15（P2，已修复，`101c26c`）`tool_failures` 表未建**（阶段 8 F5.4）—— migration 4 建表 + `idx_tool_failures_tool_time` / `idx_tool_failures_chat_time`，计入熔断的失败经 `ToolExecutor.failure_recorder` 留痕，启动时与每小时清理 7 天前记录（`app/storage/repo/tool_failures.py`）；进程内熔断计数仍在内存（与 `docs/security.md` §9 一致）。
 16. **T16（P2）纵深防御缺口** — `stickers.mark_used` 只按 `id`（`app/storage/repo/stickers.py:88-90`）、`DELETE FROM summaries WHERE id=?`（`summaries.py:134`）；当前所有调用路径都带 chat 校验，审查未发现可利用的越权路径。
 
 ### 工具与契约

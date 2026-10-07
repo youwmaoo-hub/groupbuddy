@@ -62,7 +62,7 @@ F2.1 只覆盖强触发；"不需要 @ 也能主动回复"（§2.1 第 1 条）�
 | F4.4 | `read_file` / `write_file`（限 workspace；行区间；原子写 + .bak） | P1 | 路径逃逸用例全部被拒；覆盖写有单层 `.bak`；非 UTF-8 与超过 1 MB 被拒 |
 | F4.5 | `send_sticker`（模型只给情绪值，不接触 file_id） | P2 | 情绪匹配（余弦 + tags 加分，低于阈值 `not_found`）且受冷却限制（冷却返回 `{sent:false,state:"cooldown",retry_after}`）；`file_id` 不出现在上下文/返回/日志 |
 | F4.6 | `run_code`（沙箱） | P2 | 无网络、越界失败、超时被 kill |
-| F4.7 | `host_info`（最小字段集） | P2 | 不含环境变量、进程、网络接口 |
+| F4.7 | `host_info`（最小字段集） | P2 | 不含环境变量、进程、网络接口（实现：`app/tools/builtin/host_info.py`，L4 + `allow_host_info` 默认关；字段与不可得字段的行为见 `docs/tools.md` §host_info） |
 | F4.8 | 工具熔断（本轮失败 2 次禁用；短时多次失败临时熔断） | P1 | 失败工具不再重复调用 |
 
 ### F5 权限与运维（阶段 8）

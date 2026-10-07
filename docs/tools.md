@@ -22,7 +22,7 @@
 | `write_file` | L2 | 群开关 | `path: str, content: str` | `{path,bytes,backup?: str}` | 5s |
 | `send_sticker` | L2 | 群开关 | `valence: float, arousal: float, tags?: [str]` | `{sent: bool, sticker_id: int}`；冷却中 `{sent: false, state: "cooldown", retry_after: N}` | 3s |
 | `run_code` | L3 | 群开关（默认关） | `code: str, timeout_s?: int=15, workspace?: bool=false` | `{exit_code,stdout,stderr,truncated}` | 30s（ToolSpec 35s） |
-| `host_info` | L4 | 默认关 | `fields?: [str]` | `{cpu,memory,disk_free,python,uptime_s}` | 2s（**阶段 8 设计**：无实现文件、从未注册） |
+| `host_info` | L4 | 默认关 | `fields?: [str]`（省略＝全部五个，去重、未知字段拒绝） | `{cpu,memory,disk_free,python,uptime_s}`（不可得字段为 `null`） | 2s |
 
 ### calc
 
@@ -67,8 +67,10 @@
 
 ### host_info
 
-- 只允许 `cpu`、`memory`、`disk_free`、`python`、`uptime_s` 五个字段。
+- 只允许 `cpu`、`memory`、`disk_free`、`python`、`uptime_s` 五个字段；`fields` 省略＝全部五个，顺序按请求、自动去重，出现未知字段即 `invalid_arguments`（错误消息不含字段值）。
 - 禁止环境变量、进程命令行、网络接口、主机名、用户目录、IP。
+- 取值来源（见 `app/tools/builtin/host_info.py`）：`cpu`＝`os.cpu_count()`；`memory`＝`os.sysconf` 的物理页数×页大小（不支持的平台为 `null`）；`disk_free`＝Bot 数据目录所在文件系统的剩余字节（只回数字，不回路径）；`python`＝`platform.python_version()`；`uptime_s`＝宿主机运行时长（Linux 读 `/proc/uptime`，读不到时退回本进程运行时长）。
+- 只读、无网络、无外部进程调用；任一字段取不到都返回 `null`，不报错、不泄露原因。
 
 ## 3. 错误码（统一格式）
 

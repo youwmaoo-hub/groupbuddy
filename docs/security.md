@@ -36,7 +36,7 @@
 |---|---|---|---|---|---|---|---|
 | 开关列 | — | `allow_search` | `allow_read` | `allow_write` | `allow_sticker` | `allow_code` | `allow_host_info` |
 
-工具可用 = 已注册 ∩ 本群开关；未注册、或注册但未登记等级的工具一律拒绝（fail-closed）。第 3 步的身份判定由 `app/ops/admin.py`（`AdminRegistry`）提供：目前只有群主命令用它；将来某个等级要求管理员时，工具侧复用同一个判定，不另起一套。当前已注册的等级是 L0–L3（`calc`/`search_web`/`read_file`/`write_file`/`send_sticker`/`run_code`）；L4 的 `host_info` 属阶段 8，代码里无实现、从未注册。
+工具可用 = 已注册 ∩ 本群开关；未注册、或注册但未登记等级的工具一律拒绝（fail-closed）。第 3 步的身份判定由 `app/ops/admin.py`（`AdminRegistry`）提供：目前只有群主命令用它；将来某个等级要求管理员时，工具侧复用同一个判定，不另起一套。当前已注册的等级是 L0–L4：L0–L3 为 `calc`/`search_web`/`read_file`/`write_file`/`send_sticker`/`run_code`，L4 为 `host_info`（阶段 8 F4.7；始终注册，能否调用只看 `allow_host_info`，默认关；等级本身不要求管理员）。
 
 系统提示（System3）只能注入**已裁剪**的工具清单；模型永远不能提升自己的权限。
 - **授权只由后端判定**：前端隐藏按钮、前端参数、面板传入的身份都不构成授权；面板改设置走同一条判定（`docs/domain.md` §3）。

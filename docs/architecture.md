@@ -58,7 +58,7 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | | `app/tools/policy.py` | 权限判定唯一出口（等级 → 本群开关，见 `docs/security.md` §2） |
 | | `app/tools/executor.py` | 注册表 → 权限 → schema → 执行 → 结构化结果；失败计数与熔断 |
 | | `app/tools/workspace.py` | 路径解析与文件安全（workspace 越界、符号/硬链接、UTF-8、1 MB、原子写 + 单层 `.bak`）——`read_file`/`write_file` 共用的唯一实现 |
-| | `app/tools/builtin/*.py` | 已实现 `calc`、`search_web`（接口）、`read_file`、`write_file`、`send_sticker`、`run_code`；`host_info` 属阶段 8 |
+| | `app/tools/builtin/*.py` | 已实现 `calc`、`search_web`（接口）、`read_file`、`write_file`、`send_sticker`、`run_code`、`host_info`（L4，阶段 8 F4.7） |
 | 沙箱 | `app/sandbox/spec.py` | 容器 argv 白名单的唯一拼装点（模型改不了镜像/挂载/runtime） |
 | | `app/sandbox/backends.py` | podman/docker CLI 调用与**启动时探测一次**；`FakeBackend` 供离线测试 |
 | | `app/sandbox/runner.py` | `run_code` 唯一执行入口：并发闸门、超时销毁容器、输出截断、临时文件清理 |

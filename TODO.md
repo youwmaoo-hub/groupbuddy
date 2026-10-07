@@ -9,7 +9,7 @@
 **当前事实只有一个来源：`docs/status.md`**（commit、已完成能力、本机与真机测试、真机验收证据、技术债摘要、下一步）。本节只保留阶段进度。
 
 - 阶段 0–7：**已完成**。阶段 0 含部署约束增补（Windows 开发 / Linux VPS 24/7 生产，同一份代码，见 `docs/deployment.md`）；阶段 1 曾通过真实 Telegram + DeepSeek 端到端验收；阶段 7 的 Linux/Podman 真机验收**已完成**（13/13 PASS，commit 与日志路径见 `docs/status.md`）。
-- 阶段 8（权限、配额与运维）：**已完成并通过真机验收**（真机 checkout `88531d2` = 本机 `main` HEAD：416 条全量 OK、沙箱 13 项全 PASS、migration 4 与 `host_info` Linux 行为符合契约，见 `docs/status.md` §4.2）—— 群主命令最小闭环（管理员判定 + `/settings` 回显与写入 + 非管理员被拒，见 `docs/security.md` §2.1）、日/月 token 配额（见 `docs/token.md` §4.1）、运行指标 `/stats` + `/health`（与 `storage/health.json` 同一状态，见 `docs/deployment.md` §7）、`host_info`（F4.7）、四模式完整生效（`docs/token.md` §5）以及 T12/T15；阶段 8 内明确留到后续的只有 `/clear`、链 3 轮次分档与模型档位路由。阶段 9（部署与 24/7 运行）：**进行中 —— 最小生产闭环已完成并通过真机实测**（systemd 用户级单元 `groupbuddy.service`、真实 `.env` 600、启动时 migration、`storage/health.json` 心跳、Telegram 真机收发、stop/start/restart 与 `SIGKILL` 自动重启；证据见 `docs/status.md` §4.3、契约见 `docs/deployment.md` §12.9），**备份/恢复与更新/回滚演练也已完成并真机验证**（`scripts/backup_db.py` + §8.1 bundle 流程，真机当前 `bc31c41`：422 条 OK、沙箱 13 项全 PASS，证据见 `docs/status.md` §4.4），未完成部分见 §阶段 9 的「待做」。阶段 10（Web 控制面板与多实例）：**未开始**。阶段 10 仅完成架构预留（`docs/domain.md`、`docs/architecture.md` §10），未开发面板、未建控制面表。
+- 阶段 8（权限、配额与运维）：**已完成并通过真机验收**（真机 checkout `88531d2` = 本机 `main` HEAD：416 条全量 OK、沙箱 13 项全 PASS、migration 4 与 `host_info` Linux 行为符合契约，见 `docs/status.md` §4.2）—— 群主命令最小闭环（管理员判定 + `/settings` 回显与写入 + 非管理员被拒，见 `docs/security.md` §2.1）、日/月 token 配额（见 `docs/token.md` §4.1）、运行指标 `/stats` + `/health`（与 `storage/health.json` 同一状态，见 `docs/deployment.md` §7）、`host_info`（F4.7）、四模式完整生效（`docs/token.md` §5）以及 T12/T15；阶段 8 内明确留到后续的只有链 3 轮次分档与模型档位路由（`/clear` 作为阶段 8 留后项已于 `8b14aab` 补做，见 §阶段 8）。阶段 9（部署与 24/7 运行）：**进行中 —— 最小生产闭环已完成并通过真机实测**（systemd 用户级单元 `groupbuddy.service`、真实 `.env` 600、启动时 migration、`storage/health.json` 心跳、Telegram 真机收发、stop/start/restart 与 `SIGKILL` 自动重启；证据见 `docs/status.md` §4.3、契约见 `docs/deployment.md` §12.9），**备份/恢复与更新/回滚演练也已完成并真机验证**（`scripts/backup_db.py` + §8.1 bundle 流程，真机当前 `bc31c41`：422 条 OK、沙箱 13 项全 PASS，证据见 `docs/status.md` §4.4），未完成部分见 §阶段 9 的「待做」。阶段 10（Web 控制面板与多实例）：**未开始**。阶段 10 仅完成架构预留（`docs/domain.md`、`docs/architecture.md` §10），未开发面板、未建控制面表。
 - 一次只推进一个阶段；不得跳阶段。
 
 ## 阶段表
@@ -106,7 +106,8 @@
 - 已完成（`de73b57` F4.7）：`host_info` —— `app/tools/builtin/host_info.py`（L4、`allow_host_info` 默认关、`build_registry` 始终注册），只暴露 `cpu`/`memory`/`disk_free`/`python`/`uptime_s`，`fields` 可选（去重、未知字段 `invalid_arguments`）；不读环境变量、不列进程、不查网络接口，不含主机名/用户名/IP/路径；取不到的字段返回 `null`。契约见 `docs/tools.md` §host_info、`docs/requirements.md` F4.7。
 - 已完成（`78ae9cf` 四模式，阶段 8 收尾）：`app/modes.py` 作为 `docs/token.md` §5 的唯一权威表 —— economy（窗口 10、只 L0、输出 256、贴纸关）、normal（意图分档 10/20/50、群开关、配置输出）、smart（窗口 50 + 额外 L0 只读）、unrestricted（窗口 50 + 全部已注册工具 + 输出不限）；`app/session/context.py` 按模式定窗口、`app/session/runner.py` 按模式定输出上限、`app/tools/policy.py` 按模式定工具档位、`app/ops/commands.py` 的 `MODES` 指向同一来源；模式只能由管理员 `/settings mode <值>` 修改，未知值按 normal，默认（normal）行为与升级前一致。契约见 `docs/token.md` §5、`docs/security.md` §2.2。
 - 真机验收（`88531d2`，2026-10-07）：VPS 工作树干净、跟踪文件 132；bot 用户全量 `Ran 416 tests` / `OK` / 退出码 0（无 skip、无 FAIL/ERROR）；`scripts/verify_sandbox.py` 13 项全 PASS、失败 0（与阶段 7 无回归）；migration 4 建出 `tool_failures` + 两个索引（`user_version` = 4）；`host_info` Linux 实测 cpu=2、memory=4105363456（= `/proc/meminfo`）、disk_free=35596984320、python=`3.11.2`、uptime_s=68691（= `/proc/uptime`）。逐项结果见 `docs/status.md` §4.2。
-- 待做（阶段 8 内明确留到后续）：`/clear`（群主清理本群消息原文）、链 3 工具轮次按意图分档（`TOOL_MAX_ROUNDS` 仍为全局 2）、模型档位路由（未决问题 #2）。
+- 已完成（`8b14aab`，阶段 8 留后项补做）：`/clear` —— `app/ops/commands.py` 的 `_clear`（管理员限定、只删本群 `messages` 原文、摘要与用量保留、带参数只回用法、失败固定短句），复用既有 `messages.clear_chat`（T21 死代码条目随之关闭）；契约见 `docs/security.md` §2.1、`docs/database.md` §4。
+- 待做（阶段 8 内明确留到后续）：链 3 工具轮次按意图分档（`TOOL_MAX_ROUNDS` 仍为全局 2）、模型档位路由（未决问题 #2）。
 
 ### 阶段 9 · 部署与 24/7 运行
 
@@ -183,7 +184,7 @@
 
 ### 代码质量与死代码
 
-21. **T21（P2）无调用方的死代码**：`Debouncer.flush/flush_all/pending_chats`（`app/gate/debounce.py:76,79,85`）、`UpdateDeduplicator.purge`（`app/gate/dedupe.py:20`）、`Settings.env_present`（`app/config.py:230`）、`get_logger`（`app/logging_setup.py:66`）、`messages.clear_chat`（阶段 8 预留，`app/storage/repo/messages.py:149`）、`StickerStore` 协议（`app/storage/repo/stickers.py:93`）、`SandboxErrorLike`（`app/tools/builtin/run_code.py:43`）。
+21. **T21（P2）无调用方的死代码**：`Debouncer.flush/flush_all/pending_chats`（`app/gate/debounce.py:76,79,85`）、`UpdateDeduplicator.purge`（`app/gate/dedupe.py:20`）、`Settings.env_present`（`app/config.py:230`）、`get_logger`（`app/logging_setup.py:66`）、`StickerStore` 协议（`app/storage/repo/stickers.py:93`）、`SandboxErrorLike`（`app/tools/builtin/run_code.py:43`）。（原条目里的 `messages.clear_chat` 已被 `/clear` 接上，`8b14aab`，不再计入死代码。）
 22. **T22（P2）docstring 失准**：`app/config.py:205` 称 `Settings` 不可变但没设 `frozen`；`app/gate/dedupe.py:1` 写「批次级去重」实为逐 `update_id`。
 23. **T23（P2）装配路径瑕疵**：`app/main.py:67` 重复调用 `apply_migrations`（第二次为空操作）；`:185`/`:190` 正常路径 `shutdown()` 走两次；`app/sandbox/backends.py:290-296` 日志占位符把 `keep_id` 填进 `workspace=%s`；`app/tools/workspace.py:109-110` 死代码。
 24. **T24（P2）业务层反向依赖适配层**：`app/gate/debounce.py:10`、`app/gate/filters.py:7`、`app/gate/trigger.py:14`、`app/session/runner.py:22` 反向 import `app.telegram.parse`，与 `docs/architecture.md` §2 冲突；`app/telegram/__init__.py` 一旦变成 re-export 就形成环。

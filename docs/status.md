@@ -10,11 +10,11 @@
 |---|---|
 | 代码 commit | `f7f34b5b2cf5438efd4742ae47e0544728a1e94c`（短 `f7f34b5`，分支 `main`） |
 | 跟踪文件数 | 116（`git ls-files`） |
-| 提交数 | 13（阶段提交 + 文档治理 `b529741` + A1–A3 修复 `f7f34b5`） |
+| 提交数 | 14（阶段提交 + 文档治理 `b529741` + A1–A3 修复 `f7f34b5` + 文档同步 `3347301` + 本次部署记录提交） |
 | 本机工作树 | 干净（`git status --porcelain` 无输出） |
-| 真机仓库 | `/home/bot/app` = detached HEAD @ `434f2f8`，工作树干净，属主 `bot:bot`；**尚未同步本机 `f7f34b5`**（本轮未连接 VPS） |
-| 真机远端 | `origin` 仍指向已删除的临时 bundle，**fetch/push 不可用**；尚未配置正式远端（未建 GitHub remote、未 push） |
-| 运行时目录 | 真机 `storage/` 当前不存在（验收后已清空，下次启动自动重建） |
+| 真机仓库 | `/home/bot/app` = detached HEAD @ `3347301`，工作树干净，属主 `bot:bot`；**代码基线已同步**（真机 checkout `3347301` 的代码内容 = 本机 `f7f34b5`）；本机其后的部署记录为纯文档提交，未上真机且不影响运行 |
+| 真机远端 | `origin` = VPS `/tmp/dsh_deploy_3347301.bundle`（文件存在，可 `git fetch`；仍未配置正式远端，未建 GitHub remote、未 push） |
+| 运行时目录 | 真机 `storage/` 存在（本轮沙箱验收自动创建）：`logs/`、`sandbox/`、`workspaces/{999001,999002}` 均为空目录，属主 `bot:bot` |
 
 ## 2. 已完成阶段与能力
 
@@ -54,9 +54,10 @@
 
 | 检查 | 命令 | 结果 |
 |---|---|---|
-| 全量离线测试 | `sudo -u bot bash -lc "cd /home/bot/app && .venv/bin/python -m unittest discover -s tests -t ."` | `Ran 283 tests` / `OK` / 退出码 0（Linux 上无 skip；对应真机 checkout `434f2f8`，A1–A3 新增的 10 条回归尚未在真机跑过） |
-| 沙箱真机验收 | `sudo -u bot bash -lc "cd /home/bot/app && .venv/bin/python scripts/verify_sandbox.py"` | **13 项全 PASS，失败 0 项**，退出码 0；`Tier A：PASS`、`Tier B：PASS` |
-| 验收日志 | 保留在 VPS `/tmp/dsh_verify_434f2f8.log`（26 行） | 执行后容器数 0；`storage/sandbox` 与 `storage/workspaces/{999001,999002}` 已清空 |
+| 全量离线测试 | `sudo -u bot bash -lc "cd /home/bot/app && .venv/bin/python -m unittest discover -s tests -t ."` | `Ran 293 tests` / `OK` / 退出码 0（Linux 上无 skip；对应真机 checkout `3347301`，含 A1–A3 的 10 条回归） |
+| 沙箱真机验收 | `sudo -u bot bash -lc "cd /home/bot/app && .venv/bin/python scripts/verify_sandbox.py"` | **13 项全 PASS，失败 0 项**，退出码 0；`Tier A：PASS`、`Tier B：PASS`（对应真机 checkout `3347301`） |
+| 证据日志 | 保留在 VPS `/tmp/dsh_tests_3347301.log`（43 行）、`/tmp/dsh_verify_3347301.log`（26 行） | 验收执行后容器数 0；`storage/sandbox` 与 `storage/workspaces/{999001,999002}` 已清空 |
+| 环境复核 | `.venv/bin/python -V` | Python 3.11.2；`podman images` 只有 `python:3.12-slim`（未重新 pull） |
 | 验收时间 | 2026-10-07（VPS 时间） | — |
 
 Tier A 7/7：纯计算、非 root（UID 1002）、无网络、只读根、单文件大小上限（fsize 8388608）、资源上限（memory 268435456 / pids 64 / cpu 50000-100000）、超时被 kill 且容器已销毁。
@@ -89,7 +90,7 @@ Tier B 4/4：本群 workspace 读写（非 root）、宿主侧可见、其他群
 1. 是否立项修 B 组技术债（`TODO.md` T4 / T7 / T9 / T10 / T25 等；T1–T3 已随 `f7f34b5` 修复）。
 2. 是否推进阶段 8（权限、配额、运维：群主命令、`host_info`、`/stats`、`/health`）。
 3. 是否配置正式远端（GitHub），以便后续换 Agent 维护。
-4. 是否把 `b529741` 与 `f7f34b5` 同步到 VPS（真机当前仍停在 `434f2f8`）。
+4. ~~是否把 `b529741` 与 `f7f34b5` 同步到 VPS~~ —— **已完成**：真机已同步至 `3347301`（含两提交，代码内容 = `f7f34b5`），测试与验收证据见 §4。
 
 ## 8. 如何重新生成这些证据
 
@@ -102,4 +103,18 @@ sudo -u bot bash -lc "cd /home/bot/app && .venv/bin/python -m unittest discover 
 sudo -u bot bash -lc "cd /home/bot/app && .venv/bin/python scripts/verify_sandbox.py"   # 需要容器运行时
 ```
 
+代码同步（无正式远端时的临时通道，替换 `<sha>`）：
+
+```bash
+# 本机（部署用私钥与本地临时目录不入文档）
+git bundle create <本地临时目录>/dsh_deploy_<sha>.bundle main
+scp -i <部署用私钥> <本地临时目录>/dsh_deploy_<sha>.bundle root@<vps>:/tmp/
+
+# 真机：确认 sha256 一致后
+sha256sum /tmp/dsh_deploy_<sha>.bundle
+sudo -u bot bash -lc "cd /home/bot/app && git bundle verify /tmp/dsh_deploy_<sha>.bundle \
+  && git fetch /tmp/dsh_deploy_<sha>.bundle main:refs/remotes/origin/main && git checkout <sha>"
+```
+
+约束：`/home/bot/app` 属主是 `bot`，root 直接执行 git 会报 `dubious ownership`，所有 git 操作必须经 `sudo -u bot bash -lc '…'`；
 `podman images` / `podman ps` 必须在 `bot` 用户可读的目录（如 `/home/bot/app`）里执行，否则会因 `cannot chdir to /root` 而失败。

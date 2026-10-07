@@ -37,14 +37,15 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | 日志 | `app/logging_setup.py` | 结构化日志 + 敏感字段过滤（见 security §日志） |
 | Telegram 适配 | `app/telegram/handlers.py` | 注册 message/command 路由 |
 | | `app/telegram/parse.py` | Update → `IncomingMessage`（实体、回复、@提及、别名） |
+| | `app/telegram/admins.py` | `getChatAdministrators` → 管理员 id 集合（阶段 8） |
 | | `app/telegram/sender.py` | send/edit/typing；4096 字符安全分段 |
 | 闸门 | `app/gate/dedupe.py` | `update_id` 幂等 |
-| | `app/gate/filters.py` | 入口硬过滤：自身/其他 Bot、无文本、命令；私聊默认丢弃（§2.2） |
+| | `app/gate/filters.py` | 入口硬过滤：自身/其他 Bot、无文本、命令（`allow_commands` 只给命令通道）；私聊默认丢弃（§2.2） |
 | | `app/gate/trigger.py` | 发言判定：强触发 → 可解释内容 → 上下文追问 → 冷却/窗口闸门；输出 RESPOND / WAIT / IGNORE |
 | | `app/gate/limits.py` | 主动发言的冷却与每窗口上限（进程内状态，按 `chat_id` 隔离） |
 | | `app/gate/debounce.py` | 静默窗合并多条消息；批次带"是否全部未点名"标记（`proactive`） |
 | | `app/gate/queue.py` | per-chat 串行 actor；运行期间新消息合并为下一轮一批 |
-| 会话 | `app/session/runner.py` | 一轮编排：context → llm → tools → outbound |
+| 会话 | `app/session/runner.py` | 一轮编排：群主命令通道 → context → llm → tools → outbound |
 | | `app/session/context.py` | ContextBuilder：预算式历史 + 噪声过滤；窗口按本轮边界（`id` 快照）截断 |
 | | `app/session/mood.py` | 当前情绪：最近一次贴纸的 valence/arousal（进程内存、TTL 10 分钟） |
 | | `app/session/noise.py` | 噪声判定（纯函数）：不进触发、不进上下文、不进摘要输入 |
@@ -65,6 +66,8 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | 存储 | `app/storage/db.py` | aiosqlite 连接、WAL、`user_version` 迁移 |
 | | `app/storage/repo/*.py` | messages / chat_settings / usage / stickers / summaries / notes / updates 读写（同名模块逐表一个文件） |
 | 领域 | `app/domain/bot_instance.py` | 领域对象：`BotInstance` 与 `LLMCredentials`（凭据唯一归属，见 `docs/domain.md` §1、§4） |
+| 运维/权限（阶段 8） | `app/ops/admin.py` | 本群管理员判定唯一入口：Telegram 管理员 + 进程内缓存，查询失败 fail-closed |
+| | `app/ops/commands.py` | 群主命令通道：解析、管理员判定、回复文本（不进模型、0 token） |
 | 控制面（阶段 10） | `app/control/*` | HTTP 适配器：面板 API，只调服务层（现不存在） |
 | 服务（阶段 10） | `app/services/*` | 业务唯一入口（instances / credentials / chat_settings / usage / memory_admin / workspace_admin / status） |
 | 出站 | `app/outbound/queue.py` | 统一出口；重试与退避 |
@@ -77,7 +80,8 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 Telegram Update
   → parse（→ IncomingMessage）
   → dedupe（update_id 幂等；重复直接丢弃）
-  → filters（自身消息 / 服务消息 / 无文本 / 私聊默认 → 丢弃）
+  → 群主命令（`/settings` 等：解析 → 管理员判定 → 出站；不进模型、不写 messages；未知命令静默丢弃）
+  → filters（自身消息 / 服务消息 / 无文本 / 私聊默认 / 未分发的命令 → 丢弃）
   → 落库 messages
   → trigger（RESPOND | WAIT | IGNORE；冷却/窗口闸门是程序侧判定）
   → debounce（静默窗合并，上限条数）

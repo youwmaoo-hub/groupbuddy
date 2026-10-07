@@ -60,11 +60,20 @@ class FilterTests(unittest.TestCase):
             DROP_NO_TEXT,
         )
 
-    def test_commands_are_deferred_to_stage_8(self) -> None:
+    def test_commands_are_dropped_without_the_command_channel(self) -> None:
         self.assertEqual(
             screen(make_incoming(update_id=1, chat_id=1, message_id=1, text=" /stats")).reason,
             DROP_COMMAND,
         )
+
+    def test_commands_pass_when_the_command_channel_asks(self) -> None:
+        # 群主命令通道（阶段 8）先于本过滤器分发命令（docs/security.md §2 第 3 步）
+        result = screen(
+            make_incoming(update_id=1, chat_id=1, message_id=1, text="/settings"),
+            allow_commands=True,
+        )
+        self.assertTrue(result.allowed)
+        self.assertEqual(result.reason, "ok")
 
     def test_private_chat_is_dropped_by_default(self) -> None:
         # 私聊里手打 @Bot 也必须被丢弃：0 token、不写库（docs/requirements.md §2.2）

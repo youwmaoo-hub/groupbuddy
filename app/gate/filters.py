@@ -21,8 +21,17 @@ class ScreenResult:
     reason: str
 
 
-def screen(message: IncomingMessage, *, allow_private_chat: bool = False) -> ScreenResult:
-    """程序硬规则；先过滤再判断是否回应（docs/token.md 链 1）。"""
+def screen(
+    message: IncomingMessage,
+    *,
+    allow_private_chat: bool = False,
+    allow_commands: bool = False,
+) -> ScreenResult:
+    """程序硬规则；先过滤再判断是否回应（docs/token.md 链 1）。
+
+    `allow_commands` 只给群主命令通道用（阶段 8）：命令由 `app/ops/commands.py`
+    前置分发，不进模型、不写 `messages`；未走命令通道时命令仍在这里丢弃。
+    """
     if message.is_bot_author:
         # 其他 Bot 的消息与 Bot 自己的消息：产品规则，见 docs/security.md §12
         return ScreenResult(False, DROP_BOT_AUTHOR)
@@ -31,7 +40,7 @@ def screen(message: IncomingMessage, *, allow_private_chat: bool = False) -> Scr
         return ScreenResult(False, DROP_PRIVATE)
     if not message.text.strip():
         return ScreenResult(False, DROP_NO_TEXT)
-    if message.text.lstrip().startswith("/"):
-        # 群主命令属于阶段 8；阶段 1 一律忽略，避免误回复
+    if not allow_commands and message.text.lstrip().startswith("/"):
+        # 命令走独立通道（docs/security.md §2 第 3 步）；这里丢弃是纵深防御
         return ScreenResult(False, DROP_COMMAND)
     return ScreenResult(True, "ok")

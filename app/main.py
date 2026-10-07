@@ -20,6 +20,8 @@ from app.gate.trigger import TriggerDetector
 from app.llm.client import DeepSeekClient
 from app.llm.loop import Responder
 from app.logging_setup import setup_logging
+from app.ops.admin import AdminRegistry
+from app.ops.commands import CommandService
 from app.outbound.queue import OutboundQueue
 from app.outbound.ratelimit import RateLimiter
 from app.sandbox.backends import build_backend
@@ -31,6 +33,7 @@ from app.session.summary import SummaryScheduler, SummaryService
 from app.storage.db import apply_migrations, close_db, open_db
 from app.storage.repo import updates
 from app.storage.repo.stickers import DbStickerStore
+from app.telegram.admins import AiogramAdminSource
 from app.telegram.handlers import build_router
 from app.telegram.sender import AiogramSender
 from app.tools.builtin import build_registry
@@ -90,6 +93,9 @@ class Application:
         outbound = OutboundQueue(AiogramSender(bot), limiter)
         self._outbound = outbound
 
+        # 群主命令：管理员只认 Telegram 返回的管理员，查询失败按拒绝处理（docs/security.md §2）
+        commands = CommandService(connection, AdminRegistry(AiogramAdminSource(bot)))
+
         # 沙箱：启动时探测一次并固定后端（docs/security.md §4），运行期不再探测
         sandbox = SandboxRunner(build_backend(settings), settings)
         self._sandbox = sandbox
@@ -132,6 +138,8 @@ class Application:
             outbound=outbound,
             tools=tools,
             mood=mood,
+            commands=commands,
+            bot_username=me.username or "",
         )
         chat_queue = ChatQueue(runner.handle_batch, max_batch_messages=settings.debounce_max_messages)
         self._chat_queue = chat_queue

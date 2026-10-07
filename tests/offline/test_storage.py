@@ -6,6 +6,7 @@ import sqlite3
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 import aiosqlite
 
@@ -127,6 +128,28 @@ class ChatSettingsTests(DbTestCase):
     async def test_unknown_field_rejected(self) -> None:
         with self.assertRaises(ValueError):
             await chat_settings.upsert(self.connection, 1, nope=1)
+
+    async def test_upsert_writes_only_given_columns(self) -> None:
+        # T12：单条 UPSERT，不做读-改-写（读到的旧快照会覆盖并发写入）
+        await chat_settings.upsert(self.connection, 1, allow_write=1)
+        await chat_settings.upsert(self.connection, 1, mode="smart")
+        await chat_settings.upsert(self.connection, 1, allow_code=1)
+        cursor = await self.connection.execute(
+            "SELECT mode, allow_write, allow_code FROM chat_settings WHERE chat_id = 1"
+        )
+        row = await cursor.fetchone()
+        await cursor.close()
+        self.assertEqual(tuple(row), ("smart", 1, 1))
+
+    async def test_upsert_does_not_read_before_write(self) -> None:
+        # T12 的根因就是这次读取：pytest 化后若重新引入读-改-写，本用例会失败
+        with mock.patch.object(
+            chat_settings, "get", side_effect=AssertionError("upsert 不应读取当前设置")
+        ):
+            await chat_settings.upsert(self.connection, 3, mode="economy")
+        group = await chat_settings.get(self.connection, 3)
+        self.assertEqual(group["mode"], "economy")
+        self.assertEqual(group["sticker_cooldown"], 30)  # 未给出的列取表默认值
 
 
 class UsageRepoTests(DbTestCase):

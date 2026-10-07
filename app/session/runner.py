@@ -1,4 +1,4 @@
-"""会话编排：去重 → 硬过滤 → 触发判定（含冷却闸门）→ 存储 → debounce → 一次模型调用 → 出站。"""
+"""会话编排：去重 → 群主命令（管理员判定）→ 硬过滤 → 触发判定（含冷却闸门）→ 存储 → debounce → 一次模型调用 → 出站。"""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ from app.gate.filters import screen
 from app.gate.limits import ProactiveLimiter
 from app.gate.trigger import TriggerDetector
 from app.llm.loop import Outcome, Responder
+from app.ops.commands import Command, CommandService, parse_command
 from app.outbound.queue import OutboundQueue
 from app.session.context import ContextBuilder
 from app.session.mood import MoodTracker
@@ -46,6 +47,8 @@ class SessionRunner:
         outbound: OutboundQueue,
         tools: ToolExecutor | None = None,
         mood: MoodTracker | None = None,
+        commands: CommandService | None = None,
+        bot_username: str = "",
     ) -> None:
         self._settings = settings
         self._connection = connection
@@ -58,11 +61,18 @@ class SessionRunner:
         self._outbound = outbound
         self._tools = tools
         self._mood = mood
+        self._commands = commands
+        self._bot_username = bot_username
 
     async def handle(self, incoming: IncomingMessage) -> None:
         """接收路径：必须立刻返回，绝不等待模型。"""
         if not await self._dedup.first_seen(incoming.update_id, incoming.chat_id):
             logger.debug("重复 update 丢弃 chat_id=%s update_id=%s", incoming.chat_id, incoming.update_id)
+            return
+
+        command = parse_command(incoming.text, bot_username=self._bot_username)
+        if command is not None:
+            await self._handle_command(incoming, command)
             return
 
         result = screen(incoming, allow_private_chat=self._settings.allow_private_chat)
@@ -100,6 +110,33 @@ class SessionRunner:
             decision.verdict,
             decision.reason,
             decision.proactive,
+        )
+
+    async def _handle_command(self, incoming: IncomingMessage, command: Command) -> None:
+        """群主命令通道：不进模型、不写 messages、0 token（docs/security.md §2 第 3 步）。"""
+        result = screen(
+            incoming,
+            allow_private_chat=self._settings.allow_private_chat,
+            allow_commands=True,
+        )
+        if not result.allowed:
+            logger.debug("命令丢弃 chat_id=%s 原因=%s", incoming.chat_id, result.reason)
+            return
+        if self._commands is None:
+            logger.debug("未装配命令通道，命令丢弃 chat_id=%s name=%s", incoming.chat_id, command.name)
+            return
+        text = await self._commands.reply_text(
+            chat_id=incoming.chat_id,
+            user_id=incoming.user_id,
+            command=command,
+        )
+        if text is None:
+            return
+        await self._outbound.enqueue(
+            chat_id=incoming.chat_id,
+            chat_type=incoming.chat_type,
+            text=text,
+            reply_to_message_id=incoming.message_id,
         )
 
     async def handle_batch(self, batch: Batch) -> None:

@@ -75,7 +75,8 @@ class SummaryService:
         self._connection = connection
         self._client = client
         self._settings = settings
-        self._clock = clock or time.monotonic
+        # 时钟必须与 messages.created_at / pending.last_at 同域（Unix 秒），否则静默触发恒不成立。
+        self._clock = clock or time.time
         self._locks: dict[int, asyncio.Lock] = {}
 
     async def cursor(self, chat_id: int) -> int:

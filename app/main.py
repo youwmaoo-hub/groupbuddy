@@ -164,7 +164,7 @@ class Application:
 
     async def _summary_loop(self, connection: aiosqlite.Connection) -> None:
         """后台摘要：异步、按群串行、可优雅停止，不阻塞回复（docs/memory.md §4）。"""
-        service = SummaryService(connection, self._llm, self._settings, clock=time.monotonic)
+        service = SummaryService(connection, self._llm, self._settings)
         scheduler = SummaryScheduler(
             service,
             connection,

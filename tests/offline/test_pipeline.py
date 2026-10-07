@@ -270,6 +270,31 @@ class PipelineTests(DbTestCase):
         self.assertFalse(any(f"{old_text}0" in item for item in contents))
         self.assertGreater(self.runner._context.consume_trimmed(1), 0)
 
+    async def test_oversized_batch_survives_budget_trim(self) -> None:
+        # 本轮文本自身就超过预算时，仍然不允许裁掉本轮消息（docs/memory.md §2 硬约束）
+        self.settings = make_settings(self.tmp, HISTORY_BUDGET_CHARS=60)
+        old_text = "很久以前的旧消息" * 6
+        for index in range(6):
+            await messages.insert(
+                self.connection,
+                chat_id=1,
+                message_id=600 + index,
+                user_id=42,
+                role="user",
+                text=f"{old_text}{index}",
+            )
+        self._build("好")
+        first = "@bot " + "本轮消息甲" * 8
+        second = "@bot " + "本轮消息乙" * 8
+        await self._send([first, second])
+        await self._flush()
+        contents = [str(item["content"]) for item in self.llm.calls[0]]
+        self.assertIn(first, contents)
+        self.assertIn(second, contents)
+        self.assertFalse(any(f"{old_text}0" in item for item in contents))
+        # 旧实现会把本轮一起裁掉（8 条）；现在只裁掉 6 条旧历史
+        self.assertEqual(self.runner._context.consume_trimmed(1), 6)
+
     def test_window_size_tiers(self) -> None:
         self._build()
         builder = self.runner._context

@@ -58,13 +58,14 @@ class ContextBuilder:
 
         # 先按"本轮 + 情绪"的占用裁剪历史；记忆块随后再占用剩余预算
         reserved = sum(len(item.text) for item in batch.items) + len(mood or "")
-        history, dropped = self._trim(history, reserved=reserved)
+        keep = frozenset(item.message_id for item in batch.items)
+        history, dropped = self._trim(history, reserved=reserved, keep=keep)
 
         memory = await self._memory_lines(batch, dropped=dropped)
         if memory:
             memory_text = MEMORY_HEADING + "\n" + "\n".join(memory)
             reserved += len(memory_text)
-            history, extra = self._trim(history, reserved=reserved)
+            history, extra = self._trim(history, reserved=reserved, keep=keep)
             dropped += extra
         if dropped:
             self._trimmed[batch.chat_id] = dropped
@@ -94,12 +95,21 @@ class ContextBuilder:
         """最近一次组装被预算裁掉的历史条数（观测/测试用，不参与决策）。"""
         return self._trimmed.pop(chat_id, 0)
 
-    def _trim(self, history: list[StoredMessage], *, reserved: int) -> tuple[list[StoredMessage], int]:
-        """超预算从最旧历史开始丢；本轮消息永不丢。"""
+    def _trim(
+        self,
+        history: list[StoredMessage],
+        *,
+        reserved: int,
+        keep: frozenset[int] = frozenset(),
+    ) -> tuple[list[StoredMessage], int]:
+        """超预算从最旧历史开始丢；本轮消息永不丢（即使本轮自身已超预算）。"""
         budget = self._settings.history_budget_chars
         dropped = 0
         total = reserved + sum(len(row.text) for row in history)
         while history and total > budget:
+            if history[0].message_id in keep:
+                # 本轮消息是最新的：到它就是只剩本轮，不能再裁
+                break
             total -= len(history[0].text)
             history.pop(0)
             dropped += 1

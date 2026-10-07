@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import time
 import unittest
 
 from app.config import today_in_timezone
@@ -78,6 +79,35 @@ class TriggerTests(DbTestCase):
         self.assertTrue(service.should_summarize(PendingSummary(messages=1, chars=5, last_at=900)))
         self.assertFalse(service.should_summarize(PendingSummary(messages=1, chars=5, last_at=990)))
 
+
+class ClockDomainTests(DbTestCase):
+    """静默触发必须与 last_at 同域：库里是 Unix 秒，服务默认时钟也必须是 Unix 秒。"""
+
+    async def test_quiet_trigger_uses_real_unix_seconds(self) -> None:
+        settings = make_settings(self.tmp, SUMMARY_MIN_MESSAGES=99, SUMMARY_QUIET_SECONDS=120.0)
+        service = SummaryService(self.connection, FakeLLMClient("摘要"), settings)  # 不注入假时钟
+        now = time.time()
+        # 旧实现默认单调时钟（约 1e4），与 Unix 秒相减恒为负 → 这里必然 False
+        self.assertTrue(service.should_summarize(PendingSummary(messages=1, chars=5, last_at=now - 121)))
+        self.assertFalse(service.should_summarize(PendingSummary(messages=1, chars=5, last_at=now)))
+
+    async def test_quiet_trigger_consumes_repo_timestamp(self) -> None:
+        settings = make_settings(self.tmp, SUMMARY_MIN_MESSAGES=99, SUMMARY_QUIET_SECONDS=120.0)
+        service = SummaryService(self.connection, FakeLLMClient("摘要"), settings)
+        inserted_at = int(time.time()) - 121
+        await messages_repo.insert(
+            self.connection,
+            chat_id=1,
+            message_id=500,
+            user_id=42,
+            role="user",
+            text="静默后的一条",
+            created_at=inserted_at,
+        )
+        pending = await service.pending(1)
+        self.assertEqual(pending.messages, 1)
+        self.assertEqual(pending.last_at, inserted_at)  # repo 写入的是 Unix 秒
+        self.assertTrue(service.should_summarize(pending))
 
 class ServiceTests(DbTestCase):
     async def asyncSetUp(self) -> None:

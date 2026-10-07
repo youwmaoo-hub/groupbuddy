@@ -1,9 +1,10 @@
-"""群主命令通道：解析 → 管理员判定 → 读写本群设置（docs/security.md §2.1、F5.1/F5.2）。
+"""群主命令通道：解析 → 管理员判定 → 读写设置 / 运行指标（docs/security.md §2.1、F5.1/F5.2/F5.4）。
 
 命令不走模型、不写 `messages`、0 token；出站仍由调用方交给 `app/outbound/queue.py`。
 未知命令静默丢弃（与历史行为一致），不做"未知命令"提示。
 `/settings <字段> <值>` 只允许 F5.1 列出的字段（模式、工具开关、贴纸冷却），
 非法字段/非法值一律只回一条提示且**不写库**（docs/requirements.md F5.1）。
+`/stats` 与 `/health` 只读：文案由 `app/ops/metrics.py` 渲染，不含路径、堆栈与凭据。
 """
 
 from __future__ import annotations
@@ -13,13 +14,18 @@ from dataclasses import dataclass
 
 import aiosqlite
 
+from app.config import Settings
 from app.ops.admin import AdminRegistry
+from app.ops.health import HealthState
+from app.ops.metrics import render_health, render_stats
 from app.storage.repo import chat_settings
 
 logger = logging.getLogger(__name__)
 
 PREFIX = "/"
 SETTINGS = "settings"
+STATS = "stats"
+HEALTH = "health"
 
 #: 非管理员只看到这一句：不泄露设置内容，也不透露内部判定原因。
 DENIED_TEXT = "这个命令只有群管理员能用。"
@@ -148,13 +154,22 @@ def render_value(field: SettingField, value: object) -> str:
 class CommandService:
     """命令的唯一业务入口：授权判定、参数校验与回复文本；不依赖 aiogram。"""
 
-    def __init__(self, connection: aiosqlite.Connection, admins: AdminRegistry) -> None:
+    def __init__(
+        self,
+        connection: aiosqlite.Connection,
+        admins: AdminRegistry,
+        *,
+        settings: Settings | None = None,
+        health: HealthState | None = None,
+    ) -> None:
         self._connection = connection
         self._admins = admins
+        self._settings = settings
+        self._health = health
 
     async def reply_text(self, *, chat_id: int, user_id: int, command: Command) -> str | None:
-        """返回要发送的文本；None 表示静默丢弃（未知命令）。"""
-        if command.name != SETTINGS:
+        """返回要发送的文本；None 表示静默丢弃（未知命令或未装配的数据源）。"""
+        if command.name not in (SETTINGS, STATS, HEALTH):
             logger.debug("未实现的命令 chat_id=%s name=%s", chat_id, command.name)
             return None
         if not await self._admins.is_admin(chat_id, user_id):
@@ -162,6 +177,18 @@ class CommandService:
                 "命令被拒 chat_id=%s user_id=%s name=%s 原因=not_admin", chat_id, user_id, command.name
             )
             return DENIED_TEXT
+        if command.name == STATS:
+            if self._settings is None:
+                logger.warning("未装配配置，/stats 不可用 chat_id=%s", chat_id)
+                return None
+            logger.info("查看运行统计 chat_id=%s user_id=%s", chat_id, user_id)
+            return await render_stats(self._connection, self._settings, chat_id=chat_id)
+        if command.name == HEALTH:
+            if self._health is None:
+                logger.warning("未装配健康状态，/health 不可用 chat_id=%s", chat_id)
+                return None
+            logger.info("查看健康状态 chat_id=%s user_id=%s", chat_id, user_id)
+            return render_health(await self._health.snapshot())
         if not command.args:
             return render_settings(await chat_settings.get(self._connection, chat_id))
         resolved = resolve_setting(command.args)

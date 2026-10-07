@@ -57,6 +57,11 @@
 - 只读轻量：进程存活、最后一次成功处理更新的时间戳、数据库可读、出站队列深度。
 - 形态：`storage/health.json` 心跳 + 日志；不新开 HTTP 端口。
 - 健康检查不得调用 LLM、不得产生 token 成本；失败只告警、不自动重启（避免重启风暴）。
+- 心跳周期 60 秒（`app/ops/health.py`，进程内常量，不需要新的环境变量）；快照键为
+  `instance` / `ok` / `started_at` / `checked_at` / `uptime_s` / `last_update_at` / `db_ok` / `outbound_pending`，
+  同目录临时文件 + `os.replace` 原子替换；快照只含计数与时间戳，不含路径、异常堆栈、环境变量或凭据。
+- `/health` 命令（阶段 8 F5.4）与心跳**共用同一个内部状态**（`HealthState`），只是把快照渲染成简短文本回显；
+  命令属群管理员限定、0 token、不进模型，失败时只回固定短句（`docs/security.md` §2.1）。
 
 ## 8. 更新与回滚
 
@@ -183,5 +188,6 @@ cd <项目根>
 - 数据全在 `storage/`：SQLite（WAL + `busy_timeout=5000`）、每群 `workspaces/`、`logs/`、`sandbox/`；备份与恢复见 §8 与 `docs/database.md` §5（自动备份任务属阶段 9，当前需人工 `sqlite3 .backup`；WAL 模式下不要直接 `cp` 数据库文件）。
 - 日志：`LOG_DIR` 下 5 MB × 3 轮转，统一经 SecretFilter 脱敏；日常 `LOG_LEVEL=INFO` 足够，排查时临时改 DEBUG。
 - 沙箱临时文件用后即删；启动时清理带 `groupbuddy=1` 标签的残留容器；被 `SIGKILL` 后可能留下空临时目录，直接清空 `SANDBOX_TEMP_DIR` 即可。
-- 健康检查（`storage/health.json`）与 `/health` 属阶段 8；当前以「进程存活 + 日志 + `scripts/verify_sandbox.py` 是否通过」判断状态。
+- 健康检查（`storage/health.json`）与 `/health` 已在阶段 8 F5.4 落地（见 §7）；人工检查仍是「进程存活 + 日志 + `scripts/verify_sandbox.py` 是否通过」。
+- 工具失败留痕写入 `storage/bot.db` 的 `tool_failures`（保留 7 天，启动时与每小时清理）；`/stats` 可看本群当日用量与错误率。
 - 单机单进程：同一个 Bot Token 只允许一个 polling 进程；进程托管（systemd 或容器 `restart`）属阶段 9。

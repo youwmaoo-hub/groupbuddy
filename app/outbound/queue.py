@@ -180,6 +180,11 @@ class OutboundQueue:
         self._inflight = 0  # 已出队但仍在发送的消息数（drain 必须等它归零）
         self._locks: dict[int, asyncio.Lock] = {}  # 同群串行：文本与贴纸不交错
 
+    @property
+    def pending(self) -> int:
+        """尚未发出的消息数（含正在发送的），供健康检查读取（docs/deployment.md §7）。"""
+        return sum(len(queue) for queue in self._pending.values()) + self._inflight
+
     async def enqueue(
         self,
         *,

@@ -18,13 +18,14 @@ from tests.offline.helpers import DbTestCase
 class MigrationTests(DbTestCase):
     async def test_load_migrations(self) -> None:
         versions = load_migrations()
-        self.assertEqual(len(versions), 3)
+        self.assertEqual(len(versions), 4)
         self.assertEqual(len(versions[0]), 6)
         self.assertEqual(len(versions[1]), 1)
         self.assertEqual(len(versions[2]), 7)
+        self.assertEqual(len(versions[3]), 3)  # tool_failures 表 + 两个索引（阶段 8 F5.4）
 
     async def test_apply_is_idempotent(self) -> None:
-        self.assertEqual(await apply_migrations(self.connection), 3)
+        self.assertEqual(await apply_migrations(self.connection), 4)
 
 
 class UpdateDedupeTests(DbTestCase):
@@ -265,14 +266,15 @@ class MigrationAtomicityTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual((await self._column_names(connection, "usage")).count("purpose"), 1)
             self.assertNotIn("summaries", await self._table_names(connection))
             # 旧实现：这里会抛 duplicate column name: purpose，永远无法启动
-            self.assertEqual(await apply_migrations(connection), 3)
-            self.assertEqual(await self._user_version(connection), 3)
+            self.assertEqual(await apply_migrations(connection), 4)
+            self.assertEqual(await self._user_version(connection), 4)
             self.assertEqual((await self._column_names(connection, "usage")).count("purpose"), 1)
             names = await self._table_names(connection)
             self.assertIn("summaries", names)
             self.assertIn("notes", names)
+            self.assertIn("tool_failures", names)
             # 恢复后重跑仍幂等，且不会重复加列
-            self.assertEqual(await apply_migrations(connection), 3)
+            self.assertEqual(await apply_migrations(connection), 4)
             self.assertEqual((await self._column_names(connection, "usage")).count("purpose"), 1)
         finally:
             await connection.close()
@@ -306,14 +308,30 @@ class MigrationAtomicityTests(unittest.IsolatedAsyncioTestCase):
     async def test_real_migrations_end_state(self) -> None:
         connection = await self._connect("end.db")
         try:
-            self.assertEqual(await apply_migrations(connection), 3)
-            self.assertEqual(await self._user_version(connection), 3)
+            self.assertEqual(await apply_migrations(connection), 4)
+            self.assertEqual(await self._user_version(connection), 4)
             names = await self._table_names(connection)
-            for table in ("updates", "messages", "chat_settings", "usage", "stickers", "summaries", "notes"):
+            for table in (
+                "updates",
+                "messages",
+                "chat_settings",
+                "usage",
+                "stickers",
+                "summaries",
+                "notes",
+                "tool_failures",
+            ):
                 self.assertIn(table, names)
             self.assertIn("summaries_fts", names)
             self.assertIn("notes_fts", names)
             self.assertEqual((await self._column_names(connection, "usage")).count("purpose"), 1)
+            cursor = await connection.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'tool_failures'"
+            )
+            indexes = {row[0] for row in await cursor.fetchall()}
+            await cursor.close()
+            self.assertIn("idx_tool_failures_tool_time", indexes)
+            self.assertIn("idx_tool_failures_chat_time", indexes)
         finally:
             await connection.close()
 

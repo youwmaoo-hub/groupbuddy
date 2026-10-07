@@ -22,6 +22,7 @@ from app.llm.loop import Responder
 from app.logging_setup import setup_logging
 from app.ops.admin import AdminRegistry
 from app.ops.commands import CommandService
+from app.ops.health import HEALTH_FILENAME, HEALTH_INTERVAL_SECONDS, HealthState, health_loop
 from app.ops.quota import QuotaGuard
 from app.outbound.queue import OutboundQueue
 from app.outbound.ratelimit import RateLimiter
@@ -32,7 +33,7 @@ from app.session.mood import MoodTracker
 from app.session.runner import SessionRunner
 from app.session.summary import SummaryScheduler, SummaryService
 from app.storage.db import apply_migrations, close_db, open_db
-from app.storage.repo import updates
+from app.storage.repo import tool_failures, updates
 from app.storage.repo.stickers import DbStickerStore
 from app.telegram.admins import AiogramAdminSource
 from app.telegram.handlers import build_router
@@ -45,6 +46,24 @@ logger = logging.getLogger("app.main")
 
 HOUSEKEEPING_INTERVAL_SECONDS = 3600.0
 SHUTDOWN_DRAIN_SECONDS = 10.0
+
+
+async def _database_readable(connection: aiosqlite.Connection) -> bool:
+    """健康检查用的最小只读探测：连接可用即视为数据库可读（docs/deployment.md §7）。"""
+    cursor = await connection.execute("SELECT 1")
+    try:
+        return await cursor.fetchone() is not None
+    finally:
+        await cursor.close()
+
+
+def _tool_failure_recorder(connection: aiosqlite.Connection):
+    """把计入熔断的工具失败写进 `tool_failures`，供 `/stats` 统计（阶段 8 F5.4）。"""
+
+    async def record(tool: str, chat_id: int, error_code: str) -> None:
+        await tool_failures.record(connection, tool=tool, chat_id=chat_id, error_code=error_code)
+
+    return record
 
 
 class Application:
@@ -71,6 +90,7 @@ class Application:
         await apply_migrations(connection)
         self._connection = connection
         await updates.purge_old(connection)
+        await tool_failures.purge_old(connection)
 
         instance = settings.bot_instance()
         self._llm = DeepSeekClient(instance.llm)
@@ -94,8 +114,20 @@ class Application:
         outbound = OutboundQueue(AiogramSender(bot), limiter)
         self._outbound = outbound
 
+        # 健康状态：health.json 心跳与 /health 命令共用同一个实例（docs/deployment.md §7）
+        health = HealthState(
+            instance_id=settings.instance_id,
+            db_check=lambda: _database_readable(connection),
+            pending=lambda: outbound.pending,
+        )
+
         # 群主命令：管理员只认 Telegram 返回的管理员，查询失败按拒绝处理（docs/security.md §2）
-        commands = CommandService(connection, AdminRegistry(AiogramAdminSource(bot)))
+        commands = CommandService(
+            connection,
+            AdminRegistry(AiogramAdminSource(bot)),
+            settings=settings,
+            health=health,
+        )
 
         # 配额：调用模型前按 chat_id 检查日/月用量，0 或未配置 = 不限额（docs/token.md §4.1）
         quota = QuotaGuard(connection, settings)
@@ -118,7 +150,7 @@ class Application:
             sandbox=sandbox,
         )
         policy = Policy(registry)
-        tools = ToolExecutor(registry, policy)
+        tools = ToolExecutor(registry, policy, failure_recorder=_tool_failure_recorder(connection))
         responder = Responder(self._llm, settings, tools)
 
         debouncer = Debouncer(
@@ -144,6 +176,7 @@ class Application:
             mood=mood,
             commands=commands,
             quota=quota,
+            health=health,
             bot_username=me.username or "",
         )
         chat_queue = ChatQueue(runner.handle_batch, max_batch_messages=settings.debounce_max_messages)
@@ -172,6 +205,15 @@ class Application:
             ),
             asyncio.create_task(self._housekeeping_loop(), name="housekeeping"),
             asyncio.create_task(self._summary_loop(connection), name="summary-scheduler"),
+            asyncio.create_task(
+                health_loop(
+                    health,
+                    settings.data_dir / HEALTH_FILENAME,
+                    stop=self._stop,
+                    interval=HEALTH_INTERVAL_SECONDS,
+                ),
+                name="health-heartbeat",
+            ),
         ]
         logger.info("启动完成 data_dir=%s db=%s", settings.data_dir, settings.db_path)
 
@@ -217,7 +259,7 @@ class Application:
         logger.info("已关闭")
 
     async def _housekeeping_loop(self) -> None:
-        """定期清理过期 update_id（docs/database.md §4）。"""
+        """定期清理过期 update_id 与过期工具失败记录（docs/database.md §4）。"""
         connection = self._connection
         while not self._stop.is_set():
             try:
@@ -230,6 +272,9 @@ class Application:
                 removed = await updates.purge_old(connection)
                 if removed:
                     logger.info("清理过期 update 记录 rows=%s", removed)
+                purged = await tool_failures.purge_old(connection)
+                if purged:
+                    logger.info("清理过期工具失败记录 rows=%s", purged)
             except Exception:
                 logger.exception("后台清理失败")
 

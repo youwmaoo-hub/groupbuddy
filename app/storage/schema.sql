@@ -115,3 +115,17 @@ CREATE INDEX IF NOT EXISTS idx_notes_chat ON notes (chat_id, name);
 -- FTS：external content，索引 tokens 列；内容同步由 repo 显式维护（不用 trigger）
 CREATE VIRTUAL TABLE IF NOT EXISTS summaries_fts USING fts5(tokens, content='summaries', content_rowid='id');
 CREATE VIRTUAL TABLE IF NOT EXISTS notes_fts USING fts5(tokens, content='notes', content_rowid='id');
+
+-- ===== migration 4 =====
+
+-- 工具失败留痕（阶段 8 F5.4）：只记计入熔断的失败，供 /stats 错误率；保留 7 天
+CREATE TABLE IF NOT EXISTS tool_failures (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    tool       TEXT NOT NULL,
+    chat_id    INTEGER NOT NULL,
+    error_code TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_tool_failures_tool_time ON tool_failures (tool, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_tool_failures_chat_time ON tool_failures (chat_id, created_at);

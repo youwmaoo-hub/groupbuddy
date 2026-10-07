@@ -64,11 +64,14 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | | `app/sandbox/runner.py` | `run_code` 唯一执行入口：并发闸门、超时销毁容器、输出截断、临时文件清理 |
 | | `app/sandbox/preflight.py` | 代码预扫描，仅记日志（不是安全边界） |
 | 存储 | `app/storage/db.py` | aiosqlite 连接、WAL、`user_version` 迁移 |
-| | `app/storage/repo/*.py` | messages / chat_settings / usage / stickers / summaries / notes / updates 读写（同名模块逐表一个文件） |
+| | `app/storage/repo/*.py` | messages / chat_settings / usage / stickers / summaries / notes / updates / tool_failures 读写（同名模块逐表一个文件） |
 | 领域 | `app/domain/bot_instance.py` | 领域对象：`BotInstance` 与 `LLMCredentials`（凭据唯一归属，见 `docs/domain.md` §1、§4） |
 | 运维/权限（阶段 8） | `app/ops/admin.py` | 本群管理员判定唯一入口：Telegram 管理员 + 进程内缓存，查询失败 fail-closed |
-| | `app/ops/commands.py` | 群主命令通道：解析、管理员判定、读写本群设置（`/settings`；不进模型、0 token） |
+| | `app/ops/commands.py` | 群主命令通道：解析、管理员判定、读写本群设置与只读运行指标（`/settings`、`/stats`、`/health`；不进模型、0 token） |
 | | `app/ops/quota.py` | 配额判定：调用模型前按 `chat_id` 检查日/月已用 token；`0` 或未配置 = 不限额 |
+| | `app/ops/health.py` | 健康状态唯一来源：`HealthState` 快照 + `storage/health.json` 心跳 + `/health` 共用；只读、原子写 |
+| | `app/ops/metrics.py` | `/stats` 文案渲染：当日 token 用量、工具调用/失败（错误率）、配额余量；只读不新建统计体系 |
+| | `app/storage/repo/tool_failures.py` | 工具失败留痕（计入熔断的失败）：写入、按群区间计数、7 天清理（T15） |
 | 控制面（阶段 10） | `app/control/*` | HTTP 适配器：面板 API，只调服务层（现不存在） |
 | 服务（阶段 10） | `app/services/*` | 业务唯一入口（instances / credentials / chat_settings / usage / memory_admin / workspace_admin / status） |
 | 出站 | `app/outbound/queue.py` | 统一出口；重试与退避 |
@@ -81,7 +84,7 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 Telegram Update
   → parse（→ IncomingMessage）
   → dedupe（update_id 幂等；重复直接丢弃）
-  → 群主命令（`/settings`：解析 → 管理员判定 → 读写本群设置 → 出站；不进模型、不写 messages；未知命令静默丢弃）
+  → 群主命令（`/settings` / `/stats` / `/health`：解析 → 管理员判定 → 读写本群设置或只读指标 → 出站；不进模型、不写 messages；未知命令静默丢弃）
   → filters（自身消息 / 服务消息 / 无文本 / 私聊默认 / 未分发的命令 → 丢弃）
   → 落库 messages
   → trigger（RESPOND | WAIT | IGNORE；冷却/窗口闸门是程序侧判定）
@@ -91,6 +94,7 @@ Telegram Update
   → ContextBuilder（本轮边界快照 + 全局人格 + 群设定 + 工具策略 + 动态历史 + 摘要/检索）
   → LLM 循环（可选 tool call）
         → registry 裁剪清单 → policy 判定 → executor 执行（sandbox 必要时）
+        → 计入熔断的失败写 tool_failures（供 `/stats`；调用前拒绝不写）
   → 结果写入 messages
   → OutboundQueue（限速 / retry_after 退避 / 4096 分段）
   → Telegram
@@ -106,6 +110,7 @@ Telegram Update
 - **主动发言闸门**：未点名的候选消息（`question`/`troubleshoot`/`resource`/`followup`）先过冷却与每窗口上限，被压住即 `wait`（0 token、只入库）；被点名不受限制（`docs/requirements.md` §2.1）。
 - **出站串行**：同一群的文本与贴纸发送共用一把锁（`app/outbound/queue.py`）；贴纸走独立的 1 条/20 秒限速通道。
 - **摘要调度**：后台任务 `summary-scheduler` 按 `chat_id` 串行、异步、可重试、幂等，随关闭信号停止，不阻塞回复（`app/session/summary.py`）。
+- **健康心跳**：后台任务 `health-heartbeat` 每 60 秒原子重写 `storage/health.json`（`app/ops/health.py`）；只读探测、不调用模型，写失败只告警。
 - **沙箱执行**：`run_code` 只经 `app/sandbox/runner.py` 在一次性容器里执行（无网络、只读根、非 root、`--rm`），并发上限 2（超出排队），
   超时即 kill 并销毁容器，临时输出目录用后即删；没有可用运行时即 fail-closed，绝不退化到宿主机（`docs/security.md` §4）。
 - 每群邮箱有容量上限，溢出策略：合并待处理批次并保留最新若干条，不无限堆积。

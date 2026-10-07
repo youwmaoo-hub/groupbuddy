@@ -112,7 +112,7 @@ usage (
 );
 CREATE INDEX idx_usage_chat_day ON usage (chat_id, day);
 
--- 工具失败与熔断依据（阶段 8 建表：阶段 3 的失败计数与熔断在进程内存，见 docs/security.md §9）
+-- 工具失败与熔断依据（migration 4 / 阶段 8 F5.4；阶段 3 的熔断计数仍在进程内存，见 docs/security.md §9）
 tool_failures (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   tool       TEXT NOT NULL,
@@ -121,6 +121,7 @@ tool_failures (
   created_at INTEGER NOT NULL
 );
 CREATE INDEX idx_tool_failures_tool_time ON tool_failures (tool, created_at DESC);
+CREATE INDEX idx_tool_failures_chat_time ON tool_failures (chat_id, created_at);  -- /stats 按群查当日失败
 
 -- FTS（阶段 6 / migration 3；索引 tokens 列，内容同步由 repo 显式维护，不用 trigger）
 CREATE VIRTUAL TABLE summaries_fts USING fts5(tokens, content='summaries', content_rowid='id');
@@ -129,7 +130,7 @@ CREATE VIRTUAL TABLE notes_fts     USING fts5(tokens, content='notes',     conte
 
 ## 3. 关系与不变量
 
-- `messages/summaries/notes/stickers/chat_settings/usage` 都以 `chat_id` 为租户键；跨群读取属于缺陷。
+- `messages/summaries/notes/stickers/chat_settings/usage/tool_failures` 都以 `chat_id` 为租户键；跨群读取属于缺陷。
 - `(chat_id, message_id)` 唯一：同一条 Telegram 消息即使重复 ingest 也只落一行。
 - `update_id` 是主键：`INSERT OR IGNORE` 失败即视为重复，直接丢弃更新。
 - `chat_settings` 缺失时按默认值处理（不强制预建行）。
@@ -141,7 +142,7 @@ CREATE VIRTUAL TABLE notes_fts     USING fts5(tokens, content='notes',     conte
 | 数据 | 保留 | 动作 |
 |---|---|---|
 | `updates` | 48 小时 | 删除更早行（幂等只需覆盖重放窗口；**已实现** `updates.purge_old`，housekeeping 启动时执行） |
-| `tool_failures` | 7 天 | 删除更早行（**阶段 8**：表尚未建） |
+| `tool_failures` | 7 天 | 删除更早行（**已实现** `tool_failures.purge_old`，启动时与每小时 housekeeping 各执行一次） |
 | `messages` | 默认全保留 | 群主 `/clear` 可按群清理；清理后摘要保留 |
 | `summaries` | 每群保留最近 50 条 | 超出归档删除最旧（**已实现**：`SUMMARY_KEEP=50`，摘要写成功后立即 prune） |
 | 维护 | 每周 | **阶段 9 计划，无代码**：`PRAGMA optimize`；体积明显膨胀时 `VACUUM`（离线执行） |

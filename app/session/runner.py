@@ -15,6 +15,7 @@ from app.gate.limits import ProactiveLimiter
 from app.gate.trigger import TriggerDetector
 from app.llm.loop import Outcome, Responder
 from app.ops.commands import Command, CommandService, parse_command
+from app.ops.health import HealthState
 from app.ops.quota import QuotaGuard
 from app.outbound.queue import OutboundQueue
 from app.session.context import ContextBuilder
@@ -50,6 +51,7 @@ class SessionRunner:
         mood: MoodTracker | None = None,
         commands: CommandService | None = None,
         quota: QuotaGuard | None = None,
+        health: HealthState | None = None,
         bot_username: str = "",
     ) -> None:
         self._settings = settings
@@ -65,6 +67,7 @@ class SessionRunner:
         self._mood = mood
         self._commands = commands
         self._quota = quota
+        self._health = health
         self._bot_username = bot_username
 
     async def handle(self, incoming: IncomingMessage) -> None:
@@ -72,6 +75,10 @@ class SessionRunner:
         if not await self._dedup.first_seen(incoming.update_id, incoming.chat_id):
             logger.debug("重复 update 丢弃 chat_id=%s update_id=%s", incoming.chat_id, incoming.update_id)
             return
+
+        # 健康状态只记"最近一次成功处理的更新"；去重通过即视为已处理（纯内存写，无 IO）
+        if self._health is not None:
+            self._health.mark_update()
 
         command = parse_command(incoming.text, bot_username=self._bot_username)
         if command is not None:

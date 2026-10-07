@@ -7,6 +7,7 @@ import json
 import logging
 import time
 from collections import deque
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
 from pydantic import ValidationError
@@ -42,12 +43,15 @@ class ToolExecutor:
         config: BreakerConfig | None = None,
         max_payload_bytes: int = MAX_PAYLOAD_BYTES,
         clock=None,
+        failure_recorder: Callable[[str, int, str], Awaitable[None]] | None = None,
     ) -> None:
         self._registry = registry
         self._policy = policy
         self._config = config or BreakerConfig()
         self._max_payload_bytes = max_payload_bytes
         self._clock = clock or time.monotonic
+        #: 失败留痕（tool, chat_id, error_code）；写入 `tool_failures` 供 `/stats`（阶段 8 F5.4）
+        self._failure_recorder = failure_recorder
         self._failures: dict[tuple[int, str], deque[float]] = {}
         self._breaker_until: dict[tuple[int, str], float] = {}
 
@@ -89,14 +93,14 @@ class ToolExecutor:
         try:
             payload = await asyncio.wait_for(tool.run(args, context), timeout=tool.spec.timeout_seconds)
         except asyncio.TimeoutError:
-            self._note_failure(context, name)
+            await self._note_failure(context, name, "timeout")
             return _error(name, "timeout", f"执行超过 {tool.spec.timeout_seconds:g} 秒")
         except ToolError as error:
-            self._note_failure(context, name)
+            await self._note_failure(context, name, error.code)
             return _error(name, error.code, error.message)
         except Exception:  # 未预期错误只记日志，不把细节给模型
             logger.exception("工具执行失败 tool=%s chat_id=%s", name, context.chat_id)
-            self._note_failure(context, name)
+            await self._note_failure(context, name, "internal_error")
             return _error(name, "internal_error", "执行失败")
 
         return self._fit_payload(name, payload, tool.spec.max_payload_bytes)
@@ -109,7 +113,7 @@ class ToolExecutor:
             return "该工具暂时熔断，稍后再试"
         return None
 
-    def _note_failure(self, context: ToolContext, name: str) -> None:
+    async def _note_failure(self, context: ToolContext, name: str, error_code: str) -> None:
         count = context.failures_this_round.get(name, 0) + 1
         context.failures_this_round[name] = count
         if count >= self._config.round_failures:
@@ -123,6 +127,12 @@ class ToolExecutor:
         if len(history) >= self._config.window_failures:
             self._breaker_until[(context.chat_id, name)] = now + self._config.breaker_seconds
             logger.warning("工具熔断 tool=%s chat_id=%s", name, context.chat_id)
+
+        if self._failure_recorder is not None:
+            try:
+                await self._failure_recorder(name, context.chat_id, error_code)
+            except Exception:  # 留痕失败不影响工具结果与回复
+                logger.warning("工具失败留痕失败 tool=%s chat_id=%s", name, context.chat_id, exc_info=True)
 
     def _fit_payload(self, name: str, payload: dict[str, object], limit: int | None = None) -> dict[str, object]:
         budget = self._max_payload_bytes if limit is None else limit

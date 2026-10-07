@@ -13,7 +13,8 @@ from app.gate.queue import ChatQueue
 from app.gate.trigger import TriggerDetector
 from app.llm.loop import Responder
 from app.ops.admin import AdminRegistry
-from app.ops.commands import CommandService
+from app.ops.commands import DENIED_TEXT, CommandService
+from app.ops.health import HealthState
 from app.ops.quota import DAILY_EXHAUSTED_TEXT, QuotaGuard
 from app.outbound.queue import OutboundQueue
 from app.outbound.ratelimit import RateLimiter
@@ -50,6 +51,8 @@ class PipelineTests(DbTestCase):
         sticker_fail_times: int = 0,
         commands=None,
         quota=None,
+        health=None,
+        failure_recorder=None,
     ) -> None:
         self.clock = FakeClock()
         self.debouncer = Debouncer(quiet_seconds=1.2, max_messages=5, clock=self.clock)
@@ -73,7 +76,9 @@ class PipelineTests(DbTestCase):
             mood=self.mood,
         )
         self.policy = Policy(self.registry)
-        self.tools = ToolExecutor(self.registry, self.policy, clock=self.clock.monotonic)
+        self.tools = ToolExecutor(
+            self.registry, self.policy, clock=self.clock.monotonic, failure_recorder=failure_recorder
+        )
         self.runner = SessionRunner(
             settings=self.settings,
             connection=self.connection,
@@ -88,6 +93,7 @@ class PipelineTests(DbTestCase):
             mood=self.mood,
             commands=commands,
             quota=quota,
+            health=health,
         )
     async def _send(self, texts, *, chat_id: int = 1, start_update: int = 100, start_message: int = 10) -> None:
         for index, text in enumerate(texts):
@@ -637,6 +643,61 @@ class PipelineTests(DbTestCase):
         await self._flush()
         self.assertEqual(len(self.llm.calls), 1)  # 配额没被命令吃掉
         self.assertEqual([item["text"] for item in self.sender.sent][-1], "好")
+
+    def _commands_with(self, *, admins=(42,), health=None):
+        async def fetch(_chat_id: int) -> set[int]:
+            return set(admins)
+
+        return CommandService(self.connection, AdminRegistry(fetch), settings=self.settings, health=health)
+
+    async def _command(self, text: str, *, user_id: int = 42, update_id: int = 500, message_id: int = 500) -> None:
+        await self.runner.handle(
+            make_incoming(
+                update_id=update_id, chat_id=1, message_id=message_id, text=text, user_id=user_id
+            )
+        )
+        await self.outbound.drain(5.0)
+
+    async def test_stats_command_is_admin_only_and_does_not_call_the_model(self) -> None:
+        """F5.4：/stats 只读、0 token、不进模型；非管理员被拒。"""
+        health = HealthState(instance_id="bot-1")
+        self._build(commands=self._commands_with(health=health), health=health)
+        await self._command("/stats")
+
+        self.assertEqual(self.llm.calls, [])
+        self.assertEqual((await self._usage())["calls"], 0)
+        text = str(self.sender.sent[0]["text"])
+        self.assertIn("本群运行统计", text)
+        self.assertNotIn("test-token", text)
+
+        await self._command("/stats", user_id=9, update_id=501, message_id=501)
+        self.assertEqual(self.sender.sent[-1]["text"], DENIED_TEXT)
+        self.assertNotIn("统计", str(self.sender.sent[-1]["text"]))
+
+    async def test_health_command_reports_status_without_internals(self) -> None:
+        health = HealthState(instance_id="bot-1")
+        self._build(commands=self._commands_with(health=health), health=health)
+        await self._command("/health")
+
+        self.assertEqual(self.llm.calls, [])
+        self.assertEqual((await self._usage())["calls"], 0)
+        text = str(self.sender.sent[0]["text"])
+        self.assertIn("状态：正常", text)
+        self.assertIn("数据库：可读", text)
+        self.assertNotIn("test-key", text)
+
+        await self._command("/health", user_id=9, update_id=502, message_id=502)
+        self.assertEqual(self.sender.sent[-1]["text"], DENIED_TEXT)
+
+    async def test_health_state_tracks_processed_updates(self) -> None:
+        health = HealthState(instance_id="bot-1")
+        self._build("好", commands=self._commands_with(health=health), health=health)
+        self.assertIsNone((await health.snapshot())["last_update_at"])
+
+        await self._send(["@bot 在吗"])
+        await self._flush()
+
+        self.assertIsNotNone((await health.snapshot())["last_update_at"])
 
 
 if __name__ == "__main__":

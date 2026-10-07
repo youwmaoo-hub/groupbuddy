@@ -63,7 +63,7 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | | `app/sandbox/backends.py` | podman/docker CLI 调用与**启动时探测一次**；`FakeBackend` 供离线测试 |
 | | `app/sandbox/runner.py` | `run_code` 唯一执行入口：并发闸门、超时销毁容器、输出截断、临时文件清理 |
 | | `app/sandbox/preflight.py` | 代码预扫描，仅记日志（不是安全边界） |
-| 存储 | `app/storage/db.py` | aiosqlite 连接、WAL、`user_version` 迁移 |
+| 存储 | `app/storage/db.py` | aiosqlite 连接、WAL、`user_version` 迁移、`PRAGMA optimize` 维护入口 |
 | | `app/storage/tx.py` | 写入事务边界：`transaction()` 用 `SAVEPOINT` 包住一段写入，成功提交、失败整体回滚（T9，见 `docs/database.md` §6） |
 | | `app/storage/repo/*.py` | messages / chat_settings / usage / stickers / summaries / notes / updates / tool_failures 读写（同名模块逐表一个文件；写入统一走 `app/storage/tx.py`，不再自己 `commit()`） |
 | | `app/storage/backup.py` | 冷备份能力（阶段 9）：只读源库 `Connection.backup()` → 单文件快照 → `integrity_check` + 行数统计 → 保留最近 N 份；运维入口 `scripts/backup_db.py` |
@@ -117,6 +117,7 @@ Telegram Update
 - **出站串行**：同一群的文本与贴纸发送共用一把锁（`app/outbound/queue.py`）；贴纸走独立的 1 条/20 秒限速通道。
 - **摘要调度**：后台任务 `summary-scheduler` 按 `chat_id` 串行、异步、可重试、幂等，随关闭信号停止，不阻塞回复（`app/session/summary.py`）。
 - **健康心跳**：后台任务 `health-heartbeat` 每 60 秒原子重写 `storage/health.json`（`app/ops/health.py`）；只读探测、不调用模型，写失败只告警。
+- **定期维护**：后台任务 `housekeeping` 每小时清理过期 `updates`/`tool_failures`，并按 7 天门槛执行一次 `PRAGMA optimize`（`app/storage/db.py` 的 `optimize`）；单步失败只记日志，不中断循环。
 - **沙箱执行**：`run_code` 只经 `app/sandbox/runner.py` 在一次性容器里执行（无网络、只读根、非 root、`--rm`），并发上限 2（超出排队），
   超时即 kill 并销毁容器，临时输出目录用后即删；没有可用运行时即 fail-closed，绝不退化到宿主机（`docs/security.md` §4）。
 - 每群邮箱有容量上限，溢出策略：合并待处理批次并保留最新若干条，不无限堆积。
@@ -155,7 +156,7 @@ Docker 只支持 Tier A | 独立沙箱服务 / microVM（确有必要时） |
 - `tests/offline/` 用标准库 `unittest`，不需要网络、不需要真实 Bot Token、不需要 API Key。
 - 本地开发（Windows）与生产（Linux VPS）跑同一套代码，不维护平台分支。
 - **证据分级**：本地离线 `unittest` 通过只证明本机逻辑；沙箱与平台行为必须由**真机证据**证明（VPS 上跑同一套测试 + `scripts/verify_sandbox.py`）。两类证据分别记录在 `docs/status.md`，不得互相替代（见 `AGENTS.md` 证据纪律）。
-- **覆盖率现状**：550 个测试方法覆盖闸门/会话/工具/沙箱/存储/记忆/命令/运行指标/进程入口。原先零覆盖的关键路径已补齐（T25）：`app/logging_setup.py`（`SecretFilter` 的 msg/tuple/dict 三条脱敏路径 + 根 logger 装配与轮转文件、噪声库降级）、`app/telegram/sender.py`（异常 → `RateLimited`/`SendFailed`、不设 `parse_mode`）、`app/telegram/handlers.py`（update → runner、异常不外抛）、`app/llm/client.py`（请求组装、usage/tool_calls 提取、错误翻译）、`app/main.py`（数据库探测、工具失败留痕、`stop()` 收尾与信号注册、每小时清理）与 `CliBackend.run`（真实子进程的退出码与超时销毁）；对应 `tests/offline/test_logging.py`、`test_telegram_sender.py`、`test_handlers.py`、`test_client.py`、`test_main.py`、`test_sandbox.py::CliBackendRunTests`。真机验收脚本 `scripts/verify_sandbox.py` 的判定逻辑（负向断言的探针标记与错误签名、`Tier A`/`Tier B` 按显式归属聚合）由 `tests/offline/test_verify_sandbox.py` 用假后端离线覆盖（T7）。仍未覆盖的是需要真实 Telegram/容器/真机的路径（由真机证据证明，见本文件本节的证据分级）。
+- **覆盖率现状**：564 个测试方法覆盖闸门/会话/工具/沙箱/存储/记忆/命令/运行指标/进程入口。原先零覆盖的关键路径已补齐（T25）：`app/logging_setup.py`（`SecretFilter` 的 msg/tuple/dict 三条脱敏路径 + 根 logger 装配与轮转文件、噪声库降级）、`app/telegram/sender.py`（异常 → `RateLimited`/`SendFailed`、不设 `parse_mode`）、`app/telegram/handlers.py`（update → runner、异常不外抛）、`app/llm/client.py`（请求组装、usage/tool_calls 提取、错误翻译）、`app/main.py`（数据库探测、工具失败留痕、`stop()` 收尾与信号注册、每小时清理）与 `CliBackend.run`（真实子进程的退出码与超时销毁）；对应 `tests/offline/test_logging.py`、`test_telegram_sender.py`、`test_handlers.py`、`test_client.py`、`test_main.py`、`test_sandbox.py::CliBackendRunTests`。真机验收脚本 `scripts/verify_sandbox.py` 的判定逻辑（负向断言的探针标记与错误签名、`Tier A`/`Tier B` 按显式归属聚合）由 `tests/offline/test_verify_sandbox.py` 用假后端离线覆盖（T7）。仍需覆盖的是需要真实 Telegram/容器/真机的路径（由真机证据证明，见本文件本节的证据分级）。写入事务边界（T9，`tests/offline/test_transactions.py`）与 `PRAGMA optimize` 的维护节奏（`tests/offline/test_storage.py`、`tests/offline/test_main.py`）也已有离线覆盖。
 - Windows 上软链接/硬链接相关用例会 `skipTest`（平台能力差异），因此「拒绝符号链接/硬链接」在 Windows 上是**条件跳过**、在 Linux 真机上才真正执行。
 
 ## 9. 可部署性约束（细节见 `docs/deployment.md`）

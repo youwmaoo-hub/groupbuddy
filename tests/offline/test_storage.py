@@ -10,7 +10,7 @@ from unittest import mock
 
 import aiosqlite
 
-from app.storage.db import apply_migrations, load_migrations
+from app.storage.db import apply_migrations, load_migrations, optimize
 from app.storage.repo import chat_settings, messages, updates, usage
 from tests.offline.helpers import DbTestCase
 
@@ -334,6 +334,49 @@ class MigrationAtomicityTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("idx_tool_failures_chat_time", indexes)
         finally:
             await connection.close()
+
+
+class _RecordingConnection:
+    """只记录 SQL 的假连接：用于确认维护动作发出了什么 PRAGMA。"""
+
+    def __init__(self) -> None:
+        self.statements: list[str] = []
+
+    async def execute(self, sql: str, parameters: object = ()) -> None:
+        self.statements.append(sql)
+
+
+class OptimizePragmaTests(unittest.IsolatedAsyncioTestCase):
+    async def test_optimize_issues_the_pragma(self) -> None:
+        connection = _RecordingConnection()
+
+        await optimize(connection)  # type: ignore[arg-type]
+
+        self.assertEqual(["PRAGMA optimize"], connection.statements)
+
+
+class OptimizeOnRealDatabaseTests(DbTestCase):
+    async def test_optimize_runs_and_can_be_repeated(self) -> None:
+        await messages.insert(
+            self.connection,
+            chat_id=-100,
+            message_id=1,
+            user_id=2,
+            role="user",
+            text="你好",
+            created_at=1_700_000_000,
+        )
+
+        await optimize(self.connection)
+        await optimize(self.connection)
+
+        cursor = await self.connection.execute("SELECT COUNT(*) FROM messages")
+        try:
+            row = await cursor.fetchone()
+        finally:
+            await cursor.close()
+        self.assertEqual(1, row[0])
+
 
 if __name__ == "__main__":
     unittest.main()

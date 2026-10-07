@@ -32,7 +32,7 @@ from app.session.context import ContextBuilder
 from app.session.mood import MoodTracker
 from app.session.runner import SessionRunner
 from app.session.summary import SummaryScheduler, SummaryService
-from app.storage.db import apply_migrations, close_db, open_db
+from app.storage.db import apply_migrations, close_db, open_db, optimize
 from app.storage.repo import tool_failures, updates
 from app.storage.repo.stickers import DbStickerStore
 from app.telegram.admins import AiogramAdminSource
@@ -45,6 +45,7 @@ from app.tools.policy import Policy
 logger = logging.getLogger("app.main")
 
 HOUSEKEEPING_INTERVAL_SECONDS = 3600.0
+OPTIMIZE_INTERVAL_SECONDS = 7 * 24 * 3600.0
 SHUTDOWN_DRAIN_SECONDS = 10.0
 
 
@@ -259,8 +260,9 @@ class Application:
         logger.info("已关闭")
 
     async def _housekeeping_loop(self) -> None:
-        """定期清理过期 update_id 与过期工具失败记录（docs/database.md §4）。"""
+        """定期清理过期 update_id 与过期工具失败记录（docs/database.md §4），并按周刷新统计信息（§5）。"""
         connection = self._connection
+        last_optimize: float | None = None
         while not self._stop.is_set():
             try:
                 await asyncio.wait_for(self._stop.wait(), timeout=HOUSEKEEPING_INTERVAL_SECONDS)
@@ -275,6 +277,11 @@ class Application:
                 purged = await tool_failures.purge_old(connection)
                 if purged:
                     logger.info("清理过期工具失败记录 rows=%s", purged)
+                now = asyncio.get_running_loop().time()
+                if last_optimize is None or now - last_optimize >= OPTIMIZE_INTERVAL_SECONDS:
+                    await optimize(connection)
+                    last_optimize = now
+                    logger.info("数据库统计信息已刷新")
             except Exception:
                 logger.exception("后台清理失败")
 

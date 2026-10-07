@@ -113,3 +113,8 @@ async def apply_migrations(connection: aiosqlite.Connection, migrations: Iterabl
 
 async def close_db(connection: aiosqlite.Connection) -> None:
     await connection.close()
+
+
+async def optimize(connection: aiosqlite.Connection) -> None:
+    """跑一次 `PRAGMA optimize`（docs/database.md §5 维护）：SQLite 只在其认为划算时刷新统计信息。"""
+    await connection.execute("PRAGMA optimize")

@@ -147,7 +147,7 @@ CREATE VIRTUAL TABLE notes_fts     USING fts5(tokens, content='notes',     conte
 | `messages` | 默认全保留 | 群主 `/clear` 可按群清理；清理后摘要保留 |
 | `notes` | 默认全保留 | 群主 `/note` 同名覆盖（`version` +1）或 `/note del <名称>` 删除（**已实现** `notes.delete`，同步清 `notes_fts`） |
 | `summaries` | 每群保留最近 50 条 | 超出归档删除最旧（**已实现**：`SUMMARY_KEEP=50`，摘要写成功后立即 prune） |
-| 维护 | 每周 | **未实现**：`PRAGMA optimize`；体积明显膨胀时 `VACUUM`（离线执行） |
+| 维护 | 每周 | **已实现** `PRAGMA optimize`：每小时 housekeeping 里带时间门槛，每 7 天（`app/main.py` 的 `OPTIMIZE_INTERVAL_SECONDS`）执行一次，让 SQLite 只在其认为划算时刷新统计信息；体积明显膨胀时的 `VACUUM` 仍离线手工执行（不放进进程内）。 |
 
 ## 5. 备份与恢复
 

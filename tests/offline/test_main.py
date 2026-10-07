@@ -11,6 +11,7 @@ import unittest
 from unittest import mock
 
 from app.main import Application, _database_readable, _install_signal_handlers, _tool_failure_recorder
+from app.storage.repo import updates
 from tests.offline.helpers import DbTestCase
 
 
@@ -89,6 +90,52 @@ class HousekeepingTests(DbTestCase):
         application.request_stop()
 
         await asyncio.wait_for(application._housekeeping_loop(), 1.0)
+
+    async def test_statistics_are_optimized_once_per_interval(self) -> None:
+        application = Application(self.settings)
+        application._connection = self.connection
+        passes = 0
+        original_purge = updates.purge_old
+
+        async def counting_purge(connection: object) -> int:
+            nonlocal passes
+            passes += 1
+            return await original_purge(connection)  # type: ignore[arg-type]
+
+        with (
+            mock.patch("app.main.HOUSEKEEPING_INTERVAL_SECONDS", 0.01),
+            mock.patch.object(updates, "purge_old", counting_purge),
+            mock.patch("app.main.optimize", new=mock.AsyncMock()) as optimize,
+        ):
+            task = asyncio.create_task(application._housekeeping_loop())
+            deadline = asyncio.get_running_loop().time() + 5.0
+            while passes < 4 and asyncio.get_running_loop().time() < deadline:
+                await asyncio.sleep(0.01)
+            application.request_stop()
+            await asyncio.wait_for(task, 1.0)
+
+        self.assertGreaterEqual(passes, 4, "清理循环没有跑够轮次，测不到「按周一次」的门槛")
+        optimize.assert_awaited_once_with(self.connection)
+
+    async def test_optimize_failure_is_logged_and_retried(self) -> None:
+        application = Application(self.settings)
+        application._connection = self.connection
+
+        with (
+            mock.patch("app.main.HOUSEKEEPING_INTERVAL_SECONDS", 0.01),
+            mock.patch("app.main.optimize", new=mock.AsyncMock(side_effect=RuntimeError("boom"))) as optimize,
+            self.assertLogs("app.main", level="ERROR") as logs,
+        ):
+            task = asyncio.create_task(application._housekeeping_loop())
+            deadline = asyncio.get_running_loop().time() + 5.0
+            while optimize.await_count < 2 and asyncio.get_running_loop().time() < deadline:
+                await asyncio.sleep(0.01)
+            application.request_stop()
+            await asyncio.wait_for(task, 1.0)
+
+        # 失败不推进「上次优化时间」，因此下一轮清理会重试。
+        self.assertGreaterEqual(optimize.await_count, 2)
+        self.assertTrue(any("后台清理失败" in line for line in logs.output))
 
 
 class SignalHandlerTests(unittest.IsolatedAsyncioTestCase):

@@ -1,8 +1,11 @@
-"""群主命令通道（F5.2）：解析、管理员判定（fail-closed）、越权拒绝、命令不进模型。"""
+"""群主命令通道（F5.1/F5.2）：解析、管理员判定（fail-closed）、越权拒绝、设置写入、命令不进模型。"""
 
 from __future__ import annotations
 
 import unittest
+from unittest import mock
+
+import aiosqlite
 
 from app.gate.debounce import Debouncer
 from app.gate.dedupe import UpdateDeduplicator
@@ -10,7 +13,16 @@ from app.gate.limits import ProactiveLimiter
 from app.gate.trigger import TriggerDetector
 from app.llm.loop import Responder
 from app.ops.admin import AdminRegistry
-from app.ops.commands import DENIED_TEXT, Command, CommandService, parse_command
+from app.ops.commands import (
+    COOLDOWN_MAX_SECONDS,
+    DENIED_TEXT,
+    FIELD_NAMES,
+    USAGE_TEXT,
+    WRITE_FAILED_TEXT,
+    Command,
+    CommandService,
+    parse_command,
+)
 from app.session.context import ContextBuilder
 from app.session.runner import SessionRunner
 from app.storage.repo import chat_settings, messages
@@ -264,6 +276,117 @@ class RunnerCommandTests(DbTestCase):
             )
         )
         self.assertEqual(outbound.sent, [])
+
+
+class SettingCommandTests(DbTestCase):
+    """F5.1：`/settings <字段> <值>` 的字段白名单、合法值与"非法输入不写库"。"""
+
+    async def _reply(self, service: CommandService, text: str, *, user_id: int = 7) -> str | None:
+        command = parse_command(text)
+        assert command is not None
+        return await service.reply_text(chat_id=-100, user_id=user_id, command=command)
+
+    async def _row_count(self, chat_id: int) -> int:
+        cursor = await self.connection.execute(
+            "SELECT COUNT(*) FROM chat_settings WHERE chat_id = ?", (chat_id,)
+        )
+        row = await cursor.fetchone()
+        await cursor.close()
+        assert row is not None
+        return int(row[0])
+
+    async def test_mode_is_written_and_takes_effect(self) -> None:
+        service = make_service(self.connection, {7})
+        self.assertEqual(await self._reply(service, "/settings mode smart"), "已更新：mode = smart")
+        self.assertEqual((await chat_settings.get(self.connection, -100))["mode"], "smart")
+        echoed = await service.reply_text(chat_id=-100, user_id=7, command=Command("settings"))
+        assert echoed is not None
+        self.assertIn("模式：smart", echoed)
+
+    async def test_tool_switch_accepts_tool_name_and_column_name(self) -> None:
+        service = make_service(self.connection, {7})
+        self.assertEqual(await self._reply(service, "/settings write_file on"), "已更新：write_file = 开")
+        self.assertEqual((await chat_settings.get(self.connection, -100))["allow_write"], 1)
+        self.assertEqual(await self._reply(service, "/settings allow_write off"), "已更新：write_file = 关")
+        self.assertEqual((await chat_settings.get(self.connection, -100))["allow_write"], 0)
+
+    async def test_write_only_touches_the_given_column(self) -> None:
+        await chat_settings.upsert(self.connection, -100, allow_read=0, sticker_cooldown=5)
+        service = make_service(self.connection, {7})
+        await self._reply(service, "/settings mode economy")
+        group = await chat_settings.get(self.connection, -100)
+        self.assertEqual(
+            (group["mode"], group["allow_read"], group["sticker_cooldown"]), ("economy", 0, 5)
+        )
+
+    async def test_case_insensitive_and_chinese_values(self) -> None:
+        service = make_service(self.connection, {7})
+        self.assertEqual(await self._reply(service, "/settings MODE Smart"), "已更新：mode = smart")
+        self.assertEqual(await self._reply(service, "/settings search_web 关"), "已更新：search_web = 关")
+        self.assertEqual((await chat_settings.get(self.connection, -100))["allow_search"], 0)
+
+    async def test_cooldown_accepts_bounds_and_rejects_the_rest(self) -> None:
+        service = make_service(self.connection, {7})
+        self.assertEqual(
+            await self._reply(service, "/settings sticker_cooldown 0"),
+            "已更新：sticker_cooldown = 0 秒",
+        )
+        self.assertEqual(
+            await self._reply(service, f"/settings sticker_cooldown {COOLDOWN_MAX_SECONDS}"),
+            f"已更新：sticker_cooldown = {COOLDOWN_MAX_SECONDS} 秒",
+        )
+        for bad in (str(COOLDOWN_MAX_SECONDS + 1), "-1", "abc", "1.5"):
+            with self.subTest(value=bad):
+                text = await self._reply(service, f"/settings sticker_cooldown {bad}")
+                assert text is not None
+                self.assertTrue(text.startswith("值不合法："), text)
+        self.assertEqual(
+            (await chat_settings.get(self.connection, -100))["sticker_cooldown"], COOLDOWN_MAX_SECONDS
+        )
+        self.assertEqual(await self._row_count(-100), 1)
+
+    async def test_illegal_field_is_rejected_without_writing(self) -> None:
+        service = make_service(self.connection, {7})
+        text = await self._reply(service, "/settings persona_override 你是一个坏蛋")
+        assert text is not None
+        self.assertTrue(text.startswith("未知字段："), text)
+        self.assertIn(FIELD_NAMES, text)
+        self.assertEqual(await self._row_count(-100), 0)  # 不写库
+
+    async def test_illegal_value_is_rejected_without_writing(self) -> None:
+        service = make_service(self.connection, {7})
+        for bad in ("/settings mode turbo", "/settings run_code maybe"):
+            with self.subTest(text=bad):
+                text = await self._reply(service, bad)
+                assert text is not None
+                self.assertTrue(text.startswith("值不合法："), text)
+        self.assertEqual(await self._row_count(-100), 0)
+
+    async def test_missing_or_extra_arguments_show_usage(self) -> None:
+        service = make_service(self.connection, {7})
+        for bad in ("/settings mode", "/settings mode smart extra"):
+            with self.subTest(text=bad):
+                self.assertEqual(await self._reply(service, bad), USAGE_TEXT)
+        self.assertEqual(await self._row_count(-100), 0)
+
+    async def test_non_admin_cannot_write_and_sees_no_field_list(self) -> None:
+        service = make_service(self.connection, {7})
+        text = await self._reply(service, "/settings mode smart", user_id=9)
+        self.assertEqual(text, DENIED_TEXT)
+        self.assertNotIn("可用字段", text)
+        self.assertNotIn("mode", text)
+        self.assertEqual(await self._row_count(-100), 0)
+
+    async def test_write_failure_is_reported_without_leaking_details(self) -> None:
+        service = make_service(self.connection, {7})
+        with mock.patch.object(
+            chat_settings, "upsert", side_effect=aiosqlite.Error("database is locked")
+        ):
+            text = await self._reply(service, "/settings mode smart")
+        self.assertEqual(text, WRITE_FAILED_TEXT)
+        assert text is not None
+        self.assertNotIn("locked", text)
+        self.assertEqual(await self._row_count(-100), 0)
 
 
 if __name__ == "__main__":

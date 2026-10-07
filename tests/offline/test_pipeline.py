@@ -12,6 +12,8 @@ from app.gate.limits import ProactiveLimiter
 from app.gate.queue import ChatQueue
 from app.gate.trigger import TriggerDetector
 from app.llm.loop import Responder
+from app.ops.admin import AdminRegistry
+from app.ops.commands import CommandService
 from app.outbound.queue import OutboundQueue
 from app.outbound.ratelimit import RateLimiter
 from app.session.context import ContextBuilder
@@ -45,6 +47,7 @@ class PipelineTests(DbTestCase):
         on_complete=None,
         search_backend: str = "none",
         sticker_fail_times: int = 0,
+        commands=None,
     ) -> None:
         self.clock = FakeClock()
         self.debouncer = Debouncer(quiet_seconds=1.2, max_messages=5, clock=self.clock)
@@ -81,6 +84,7 @@ class PipelineTests(DbTestCase):
             outbound=self.outbound,
             tools=self.tools,
             mood=self.mood,
+            commands=commands,
         )
     async def _send(self, texts, *, chat_id: int = 1, start_update: int = 100, start_message: int = 10) -> None:
         for index, text in enumerate(texts):
@@ -526,6 +530,29 @@ class PipelineTests(DbTestCase):
         self.clock.advance(2.0)
         self.assertEqual(self.llm.calls, [])
         self.assertEqual(await messages.recent(self.connection, chat_id=1, limit=10), [])
+
+    async def test_settings_command_takes_effect_on_the_next_turn(self) -> None:
+        """F5.1：管理员改设置当轮生效，且命令本身不进模型、不记账。"""
+
+        async def fetch(_chat_id: int) -> set[int]:
+            return {42}
+
+        self._build("好", commands=CommandService(self.connection, AdminRegistry(fetch)))
+        await self._send(["/settings mode smart", "/settings write_file on"])
+        await self.outbound.drain(5.0)
+        self.assertEqual(self.llm.calls, [])  # 命令 0 token
+        self.assertEqual((await self._usage())["calls"], 0)  # 命令不记账
+        self.assertEqual(
+            [item["text"] for item in self.sender.sent],
+            ["已更新：mode = smart", "已更新：write_file = 开"],
+        )
+
+        await self._send(["@bot 在吗"], start_update=200, start_message=20)
+        await self._flush()
+        group = await chat_settings.get(self.connection, 1)
+        self.assertEqual((group["mode"], group["allow_write"]), ("smart", 1))
+        self.assertIn("write_file", self.llm.tool_names[0])  # 工具开关当轮生效
+        self.assertIn("模式：smart", str(self.llm.calls[0][0]["content"]))  # 模式当轮进入固定段
 
 
 if __name__ == "__main__":

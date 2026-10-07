@@ -48,7 +48,14 @@
 - 命令**不进模型、不写 `messages`、0 token**；未知命令静默丢弃，不回复。
 - 非管理员得到一句固定拒绝文案，**不泄露**设置内容、管理员名单或内部原因（§11 第 4 条）。
 - 私聊、自身/其他 Bot 的消息仍按入口硬过滤丢弃（§12）。
-- 已知实现范围：目前只有 `/settings`（回显本群模式、工具开关与贴纸冷却）；改设置（F5.1）与配额、`/stats`、`/health` 尚未实现。
+- **改设置（F5.1）**：`/settings <字段> <值>`，管理员限定。允许的字段只有 F5.1 列出的范围：
+  工具开关 `search_web` / `read_file` / `write_file` / `run_code` / `send_sticker` / `host_info`（值为 `on`/`off`，也接受 `开`/`关` 与等价列名 `allow_*`）、
+  `sticker_cooldown`（0–3600 的整数秒）、`mode`（`economy` / `normal` / `smart` / `unrestricted`，见 `docs/token.md` §5）。
+  `persona_override` 与 `owner_user_id` **不在**命令可写范围内（不采用 `owner_user_id` 自举）。
+- 写入只经 `chat_settings.upsert` 的单条原子 `INSERT … ON CONFLICT DO UPDATE`，**只写这一列**，绝不整行覆盖（T12）。
+- 非法字段、非法值、参数个数不对：只回一条提示（未知字段时附带可用字段），**不写库**；写入失败只回一句固定文案，不回显 SQLite 细节。
+- 立即生效：每轮都重新读取群设置——工具开关当轮改变可用清单，`mode` 当轮进入固定段。非管理员在任何情况下都只看到固定拒绝文案，**连字段列表都不下发**。
+- 尚未实现（阶段 8 后续）：配额、`/stats`、`/health`，以及模式对窗口 / 输出上限 / 工具档位的完整影响。
 
 ## 3. 工作区与路径
 

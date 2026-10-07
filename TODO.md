@@ -9,7 +9,7 @@
 **当前事实只有一个来源：`docs/status.md`**（commit、已完成能力、本机与真机测试、真机验收证据、技术债摘要、下一步）。本节只保留阶段进度。
 
 - 阶段 0–7：**已完成**。阶段 0 含部署约束增补（Windows 开发 / Linux VPS 24/7 生产，同一份代码，见 `docs/deployment.md`）；阶段 1 曾通过真实 Telegram + DeepSeek 端到端验收；阶段 7 的 Linux/Podman 真机验收**已完成**（13/13 PASS，commit 与日志路径见 `docs/status.md`）。
-- 阶段 8（权限、配额与运维）：**已完成并通过真机验收**（真机 checkout `88531d2` = 本机 `main` HEAD：416 条全量 OK、沙箱 13 项全 PASS、migration 4 与 `host_info` Linux 行为符合契约，见 `docs/status.md` §4.2）—— 群主命令最小闭环（管理员判定 + `/settings` 回显与写入 + 非管理员被拒，见 `docs/security.md` §2.1）、日/月 token 配额（见 `docs/token.md` §4.1）、运行指标 `/stats` + `/health`（与 `storage/health.json` 同一状态，见 `docs/deployment.md` §7）、`host_info`（F4.7）、四模式完整生效（`docs/token.md` §5）以及 T12/T15；阶段 8 内明确留到后续的只有链 3 轮次分档与模型档位路由（`/clear` 作为阶段 8 留后项已于 `8b14aab` 补做、群级人设 Persona 已由 `c29ecac` 补做、长期笔记 `/note` 已由 `495389b` 补做（记忆体验优化第一项），工具体验优化 T31 已由 `e1dcb6a` 修复（工具清单逐轮重取），见 §阶段 8）。阶段 9（部署与 24/7 运行）：**进行中 —— 最小生产闭环已完成并通过真机实测**（systemd 用户级单元 `groupbuddy.service`、真实 `.env` 600、启动时 migration、`storage/health.json` 心跳、Telegram 真机收发、stop/start/restart 与 `SIGKILL` 自动重启；证据见 `docs/status.md` §4.3、契约见 `docs/deployment.md` §12.9），**备份/恢复与更新/回滚演练也已完成并真机验证**（`scripts/backup_db.py` + §8.1 bundle 流程，真机当前 `26e946d`（= `bafe096`；真机直接相关 65 条 OK），证据见 `docs/status.md` §4.4），未完成部分见 §阶段 9 的「待做」。B 组技术债：T25 关键路径补测已完成（`6b93fd6`，只加测试），T7 验收脚本判定口径已修复（`4ea2326`，含 4 条离线测试），T9 repo 写入事务边界已修复（`1826d89`，含 10 条离线测试，契约见 `docs/database.md` §6）。阶段 10（Web 控制面板与多实例）：**未开始**。阶段 10 仅完成架构预留（`docs/domain.md`、`docs/architecture.md` §10），未开发面板、未建控制面表。
+- 阶段 8（权限、配额与运维）：**已完成并通过真机验收**（真机 checkout `88531d2` = 本机 `main` HEAD：416 条全量 OK、沙箱 13 项全 PASS、migration 4 与 `host_info` Linux 行为符合契约，见 `docs/status.md` §4.2）—— 群主命令最小闭环（管理员判定 + `/settings` 回显与写入 + 非管理员被拒，见 `docs/security.md` §2.1）、日/月 token 配额（见 `docs/token.md` §4.1）、运行指标 `/stats` + `/health`（与 `storage/health.json` 同一状态，见 `docs/deployment.md` §7）、`host_info`（F4.7）、四模式完整生效（`docs/token.md` §5）以及 T12/T15；阶段 8 内明确留到后续的只有链 3 轮次分档与模型档位路由（`/clear` 作为阶段 8 留后项已于 `8b14aab` 补做、群级人设 Persona 已由 `c29ecac` 补做、长期笔记 `/note` 已由 `495389b` 补做（记忆体验优化第一项），工具体验优化 T31 已由 `e1dcb6a` 修复（工具清单逐轮重取），见 §阶段 8）。阶段 9（部署与 24/7 运行）：**进行中 —— 最小生产闭环已完成并通过真机实测**（systemd 用户级单元 `groupbuddy.service`、真实 `.env` 600、启动时 migration、`storage/health.json` 心跳、Telegram 真机收发、stop/start/restart 与 `SIGKILL` 自动重启；证据见 `docs/status.md` §4.3、契约见 `docs/deployment.md` §12.9），**备份/恢复与更新/回滚演练也已完成并真机验证**（`scripts/backup_db.py` + §8.1 bundle 流程，真机当前 `26e946d`（= `bafe096`；真机直接相关 65 条 OK），证据见 `docs/status.md` §4.4），未完成部分见 §阶段 9 的「待做」。B 组技术债：T25 关键路径补测已完成（`6b93fd6`，只加测试），T7 验收脚本判定口径已修复（`4ea2326`，含 4 条离线测试），T9 repo 写入事务边界已修复（`1826d89`，含 10 条离线测试，契约见 `docs/database.md` §6），T4 容器运行时保留退出码已映射 `execution_failed`（含 2 条离线测试，契约见 `docs/tools.md` §2 `run_code`）。阶段 10（Web 控制面板与多实例）：**未开始**。阶段 10 仅完成架构预留（`docs/domain.md`、`docs/architecture.md` §10），未开发面板、未建控制面表。
 - 一次只推进一个阶段；不得跳阶段。
 
 ## 阶段表
@@ -158,9 +158,10 @@
 
 ### 安全与沙箱
 
-4. **T4（P1）CLI 非零退出不映射 `execution_failed`**（用户点名）— `app/sandbox/runner.py:143-149`、`app/sandbox/backends.py:128-129`：
-   只有后端调用**抛异常**时才映射（`runner.py:128-131`）；Podman 以 125/126/127 退出时 argv 原样成为工具结果，
-   「容器没起来」与「程序正常失败」不可区分 —— 阶段 7 首次真机验收的 `--workdir /workspace` 事故正是由此漏报。契约见 `docs/tools.md` §2 `run_code`。
+4. **T4（P1，已修复，`d59a703`）CLI 非零退出不映射 `execution_failed`**（用户点名）— 原状：只有后端调用**抛异常**时才映射（`runner.py:128-131`）；
+   Podman 以 125/126/127 退出时 argv 原样成为工具结果，「容器没起来」与「程序正常失败」不可区分 —— 阶段 7 首次真机验收的 `--workdir /workspace` 事故正是由此漏报。
+   修复：`app/sandbox/backends.py` 新增 `CLI_FAILURE_EXIT_CODES = frozenset({125, 126, 127})`，`runner.py` 在超时判定之后、读输出之前按该集合映射为 `SandboxError("execution_failed", …)` 并销毁容器，argv 退出码不再返回给模型；
+   离线测试 2 条（`tests/offline/test_sandbox.py` 的 `RunnerTests`），契约见 `docs/tools.md` §2 `run_code`。**改动运行期行为，真机需随下一次部署复验。**
 5. **T5（P2）沙箱 stderr 未清洗** — 容器/CLI 的 stderr 原样进入模型上下文（`runner.py:138,146-148`），与 `docs/security.md` §3「上下文里不出现宿主机绝对路径」冲突。
 6. **T6（P2）`--cap-drop=ALL` 与 `no-new-privileges` 未被验收覆盖** — 实现在 `app/sandbox/spec.py:68-70`，但 `scripts/verify_sandbox.py` 无对应检查项。
 7. **T7（P2，已修复，`4ea2326`）验收脚本判定口径弱** — `want_ok=False` 的两项（无网络、只读根）任何非零退出都 PASS，区分不出「容器没启动」；

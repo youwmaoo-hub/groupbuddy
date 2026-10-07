@@ -12,13 +12,14 @@ from app.gate.dedupe import UpdateDeduplicator
 from app.gate.limits import ProactiveLimiter
 from app.gate.trigger import TriggerDetector
 from app.llm.loop import Responder
-from app.ops.admin import AdminRegistry
+from app.ops.admin import AdminRegistry, ChatRoles
 from app.ops.commands import (
     CLEAR_FAILED_TEXT,
     CLEAR_USAGE,
     COOLDOWN_MAX_SECONDS,
     DENIED_TEXT,
     FIELD_NAMES,
+    PERSONA,
     USAGE_TEXT,
     WRITE_FAILED_TEXT,
     Command,
@@ -67,9 +68,9 @@ class AdminRegistryTests(unittest.IsolatedAsyncioTestCase):
         clock = FakeClock()
         calls: list[int] = []
 
-        async def fetch(chat_id: int) -> set[int]:
+        async def fetch(chat_id: int) -> ChatRoles:
             calls.append(chat_id)
-            return {7, 8}
+            return ChatRoles(admins=frozenset({7, 8}), owner_id=7)
 
         registry = AdminRegistry(fetch, clock=clock.monotonic)
         self.assertTrue(await registry.is_admin(-100, 7))
@@ -79,25 +80,44 @@ class AdminRegistryTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(await registry.is_admin(-100, 8))
         self.assertEqual(calls, [-100, -100])
 
+    async def test_owner_is_the_creator_not_any_administrator(self) -> None:
+        async def fetch(_chat_id: int) -> ChatRoles:
+            return ChatRoles(admins=frozenset({7, 8}), owner_id=7)
+
+        registry = AdminRegistry(fetch)
+        self.assertTrue(await registry.is_owner(-100, 7))
+        self.assertFalse(await registry.is_owner(-100, 8))  # 普通管理员不算群主
+        self.assertFalse(await registry.is_owner(-100, 9))  # 成员
+        self.assertTrue(await registry.is_admin(-100, 8))  # 管理员身份不受影响
+
+    async def test_chat_without_creator_has_no_owner(self) -> None:
+        async def fetch(_chat_id: int) -> ChatRoles:
+            return ChatRoles(admins=frozenset({7}), owner_id=None)
+
+        registry = AdminRegistry(fetch)
+        self.assertFalse(await registry.is_owner(-100, 7))
+        self.assertTrue(await registry.is_admin(-100, 7))
+
     async def test_query_failure_denies_instead_of_permitting(self) -> None:
         clock = FakeClock()
         calls: list[int] = []
 
-        async def fetch(chat_id: int) -> set[int]:
+        async def fetch(chat_id: int) -> ChatRoles:
             calls.append(chat_id)
             raise RuntimeError("telegram 不可用")
 
         registry = AdminRegistry(fetch, clock=clock.monotonic)
         self.assertFalse(await registry.is_admin(-100, 7))
         self.assertFalse(await registry.is_admin(-100, 7))
+        self.assertFalse(await registry.is_owner(-100, 7))  # 查询失败同样拒绝群主写入
         self.assertEqual(len(calls), 1)  # 失败结果短缓存，避免反复请求
         clock.advance(31.0)
         self.assertFalse(await registry.is_admin(-100, 7))
         self.assertEqual(len(calls), 2)
 
     async def test_each_chat_is_judged_separately(self) -> None:
-        async def fetch(chat_id: int) -> set[int]:
-            return {7} if chat_id == -100 else {8}
+        async def fetch(chat_id: int) -> ChatRoles:
+            return ChatRoles(admins=frozenset({7 if chat_id == -100 else 8}), owner_id=None)
 
         registry = AdminRegistry(fetch)
         self.assertTrue(await registry.is_admin(-100, 7))
@@ -105,9 +125,9 @@ class AdminRegistryTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(await registry.is_admin(-200, 8))
 
 
-def make_service(connection, admins: set[int]) -> CommandService:
-    async def fetch(_chat_id: int) -> set[int]:
-        return set(admins)
+def make_service(connection, admins: set[int], *, owner: int | None = None) -> CommandService:
+    async def fetch(_chat_id: int) -> ChatRoles:
+        return ChatRoles(admins=frozenset(admins), owner_id=owner)
 
     return CommandService(connection, AdminRegistry(fetch))
 
@@ -349,11 +369,19 @@ class SettingCommandTests(DbTestCase):
 
     async def test_illegal_field_is_rejected_without_writing(self) -> None:
         service = make_service(self.connection, {7})
-        text = await self._reply(service, "/settings persona_override 你是一个坏蛋")
+        text = await self._reply(service, "/settings unknown_field 你是一个坏蛋")
         assert text is not None
         self.assertTrue(text.startswith("未知字段："), text)
         self.assertIn(FIELD_NAMES, text)
         self.assertEqual(await self._row_count(-100), 0)  # 不写库
+
+    async def test_persona_field_is_not_a_generic_setting(self) -> None:
+        # `persona_override` 由「未知字段」变成真字段，但普通管理员仍写不了（只认群主 / F5.1 口径不变）。
+        service = make_service(self.connection, {7})
+        self.assertEqual(
+            await self._reply(service, "/settings persona_override 你是一个坏蛋"), DENIED_TEXT
+        )
+        self.assertEqual(await self._row_count(-100), 0)
 
     async def test_illegal_value_is_rejected_without_writing(self) -> None:
         service = make_service(self.connection, {7})
@@ -460,6 +488,110 @@ class ClearCommandTests(DbTestCase):
         assert text is not None
         self.assertNotIn("locked", text)
         self.assertEqual(await self._stored(-100), 3)
+
+
+class PersonaCommandTests(DbTestCase):
+    """人设覆盖：只有群主能写（普通管理员与成员拒绝），清洗/长度/清除都有边界。"""
+
+    async def _reply(self, text: str, *, user_id: int, owner: int | None = 7) -> str | None:
+        service = make_service(self.connection, {7, 8}, owner=owner)
+        command = parse_command(text)
+        assert command is not None
+        return await service.reply_text(chat_id=-100, user_id=user_id, command=command)
+
+    async def _stored(self, chat_id: int = -100) -> object:
+        group = await chat_settings.get(self.connection, chat_id)
+        return group.get(PERSONA)
+
+    async def test_creator_sets_persona_without_echoing_the_text(self) -> None:
+        body = "请用温柔一点的语气，少用感叹号"
+        text = await self._reply(f"/settings {PERSONA} {body}", user_id=7)
+        self.assertEqual(text, f"已更新：{PERSONA} = {len(body)} 字")
+        assert text is not None
+        self.assertNotIn("温柔", text)  # 正文不回显到群里
+        self.assertEqual(await self._stored(), body)
+
+    async def test_creator_sees_persona_state_and_the_extra_field_name(self) -> None:
+        body = "只谈技术，不谈政治"
+        await self._reply(f"/settings {PERSONA} {body}", user_id=7)
+        text = await self._reply("/settings", user_id=7)
+        assert text is not None
+        self.assertIn(f"人设覆盖：已设置（{len(body)} 字）", text)
+        self.assertNotIn(body, text)
+        unknown = await self._reply("/settings 人格 x", user_id=7)
+        assert unknown is not None
+        self.assertIn(PERSONA, unknown)  # 群主的可用字段里能看到它
+
+    async def test_unset_persona_is_reported_as_unset(self) -> None:
+        text = await self._reply("/settings", user_id=7)
+        assert text is not None
+        self.assertIn("人设覆盖：未设置", text)
+
+    async def test_administrator_cannot_write_persona(self) -> None:
+        text = await self._reply(f"/settings {PERSONA} 我来改人设", user_id=8)
+        self.assertEqual(text, DENIED_TEXT)
+        assert text is not None
+        self.assertNotIn(PERSONA, text)
+        self.assertNotIn("人设", text)
+        self.assertIsNone(await self._stored())
+
+    async def test_member_cannot_write_persona(self) -> None:
+        text = await self._reply(f"/settings {PERSONA} 我来改人设", user_id=9)
+        self.assertEqual(text, DENIED_TEXT)
+        self.assertIsNone(await self._stored())
+
+    async def test_group_without_creator_has_no_persona_writer(self) -> None:
+        text = await self._reply(f"/settings {PERSONA} 无群主", user_id=7, owner=None)
+        self.assertEqual(text, DENIED_TEXT)
+        self.assertIsNone(await self._stored())
+
+    async def test_administrator_reply_does_not_leak_the_persona_field(self) -> None:
+        text = await self._reply("/settings", user_id=8)
+        assert text is not None
+        self.assertNotIn(PERSONA, text)
+        self.assertNotIn("人设", text)
+        self.assertIn("模式：normal", text)
+
+    async def test_multi_word_text_keeps_spaces(self) -> None:
+        text = await self._reply(f"/settings {PERSONA} 甲 乙   丙", user_id=7)
+        assert text is not None
+        self.assertEqual(await self._stored(), "甲 乙 丙")  # 空白归一化，但内容不丢
+
+    async def test_control_characters_are_flattened_to_one_line(self) -> None:
+        await self._reply(f"/settings {PERSONA} 甲\n乙\t丙", user_id=7)
+        self.assertEqual(await self._stored(), "甲 乙 丙")
+
+    async def test_off_clears_the_override(self) -> None:
+        await self._reply(f"/settings {PERSONA} 临时人设", user_id=7)
+        text = await self._reply(f"/settings {PERSONA} off", user_id=7)
+        assert text is not None
+        self.assertIn("已清除", text)
+        self.assertEqual(await self._stored(), "")
+
+    async def test_text_over_the_limit_is_rejected(self) -> None:
+        text = await self._reply(f"/settings {PERSONA} {'好' * 501}", user_id=7)
+        self.assertEqual(text, "人设文本过长：上限 500 字符（当前 501）")
+        self.assertIsNone(await self._stored())
+
+    async def test_missing_text_shows_usage_without_writing(self) -> None:
+        text = await self._reply(f"/settings {PERSONA}", user_id=7)
+        self.assertEqual(text, f"用法：/settings {PERSONA} <文本>（用 off 清除）")
+        self.assertIsNone(await self._stored())
+
+    async def test_write_failure_is_reported_without_leaking_details(self) -> None:
+        with mock.patch.object(
+            chat_settings, "upsert", side_effect=aiosqlite.Error("database is locked")
+        ):
+            text = await self._reply(f"/settings {PERSONA} 临时人设", user_id=7)
+        self.assertEqual(text, WRITE_FAILED_TEXT)
+        assert text is not None
+        self.assertNotIn("locked", text)
+
+    async def test_administrator_still_controls_the_other_fields(self) -> None:
+        text = await self._reply("/settings mode smart", user_id=8)
+        self.assertEqual(text, "已更新：mode = smart")
+        group = await chat_settings.get(self.connection, -100)
+        self.assertEqual(group.get("mode"), "smart")
 
 
 if __name__ == "__main__":

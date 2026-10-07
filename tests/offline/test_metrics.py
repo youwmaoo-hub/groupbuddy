@@ -10,7 +10,7 @@ from unittest import mock
 import aiosqlite
 
 from app.config import today_in_timezone
-from app.ops.admin import AdminRegistry
+from app.ops.admin import AdminRegistry, ChatRoles
 from app.ops.commands import DENIED_TEXT, Command, CommandService
 from app.ops.health import HealthState, health_loop, write_snapshot
 from app.ops.metrics import STATS_FAILED_TEXT, day_bounds, render_health, render_stats
@@ -243,9 +243,9 @@ class RenderStatsTests(DbTestCase):
 class CommandMetricsTests(DbTestCase):
     """`/stats` 与 `/health` 走既有命令通道：管理员可见、非管理员拒绝、0 token。"""
 
-    def _service(self, *, admins=(42,), **kwargs: object) -> CommandService:
-        async def fetch(chat_id: int) -> set[int]:
-            return set(admins)  # type: ignore[arg-type]
+    def _service(self, *, admins=(42,), owner=None, **kwargs: object) -> CommandService:
+        async def fetch(_chat_id: int) -> ChatRoles:
+            return ChatRoles(admins=frozenset(admins), owner_id=owner)
 
         return CommandService(self.connection, AdminRegistry(fetch), **kwargs)  # type: ignore[arg-type]
 

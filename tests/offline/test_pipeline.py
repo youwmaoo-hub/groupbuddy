@@ -12,7 +12,8 @@ from app.gate.limits import ProactiveLimiter
 from app.gate.queue import ChatQueue
 from app.gate.trigger import TriggerDetector
 from app.llm.loop import Responder
-from app.ops.admin import AdminRegistry
+from app.llm.prompts import GLOBAL_PERSONA
+from app.ops.admin import AdminRegistry, ChatRoles
 from app.ops.commands import DENIED_TEXT, CommandService
 from app.ops.health import HealthState
 from app.ops.quota import DAILY_EXHAUSTED_TEXT, QuotaGuard
@@ -561,8 +562,8 @@ class PipelineTests(DbTestCase):
     async def test_settings_command_takes_effect_on_the_next_turn(self) -> None:
         """F5.1：管理员改设置当轮生效，且命令本身不进模型、不记账。"""
 
-        async def fetch(_chat_id: int) -> set[int]:
-            return {42}
+        async def fetch(_chat_id: int) -> ChatRoles:
+            return ChatRoles(admins=frozenset({42}), owner_id=None)
 
         self._build("好", commands=CommandService(self.connection, AdminRegistry(fetch)))
         await self._send(["/settings mode smart", "/settings write_file on"])
@@ -643,8 +644,8 @@ class PipelineTests(DbTestCase):
     async def test_settings_command_does_not_consume_quota(self) -> None:
         """命令不调用模型，因此既不记账也不消耗该群配额。"""
 
-        async def fetch(_chat_id: int) -> set[int]:
-            return {42}
+        async def fetch(_chat_id: int) -> ChatRoles:
+            return ChatRoles(admins=frozenset({42}), owner_id=None)
 
         self.settings = make_settings(self.tmp, QUOTA_DAILY_TOKENS=100)
         self._build(
@@ -662,9 +663,9 @@ class PipelineTests(DbTestCase):
         self.assertEqual(len(self.llm.calls), 1)  # 配额没被命令吃掉
         self.assertEqual([item["text"] for item in self.sender.sent][-1], "好")
 
-    def _commands_with(self, *, admins=(42,), health=None):
-        async def fetch(_chat_id: int) -> set[int]:
-            return set(admins)
+    def _commands_with(self, *, admins=(42,), owner=None, health=None):
+        async def fetch(_chat_id: int) -> ChatRoles:
+            return ChatRoles(admins=frozenset(admins), owner_id=owner)
 
         return CommandService(self.connection, AdminRegistry(fetch), settings=self.settings, health=health)
 
@@ -772,6 +773,26 @@ class PipelineTests(DbTestCase):
         await self._flush()
         smart_payload = " ".join(str(item.get("content", "")) for item in self.llm.calls[1])
         self.assertEqual(smart_payload.count("旧历史"), 15)  # 窗口 50：全部历史都在
+
+    async def test_persona_override_reaches_the_system_prompt(self) -> None:
+        """群主设的人设当轮之后生效；未设置时用内置人格，普通管理员改不了。"""
+        self._build("好", "好", commands=self._commands_with(admins=(42, 43), owner=42))
+        await self._command("/settings persona_override 偷改人设", user_id=43, update_id=90, message_id=90)
+        self.assertEqual(self.sender.sent[-1]["text"], DENIED_TEXT)  # 普通管理员不行
+
+        await self._send(["@bot 在吗"], start_update=100, start_message=10)
+        await self._flush()
+        self.assertIn(GLOBAL_PERSONA, str(self.llm.calls[0][0]["content"]))
+
+        await self._command("/settings persona_override 本群只说短句", update_id=500, message_id=500)
+        self.assertEqual(len(self.llm.calls), 1)  # 命令本身 0 token
+
+        await self._send(["@bot 在吗"], start_update=200, start_message=20)
+        await self._flush()
+        prompt = str(self.llm.calls[1][0]["content"])
+        self.assertIn("本群只说短句", prompt)
+        self.assertNotIn(GLOBAL_PERSONA, prompt)  # 覆盖后不再注入内置人格
+        self.assertEqual(len(self.llm.calls), 2)
 
 
 if __name__ == "__main__":

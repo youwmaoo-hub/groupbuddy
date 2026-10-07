@@ -6,6 +6,8 @@
 非法字段/非法值一律只回一条提示且**不写库**（docs/requirements.md F5.1）。
 `/stats` 与 `/health` 只读：文案由 `app/ops/metrics.py` 渲染，不含路径、堆栈与凭据。
 `/clear` 只删本群 `messages` 原文（`docs/database.md` §4）：摘要、用量与统计数据保留，其他群不受影响。
+`/settings persona_override <文本>` 是本群的人设覆盖（docs/persona.md §2），**只有群主（creator）能写**：
+普通管理员与成员都按 `DENIED_TEXT` 拒绝；文本清洗与长度校验见 `app/ops/persona.py`。
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ import aiosqlite
 
 from app import modes
 from app.config import Settings
+from app.ops import persona
 from app.ops.admin import AdminRegistry
 from app.ops.health import HealthState
 from app.ops.metrics import render_health, render_stats
@@ -88,7 +91,19 @@ SETTING_FIELDS = _build_fields()
 
 #: 可用字段（规范名，按 render_settings 的回显顺序）。
 FIELD_NAMES = "、".join((MODE, *(tool for tool, _ in TOOL_SWITCHES), STICKER_COOLDOWN))
-USAGE_TEXT = f"用法：/settings 或 /settings <字段> <值>\n可用字段：{FIELD_NAMES}"
+
+#: 群级人设：只认群主写入，因此单独成字段、不进 `SETTING_FIELDS` 的通用两参数路径。
+PERSONA = "persona_override"
+PERSONA_FIELD = SettingField(name=PERSONA, column=PERSONA, kind="text")
+OWNER_FIELD_NAMES = f"{FIELD_NAMES}、{PERSONA}"
+
+
+def usage_text(field_names: str = FIELD_NAMES) -> str:
+    """`/settings` 用法；群主能多看到一个只属于他的字段。"""
+    return f"用法：/settings 或 /settings <字段> <值>\n可用字段：{field_names}"
+
+
+USAGE_TEXT = usage_text()
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,6 +113,7 @@ class Command:
     name: str
     args: tuple[str, ...] = ()
     mention: str = ""
+    rest: str = ""  # 命令名之后的原文（人设文本可含空格，不能只按空白切分）
 
 
 def parse_command(text: str, *, bot_username: str = "") -> Command | None:
@@ -114,25 +130,35 @@ def parse_command(text: str, *, bot_username: str = "") -> Command | None:
     if mention and bot_username and mention != bot_username.casefold():
         # 命令是发给别的 Bot 的：交给入口过滤器按普通命令丢弃
         return None
-    return Command(name=name, args=tuple(parts[1:]), mention=mention)
+    return Command(
+        name=name,
+        args=tuple(parts[1:]),
+        mention=mention,
+        rest=stripped[len(parts[0]) :].strip(),
+    )
 
 
-def render_settings(group: dict[str, object]) -> str:
-    """只回显设置本身：模式、工具开关、贴纸冷却；不含凭据与路径。"""
+def render_settings(group: dict[str, object], *, can_set_persona: bool = False) -> str:
+    """只回显设置本身：模式、工具开关、贴纸冷却；群主额外看到人设覆盖状态（不回显全文）。"""
     lines = ["当前群设置", f"模式：{group.get('mode', 'normal')}"]
     for tool, column in TOOL_SWITCHES:
         lines.append(f"{tool}：{'开' if group.get(column) else '关'}")
     lines.append(f"贴纸冷却：{int(group.get('sticker_cooldown') or 0)} 秒")
+    if can_set_persona:
+        override = persona.sanitize(str(group.get(PERSONA) or ""))
+        lines.append(f"人设覆盖：{f'已设置（{len(override)} 字）' if override else '未设置'}")
     return "\n".join(lines)
 
 
-def resolve_setting(args: tuple[str, ...]) -> tuple[SettingField, object] | str:
+def resolve_setting(
+    args: tuple[str, ...], *, field_names: str = FIELD_NAMES
+) -> tuple[SettingField, object] | str:
     """解析 `<字段> <值>`：成功返回 (字段, 值)，失败返回一条可直接回复的文案（不写库）。"""
     if len(args) != 2:
-        return USAGE_TEXT
+        return usage_text(field_names)
     field = SETTING_FIELDS.get(args[0].casefold())
     if field is None:
-        return f"未知字段：{args[0]}\n可用字段：{FIELD_NAMES}"
+        return f"未知字段：{args[0]}\n可用字段：{field_names}"
     value = args[1].strip().casefold()
     if field.kind == "bool":
         if value in BOOL_TRUE:
@@ -149,12 +175,33 @@ def resolve_setting(args: tuple[str, ...]) -> tuple[SettingField, object] | str:
     return field, int(value)
 
 
+def resolve_persona_setting(rest: str) -> tuple[SettingField, str] | str:
+    """解析 `/settings persona_override <文本>`；文本取命令名之后的原文（可含空格）。
+
+    返回 (字段, 清洗后文本)：文本为 `off`/`关` 时值为空串，表示清除本群覆盖、回退部署侧人格。
+    """
+    parts = rest.split(None, 1)
+    if len(parts) < 2:
+        return f"用法：/settings {PERSONA} <文本>（用 off 清除）"
+    text = persona.sanitize(parts[1])
+    if not text:
+        return f"用法：/settings {PERSONA} <文本>（用 off 清除）"
+    if persona.is_clear(text):
+        return PERSONA_FIELD, ""
+    if len(text) > persona.MAX_CHARS:
+        return f"人设文本过长：上限 {persona.MAX_CHARS} 字符（当前 {len(text)}）"
+    return PERSONA_FIELD, text
+
+
 def render_value(field: SettingField, value: object) -> str:
     """把写入的值渲染成确认文案里的样子（与 render_settings 措辞一致）。"""
     if field.kind == "bool":
         return "开" if value else "关"
     if field.kind == "int":
         return f"{int(value)} 秒"
+    if field.kind == "text":
+        # 人设正文不回显到群里（群主自己刚发的，无需复读，也少一份被转发的文本）。
+        return f"{len(str(value))} 字" if value else "已清除（回退到部署侧 PERSONA / 内置人格）"
     return str(value)
 
 
@@ -198,9 +245,21 @@ class CommandService:
                 return None
             logger.info("查看健康状态 chat_id=%s user_id=%s", chat_id, user_id)
             return render_health(await self._health.snapshot())
+        # 以下都是 `/settings`：人设覆盖只认群主，其余字段仍只认管理员。
+        is_owner = await self._admins.is_owner(chat_id, user_id)
+        if command.args and command.args[0].casefold() == PERSONA and not is_owner:
+            logger.info(
+                "命令被拒 chat_id=%s user_id=%s name=%s 原因=not_owner", chat_id, user_id, command.name
+            )
+            return DENIED_TEXT
         if not command.args:
-            return render_settings(await chat_settings.get(self._connection, chat_id))
-        resolved = resolve_setting(command.args)
+            group = await chat_settings.get(self._connection, chat_id)
+            return render_settings(group, can_set_persona=is_owner)
+        if command.args[0].casefold() == PERSONA:
+            resolved = resolve_persona_setting(command.rest)
+        else:
+            field_names = OWNER_FIELD_NAMES if is_owner else FIELD_NAMES
+            resolved = resolve_setting(command.args, field_names=field_names)
         if isinstance(resolved, str):
             logger.info("命令参数被拒 chat_id=%s user_id=%s 字段=%s", chat_id, user_id, command.args[0])
             return resolved

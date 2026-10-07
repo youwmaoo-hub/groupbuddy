@@ -16,11 +16,13 @@
 | 层 | 来源 | 注入位置 | 影响范围 |
 |---|---|---|---|
 | 全局人格 | 本文 §4；部署侧 `PERSONA` 非空时覆盖 | system 固定段第 1 段 `## 全局人格` | 只影响语气 |
-| 群设定 | `chat_settings`（模式，群主覆盖 `persona_override` 属阶段 8） | system 固定段第 2 段 `## 群设定` | 影响模式，不影响安全边界 |
+| 群设定 | `chat_settings`（模式；群主可写 `persona_override`，阶段 8 已实现） | system 固定段第 2 段 `## 群设定` | 影响模式，不影响安全边界 |
 | 当前情绪 | 最近一次贴纸的 valence/arousal（`app/session/mood.py`；进程内存、TTL 10 分钟、重启清空） | 动态段**末条** `当前情绪：…`，为空则不注入 | 只影响语气 |
 
-优先级：群设定 `persona_override`（阶段 8）> 部署侧 `PERSONA` > 本文全局人格。
+优先级：群设定 `persona_override` > 部署侧 `PERSONA` > 本文全局人格（唯一读取入口 `app/ops/persona.py` 的 `resolve`，由 `app/session/context.py` 在每轮组装时调用）。
 固定段顺序（人格 → 群设定 → 输出规则）不得变化：固定段字节稳定才能吃到提示词缓存（见 `docs/token.md` §3）。
+
+写入入口：`/settings persona_override <文本>`，**仅群主（Telegram `creator`）可写**（普通管理员与成员拒绝，见 `docs/security.md` §2.1）——文本经 `app/ops/persona.py` 清洗成单行、上限 500 字符，`off` / `关` 清除本群覆盖并回退部署侧人格；确认与回显只出现字数，不回显正文。它只替换第 1 段的正文，不改变段落顺序，也不影响模式、工具与权限（§3）。
 
 ## 3. 人设红线
 

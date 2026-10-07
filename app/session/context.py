@@ -8,6 +8,7 @@ from app import modes
 from app.config import Settings
 from app.gate.debounce import Batch
 from app.llm.prompts import build_messages, build_system_prompt
+from app.ops import persona
 from app.session import retrieval
 from app.storage.repo import chat_settings, messages, summaries
 from app.storage.repo_models import StoredMessage
@@ -44,7 +45,7 @@ class ContextBuilder:
         current = group if group is not None else await chat_settings.get(self._connection, batch.chat_id)
         mode = modes.normalize(current.get("mode"))
         system_prompt = build_system_prompt(
-            persona=self._settings.persona,
+            persona=persona.resolve(current, self._settings.persona),
             mode=mode,
             allowed_tools=allowed_tools,
         )

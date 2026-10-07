@@ -8,9 +8,9 @@
 
 | 项 | 值 |
 |---|---|
-| 代码 commit | `bc31c41db098f1aad61841cfca2ed1c59f80b221`（短 `bc31c41`，分支 `main`；阶段 9：SQLite 冷备份 + 校验 + 保留，`app/storage/backup.py`、`scripts/backup_db.py`，见 `docs/database.md` §5） |
+| 代码 commit | `bafe096346ce4c8f8c77260e40fafa149e2c74c1`（短 `bafe096`，分支 `main`；阶段 9 之后的真实使用修复：贴纸库为空时不把 `send_sticker` 下发给模型，见 §4.5） |
 | 跟踪文件数 | 135（`git ls-files`） |
-| 提交数 | 32（阶段提交 + 文档治理 `b529741` + A1–A3 修复 `f7f34b5` + 文档同步 `3347301` + 部署记录 + 阶段 8 F5.2 `7382639` + F5.1 `c49fdc5` + F5.3 `1d649b8` + F5.4 `101c26c` + 基线 `ad560f4` + F4.7 `de73b57` + 四模式 `78ae9cf` + 四模式基线 `88531d2` + 真机验收记录 `d5e48f0` + 阶段 9 托管文档 `5a5b6d5` + 阶段 9 基线 `cb30c10` + 备份与校验 `bc31c41` + 本次阶段 9 演练记录） |
+| 提交数 | 33（阶段提交 + 文档治理 `b529741` + A1–A3 修复 `f7f34b5` + 文档同步 `3347301` + 部署记录 + 阶段 8 F5.2 `7382639` + F5.1 `c49fdc5` + F5.3 `1d649b8` + F5.4 `101c26c` + 基线 `ad560f4` + F4.7 `de73b57` + 四模式 `78ae9cf` + 四模式基线 `88531d2` + 真机验收记录 `d5e48f0` + 阶段 9 托管文档 `5a5b6d5` + 阶段 9 基线 `cb30c10` + 备份与校验 `bc31c41` + 阶段 9 演练记录 `bed250b` + 真实使用修复 `bafe096` + 本次基线记录） |
 | 本机工作树 | 干净（`git status --porcelain` 无输出）；本机 `main` HEAD 为本次阶段 9 演练记录提交，代码内容与真机 `bc31c41` 一致 |
 | 真机仓库 | `/home/bot/app` = detached HEAD @ `bc31c41`（与上表代码 commit 完全一致），工作树干净，属主 `bot:bot`，跟踪文件 135；**Bot 已在真机运行**：systemd 用户级单元 `groupbuddy.service`（`ActiveState=active`、`Restart=always`，见 §4.3） |
 | 真机远端 | `origin` = VPS `/home/bot/bundles/dsh_deploy_bc31c41.bundle`（Bot 用户持久目录，`/tmp` 会被清理；bundle 含 `refs/heads/main` 与演练用分支 `stage9-broken-probe`，可 `git fetch`；仍未配置正式远端，未建 GitHub remote、未 push） |
@@ -36,7 +36,7 @@
 
 - 解释器：Python 3.13.15（仓库内 `.venv`）；`openai 3.24.0`；**沙箱走 FakeBackend，不跑真实容器**。
 - 命令：`python -m unittest discover -s tests -t .`
-- 结果：`Ran 422 tests` / `OK (skipped=2)` / 退出码 0（293 原有 + 22 条 F5.2 + 11 条 F5.1 + 20 条 F5.3 + 32 条 F5.4 + 19 条 F4.7：`host_info` 冻结字段集与 schema、L4 默认关与群开关、不可得字段与 `/proc` 缺失回退、不泄露环境变量/主机名/路径；19 条四模式：档位表逐列、economy/smart/unrestricted 的工具档位、模式窗口与 normal 意图分档、输出上限透传，含 3 条端到端：`/settings mode` 改完立即影响下一条消息的输出上限与工具清单、smart 解锁只读工具、economy 与 smart 的历史窗口差异体现在发给模型的上下文里；6 条阶段 9 备份：在线库生成已验证快照且源库不受影响、保留份数与 `removed`、`keep=0` 不清理、同分钟第二次快照加后缀、缺库时 CLI 退出码 2、CLI 输出含 `integrity=ok` 且不含凭据）。
+- 结果：`Ran 425 tests` / `OK (skipped=2)` / 退出码 0（293 原有 + 22 条 F5.2 + 11 条 F5.1 + 20 条 F5.3 + 32 条 F5.4 + 19 条 F4.7 + 19 条四模式 + 6 条阶段 9 备份 + 3 条真实使用修复 `bafe096`：`allow_sticker` 关/开且库空/开且有贴纸三种下发组合（含 `check()` 契约不变）、空库时普通消息仍只调一轮模型且工具清单不含 `send_sticker`、库里有贴纸时重新下发；F4.7 明细：`host_info` 冻结字段集与 schema、L4 默认关与群开关、不可得字段与 `/proc` 缺失回退、不泄露环境变量/主机名/路径；四模式明细：档位表逐列、economy/smart/unrestricted 的工具档位、模式窗口与 normal 意图分档、输出上限透传，含 3 条端到端（`/settings mode` 改完立即影响下一条消息的输出上限与工具清单、smart 解锁只读工具、economy 与 smart 的历史窗口差异体现在发给模型的上下文里）；阶段 9 备份明细：在线库生成已验证快照且源库不受影响、保留份数与 `removed`、`keep=0` 不清理、同分钟第二次快照加后缀、缺库时 CLI 退出码 2、CLI 输出含 `integrity=ok` 且不含凭据）。
 - 2 条 skip 为平台条件跳过（Windows 上软/硬链接相关用例，见 `TODO.md` T28）。
 - 覆盖缺口（已知）：`app/main.py`、`app/logging_setup.py`、`app/telegram/handlers.py`、`app/telegram/sender.py` 无测试（见 `TODO.md` T25）。
 
@@ -112,6 +112,15 @@ Tier B 4/4：本群 workspace 读写（非 root）、宿主侧可见、其他群
 
 演练结论：备份可恢复、恢复库可读且与线上一致、更新成功、坏版本失败可检出并可回滚、回滚后 Bot 恢复 `active`、`bot.db` 与 workspace 全程未丢、日志与错误消息无 Secret。
 
+### 4.5 首次真实使用观察与修复（2026-10-07，真机 `bc31c41`）
+
+用户在真实群（`chat_id` `-1004487987492`）使用后按只读方式核对（Bot 未改动）：`updates` 30、`messages` 56（user 29 / assistant 27）、`usage` 32（chat 29 次 `43976 in / 4547 out`；summary 3 次 `2372 / 821`）、`summaries` 3、`chat_settings` 0、`stickers` **0**、`tool_failures` **2**；日志 WARNING/ERROR 仅上次演练故意注入的 2 条；`health.json` `ok=true`。
+
+- **发现**：`tool_failures` 两条 `('send_sticker', -1004487987492, 'not_found')`。原因是 `allow_sticker` 默认开、而本群贴纸库为空 → `send_sticker` 每次匹配必然 `not_found`，模型想发表情就白花一轮工具调用，并污染 `/stats` 的错误率。
+- **修复 `bafe096`**（独立 commit，5 个代码/测试文件 + `docs/security.md` + `docs/tools.md`）：`ToolContext` 新增 `stickers_available`（默认 `true`）；runner 每轮在 `profile.stickers` 为真时查一次本群贴纸（economy 短路不多查）；`Policy._advertised` 只从**下发清单**剔除 `send_sticker`——`check()`/执行路径的 `permission_denied`/`not_found` 契约不变（库为空时模型仍硬调依旧是 `not_found`）。不引入缓存/后台任务。
+- **本机验证**：`Ran 425 tests` / `OK (skipped=2)` / 退出码 0；新增 3 条测试（三种下发组合 + 空库端到端只调一轮模型 + 有贴纸时重新下发）。
+- **真机状态**：该修复**尚未同步到真机**（真机仍 `bc31c41`、422 条 OK）；同步后再复验。
+
 ## 5. 尚未做 / 尚未上线（重要）
 
 - **Bot 已在真机 24/7 运行**：systemd 用户级单元 `groupbuddy.service`（`Restart=always`、`RestartSec=5`，配合 `Linger=yes` 开机自启），真机证据见 §4.3，部署契约见 `docs/deployment.md` §12.9。
@@ -138,7 +147,7 @@ Tier B 4/4：本群 workspace 读写（非 root）、宿主侧可见、其他群
 ## 7. 下一步
 
 1. **阶段 8 已全部完成并通过真机验收**（真机 `88531d2`：416 条全量 OK、沙箱 13 项全 PASS、migration 4 与 `host_info` Linux 行为符合契约）：F5.2（管理员判定 + 命令通道 + T12）、F5.1（`/settings <字段> <值>` 写入、即时生效）、F5.3（日/月配额）、F5.4（`/stats` + `/health`，`tool_failures` 留痕与 7 天清理，与 `storage/health.json` 同一内部状态）、F4.7（`host_info`：`cpu`/`memory`/`disk_free`/`python`/`uptime_s`，L4 + `allow_host_info` 默认关）与四模式（`78ae9cf`：窗口 / 输出上限 / 工具档位，`docs/token.md` §5）。阶段 8 内明确留到后续的只有 `/clear`、链 3 轮次分档、模型档位路由。
-2. **阶段 9（部署与 24/7）进行中**：最小生产闭环已完成并真机验证（systemd 用户级单元、真实 `.env`、启动时 migration、health 心跳、Telegram 真机收发、stop/start/restart 与 `SIGKILL` 自动重启，见 §4.3）；备份/恢复与更新/回滚演练已通过（`scripts/backup_db.py`、`docs/deployment.md` §8.1，证据见 §4.4），真机当前跑 `bc31c41`（422 条 OK、沙箱 13 项全 PASS）。阶段 9 未完成部分：程序内自动备份任务与 `BACKUP_*` 环境键、`PRAGMA optimize`/`VACUUM`、容器托管（可选路径）。
+2. **阶段 9（部署与 24/7）进行中**：最小生产闭环已完成并真机验证（systemd 用户级单元、真实 `.env`、启动时 migration、health 心跳、Telegram 真机收发、stop/start/restart 与 `SIGKILL` 自动重启，见 §4.3）；备份/恢复与更新/回滚演练已通过（`scripts/backup_db.py`、`docs/deployment.md` §8.1，证据见 §4.4），真机当前跑 `bc31c41`（422 条 OK、沙箱 13 项全 PASS）。首次真实使用发现的空贴纸库问题已在本机修好（`bafe096`，见 §4.5），**待在真机同步后复验**。阶段 9 未完成部分：程序内自动备份任务与 `BACKUP_*` 环境键、`PRAGMA optimize`/`VACUUM`、容器托管（可选路径）。
 3. 是否立项修 B 组技术债（`TODO.md` T4 / T7 / T9 / T10 / T25 等；T1–T3 已随 `f7f34b5`、T12 已随 `7382639`、T15 已随 `101c26c` 修复）。
 4. 是否配置正式远端（GitHub），以便后续换 Agent 维护。
 

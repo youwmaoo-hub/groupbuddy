@@ -8,6 +8,8 @@
 `/clear` 只删本群 `messages` 原文（`docs/database.md` §4）：摘要、用量与统计数据保留，其他群不受影响。
 `/settings persona_override <文本>` 是本群的人设覆盖（docs/persona.md §2），**只有群主（creator）能写**：
 普通管理员与成员都按 `DENIED_TEXT` 拒绝；文本清洗与长度校验见 `app/ops/persona.py`。
+`/note` 是本群长期记忆（docs/memory.md §6），同样**只有群主**能用：列出、查看、记住、删除，
+解析与文案见 `app/ops/notes.py`，写库与 FTS 同步见 `app/storage/repo/notes.py`。
 """
 
 from __future__ import annotations
@@ -19,11 +21,13 @@ import aiosqlite
 
 from app import modes
 from app.config import Settings
+from app.ops import notes as notes_ops
 from app.ops import persona
 from app.ops.admin import AdminRegistry
 from app.ops.health import HealthState
 from app.ops.metrics import render_health, render_stats
-from app.storage.repo import chat_settings, messages
+from app.session.retrieval import term_tokens
+from app.storage.repo import chat_settings, messages, notes
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +36,7 @@ SETTINGS = "settings"
 STATS = "stats"
 HEALTH = "health"
 CLEAR = "clear"
+NOTE = "note"
 
 #: 非管理员只看到这一句：不泄露设置内容，也不透露内部判定原因。
 DENIED_TEXT = "这个命令只有群管理员能用。"
@@ -63,6 +68,9 @@ WRITE_FAILED_TEXT = "写入失败，请稍后重试。"
 #: `/clear` 的用法与失败文案（同样不泄露数据库细节）。
 CLEAR_USAGE = "用法：/clear"
 CLEAR_FAILED_TEXT = "清理失败，请稍后重试。"
+
+#: `/note` 的失败文案来自这里（用法文案在 `app/ops/notes.py`，由 `parse` 直接返回）。
+NOTE_FAILED_TEXT = "笔记操作失败，请稍后重试。"
 
 
 @dataclass(frozen=True, slots=True)
@@ -223,7 +231,7 @@ class CommandService:
 
     async def reply_text(self, *, chat_id: int, user_id: int, command: Command) -> str | None:
         """返回要发送的文本；None 表示静默丢弃（未知命令或未装配的数据源）。"""
-        if command.name not in (SETTINGS, STATS, HEALTH, CLEAR):
+        if command.name not in (SETTINGS, STATS, HEALTH, CLEAR, NOTE):
             logger.debug("未实现的命令 chat_id=%s name=%s", chat_id, command.name)
             return None
         if not await self._admins.is_admin(chat_id, user_id):
@@ -231,6 +239,8 @@ class CommandService:
                 "命令被拒 chat_id=%s user_id=%s name=%s 原因=not_admin", chat_id, user_id, command.name
             )
             return DENIED_TEXT
+        if command.name == NOTE:
+            return await self._note(chat_id=chat_id, user_id=user_id, command=command)
         if command.name == CLEAR:
             return await self._clear(chat_id=chat_id, user_id=user_id, args=command.args)
         if command.name == STATS:
@@ -284,3 +294,55 @@ class CommandService:
             return CLEAR_FAILED_TEXT
         logger.info("群消息已清理 chat_id=%s user_id=%s rows=%s", chat_id, user_id, deleted)
         return f"已清理本群消息原文 {deleted} 条；群摘要保留。"
+
+    async def _note(self, *, chat_id: int, user_id: int, command: Command) -> str:
+        """`/note`：只有群主能读写本群长期记忆（docs/memory.md §6）。
+
+        列出/查看/记住/删除都走同一条授权判定；正文经 `app/ops/notes.py` 清洗并限长，
+        写入复用 `notes.upsert`（同名覆盖 version+1，FTS 同步）；失败只回固定短句。
+        """
+        if not await self._admins.is_owner(chat_id, user_id):
+            logger.info("命令被拒 chat_id=%s user_id=%s name=note 原因=not_owner", chat_id, user_id)
+            return DENIED_TEXT
+        request = notes_ops.parse(command.args, command.rest)
+        if isinstance(request, str):
+            logger.info("笔记参数被拒 chat_id=%s user_id=%s", chat_id, user_id)
+            return request
+        try:
+            if request.action == "list":
+                rows = await notes.list_for_chat(
+                    self._connection, chat_id=chat_id, limit=notes_ops.LIST_LIMIT
+                )
+                return notes_ops.render_list(rows)
+            if request.action == "show":
+                row = await notes.get(self._connection, chat_id=chat_id, name=request.name)
+                return notes_ops.render_show(row) if row is not None else notes_ops.missing(request.name)
+            if request.action == "delete":
+                deleted = await notes.delete(self._connection, chat_id=chat_id, name=request.name)
+                if not deleted:
+                    return notes_ops.missing(request.name)
+                logger.info("笔记已删除 chat_id=%s user_id=%s name=%s", chat_id, user_id, request.name)
+                return notes_ops.render_deleted(request.name)
+            # save：写入后回读一次拿权威版本号（新建 v1 / 同名覆盖 +1）。
+            await notes.upsert(
+                self._connection,
+                chat_id=chat_id,
+                name=request.name,
+                text=request.text,
+                tokens=term_tokens(request.text),
+            )
+            stored = await notes.get(self._connection, chat_id=chat_id, name=request.name)
+        except aiosqlite.Error:
+            logger.exception("笔记读写失败 chat_id=%s action=%s", chat_id, request.action)
+            return NOTE_FAILED_TEXT
+        if stored is None:
+            logger.warning("笔记写入后读不到 chat_id=%s name=%s", chat_id, request.name)
+            return NOTE_FAILED_TEXT
+        logger.info(
+            "笔记已写入 chat_id=%s user_id=%s name=%s version=%s",
+            chat_id,
+            user_id,
+            request.name,
+            stored.version,
+        )
+        return notes_ops.render_saved(stored)

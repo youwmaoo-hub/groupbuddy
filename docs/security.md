@@ -62,6 +62,7 @@
   `/health` 与 `storage/health.json` 心跳**共用同一个内部状态**（`app/ops/health.py`，快照在内存，不含路径、异常堆栈、环境变量或凭据）。
   文案只出现计数、时长与上限；读取失败时只回一句固定短句，不回显数据库错误、路径或堆栈（§7、§11 第 4 条）。
 - **清理本群消息（`/clear`）**：管理员限定（同一判定与固定拒绝文案），**只删本群** `messages` 原文（`DELETE … WHERE chat_id = ?`，复用 `messages.clear_chat`），不动其他群、不动 `summaries`（摘要保留）、不动 `usage` 与统计；成功只回「已清理本群消息原文 N 条」，带参数只回用法，失败只回一句固定短句（不回显 SQLite 细节）。契约见 `docs/database.md` §4。
+- **长期笔记（`/note`，里程碑 B）**：**只允许群主**（与 `persona_override` 同一 `is_owner` 判定、同一固定拒绝文案；普通管理员与成员连读都不行）。`/note` 列出本群笔记（只回名称/版本/字数/更新时间）、`/note <名称>` 查看正文、`/note <名称> <内容>` 写入或同名覆盖（`version` +1）、`/note del <名称>` 删除。正文经 `app/ops/text.py` 单行化、≤500 字，名称 ≤50 字符；确认与列表都不回显正文；写入/删除失败只回一句固定短句，不回显 SQLite 细节。删除同步清 `notes_fts`（外部内容表，**已实现** `notes.delete`）。命令 **0 token、不进模型**；笔记只在回溯源（之前/上次…）命中时进入动态段（`docs/memory.md` §5/§6）。
 ### 2.2 模式对权限的影响（阶段 8，`docs/token.md` §5）
 
 - 唯一权威表 `app/modes.py`（`PROFILES`）；`app/tools/policy.py` 按它叠加档位，`app/session/context.py` 按它定窗口，`app/session/runner.py` 按它定输出上限。

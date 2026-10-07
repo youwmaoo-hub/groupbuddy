@@ -11,6 +11,8 @@
 
 from __future__ import annotations
 
+from app.ops.text import single_line
+
 #: 单群人设文本上限（字符数，按清洗后的单行文本计算）。
 MAX_CHARS = 500
 
@@ -22,11 +24,9 @@ def sanitize(text: str) -> str:
     """把任意输入压成单行：控制字符（含换行、制表、C1）折成空格，空白归一化，去首尾。
 
     人设只进 system prompt 的一个段落，多行文本会破坏段结构，因此在写入侧就折平。
+    实现与人设无关，交给 `app/ops/text.single_line`（笔记正文用同一套规则）。
     """
-    chars = [
-        " " if ch.isspace() or ord(ch) < 32 or 0x7F <= ord(ch) <= 0x9F else ch for ch in text
-    ]
-    return " ".join("".join(chars).split())
+    return single_line(text)
 
 
 def is_clear(text: str) -> bool:

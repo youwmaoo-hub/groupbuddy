@@ -794,6 +794,19 @@ class PipelineTests(DbTestCase):
         self.assertNotIn(GLOBAL_PERSONA, prompt)  # 覆盖后不再注入内置人格
         self.assertEqual(len(self.llm.calls), 2)
 
+    async def test_owner_note_reaches_the_memory_block_on_recall(self) -> None:
+        """群主用 /note 写长期记忆（0 token）；之后一句回溯会把笔记注入记忆块。"""
+        self._build("我记得", commands=self._commands_with(owner=42))
+        await self._command("/note 部署 生产部署用 systemd 托管", update_id=90, message_id=90)
+        self.assertEqual(self.llm.calls, [])  # 命令本身 0 token
+        self.assertIn("已记住笔记「部署」", str(self.sender.sent[-1]["text"]))
+
+        await self._send(["@bot 之前那个部署方式是怎么弄的"], start_update=200, start_message=20)
+        await self._flush()
+        memory = str(self.llm.calls[0][1]["content"])
+        self.assertIn("相关记录：", memory)
+        self.assertIn("[笔记:部署] 生产部署用 systemd 托管", memory)
+
 
 if __name__ == "__main__":
     unittest.main()

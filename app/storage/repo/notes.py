@@ -17,6 +17,10 @@ UPSERT_SQL = (
     "text=excluded.text, tokens=excluded.tokens, version=notes.version + 1, updated_at=excluded.updated_at"
 )
 SELECT_ONE_SQL = f"SELECT {SELECT_COLUMNS} FROM notes WHERE chat_id = ? AND name = ?"
+LIST_SQL = (
+    f"SELECT {SELECT_COLUMNS} FROM notes WHERE chat_id = ? ORDER BY updated_at DESC, id DESC LIMIT ?"
+)
+DELETE_SQL = "DELETE FROM notes WHERE chat_id = ? AND name = ?"
 FTS_INSERT_SQL = "INSERT INTO notes_fts (rowid, tokens) VALUES (?, ?)"
 FTS_DELETE_SQL = "INSERT INTO notes_fts (notes_fts, rowid, tokens) VALUES ('delete', ?, ?)"
 SEARCH_SQL = (
@@ -54,6 +58,32 @@ async def get(connection: aiosqlite.Connection, *, chat_id: int, name: str) -> N
     row = await cursor.fetchone()
     await cursor.close()
     return None if row is None else NoteRow.from_row(row)
+
+
+async def list_for_chat(
+    connection: aiosqlite.Connection,
+    *,
+    chat_id: int,
+    limit: int = 50,
+) -> list[NoteRow]:
+    """按更新时间倒序列出本群笔记（只读；跨群不可见）。"""
+    cursor = await connection.execute(LIST_SQL, (chat_id, limit))
+    rows = await cursor.fetchall()
+    await cursor.close()
+    return [NoteRow.from_row(row) for row in rows]
+
+
+async def delete(connection: aiosqlite.Connection, *, chat_id: int, name: str) -> bool:
+    """删除一条笔记并同步 FTS（external content FTS：必须先删旧 tokens 再删正文行）。"""
+    previous = await get(connection, chat_id=chat_id, name=name)
+    if previous is None:
+        return False
+    await connection.execute(FTS_DELETE_SQL, (previous.id, previous.tokens))
+    cursor = await connection.execute(DELETE_SQL, (chat_id, name))
+    deleted = cursor.rowcount > 0
+    await cursor.close()
+    await connection.commit()
+    return deleted
 
 
 async def search(

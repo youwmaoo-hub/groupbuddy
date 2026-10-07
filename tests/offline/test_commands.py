@@ -12,6 +12,7 @@ from app.gate.dedupe import UpdateDeduplicator
 from app.gate.limits import ProactiveLimiter
 from app.gate.trigger import TriggerDetector
 from app.llm.loop import Responder
+from app.ops import notes as notes_ops
 from app.ops.admin import AdminRegistry, ChatRoles
 from app.ops.commands import (
     CLEAR_FAILED_TEXT,
@@ -19,6 +20,7 @@ from app.ops.commands import (
     COOLDOWN_MAX_SECONDS,
     DENIED_TEXT,
     FIELD_NAMES,
+    NOTE_FAILED_TEXT,
     PERSONA,
     USAGE_TEXT,
     WRITE_FAILED_TEXT,
@@ -28,7 +30,7 @@ from app.ops.commands import (
 )
 from app.session.context import ContextBuilder
 from app.session.runner import SessionRunner
-from app.storage.repo import chat_settings, messages, summaries
+from app.storage.repo import chat_settings, messages, notes, summaries
 from tests.offline.helpers import DbTestCase, FakeClock, FakeLLMClient, make_incoming
 
 
@@ -592,6 +594,126 @@ class PersonaCommandTests(DbTestCase):
         self.assertEqual(text, "已更新：mode = smart")
         group = await chat_settings.get(self.connection, -100)
         self.assertEqual(group.get("mode"), "smart")
+
+
+class NoteCommandTests(DbTestCase):
+    """长期笔记（docs/memory.md §6）：只有群主能写/删，列表不复读正文，失败不回显细节。"""
+
+    async def _reply(self, text: str, *, user_id: int, owner: int | None = 7) -> str | None:
+        service = make_service(self.connection, {7, 8}, owner=owner)
+        command = parse_command(text)
+        assert command is not None
+        return await service.reply_text(chat_id=-100, user_id=user_id, command=command)
+
+    async def _row(self, name: str = "部署", chat_id: int = -100):
+        return await notes.get(self.connection, chat_id=chat_id, name=name)
+
+    async def test_creator_saves_a_note_without_echoing_the_body(self) -> None:
+        body = "生产用 systemd 托管"
+        text = await self._reply(f"/note 部署 {body}", user_id=7)
+        self.assertEqual(text, f"已记住笔记「部署」（v1，{len(body)} 字）。")
+        assert text is not None
+        self.assertNotIn("systemd", text)  # 正文不回显到群里
+        row = await self._row()
+        assert row is not None
+        self.assertEqual((row.text, row.version), (body, 1))
+
+    async def test_creator_lists_notes_with_metadata_but_not_bodies(self) -> None:
+        body = "生产用 systemd 托管"
+        await self._reply(f"/note 部署 {body}", user_id=7)
+        for command in ("/note", "/note list", "/note 列表"):
+            with self.subTest(command=command):
+                text = await self._reply(command, user_id=7)
+                assert text is not None
+                self.assertIn("本群笔记（1 条）", text)
+                self.assertIn("部署（v1，", text)
+                self.assertNotIn("systemd", text)
+
+    async def test_empty_library_lists_with_usage(self) -> None:
+        text = await self._reply("/note", user_id=7)
+        assert text is not None
+        self.assertIn("本群还没有笔记", text)
+        self.assertIn("/note <名称> <内容>", text)
+
+    async def test_creator_shows_a_note_body(self) -> None:
+        body = "生产用 systemd 托管"
+        await self._reply(f"/note 部署 {body}", user_id=7)
+        text = await self._reply("/note 部署", user_id=7)
+        assert text is not None
+        self.assertIn("笔记「部署」（v1", text)
+        self.assertIn(body, text)
+
+    async def test_saving_the_same_name_bumps_the_version(self) -> None:
+        await self._reply("/note 部署 生产用 systemd 托管", user_id=7)
+        text = await self._reply("/note 部署 改用 docker compose", user_id=7)
+        self.assertEqual(text, "已更新笔记「部署」（v2，17 字）。")
+        row = await self._row()
+        assert row is not None
+        self.assertEqual((row.text, row.version), ("改用 docker compose", 2))
+
+    async def test_creator_deletes_a_note(self) -> None:
+        await self._reply("/note 部署 生产用 systemd 托管", user_id=7)
+        text = await self._reply("/note del 部署", user_id=7)
+        self.assertEqual(text, "已删除笔记「部署」。")
+        assert text is not None
+        self.assertNotIn("systemd", text)
+        self.assertIsNone(await self._row())
+        self.assertEqual(await self._reply("/note del 部署", user_id=7), "没有这条笔记：部署")
+
+    async def test_showing_a_missing_note_is_reported(self) -> None:
+        self.assertEqual(await self._reply("/note 没有", user_id=7), "没有这条笔记：没有")
+
+    async def test_administrator_and_member_are_denied(self) -> None:
+        for user_id in (8, 9):
+            with self.subTest(user_id=user_id):
+                text = await self._reply("/note 部署 生产用 systemd 托管", user_id=user_id)
+                self.assertEqual(text, DENIED_TEXT)
+                assert text is not None
+                self.assertNotIn("部署", text)
+                self.assertNotIn("systemd", text)
+                self.assertIsNone(await self._row())
+
+    async def test_administrator_cannot_read_or_delete_notes(self) -> None:
+        await self._reply("/note 部署 生产用 systemd 托管", user_id=7)
+        for command in ("/note", "/note 部署", "/note del 部署"):
+            with self.subTest(command=command):
+                self.assertEqual(await self._reply(command, user_id=8), DENIED_TEXT)
+        self.assertIsNotNone(await self._row())
+
+    async def test_group_without_creator_has_no_note_writer(self) -> None:
+        text = await self._reply("/note 部署 生产用 systemd 托管", user_id=7, owner=None)
+        self.assertEqual(text, DENIED_TEXT)
+        self.assertIsNone(await self._row())
+
+    async def test_invalid_arguments_show_usage_without_writing(self) -> None:
+        for command in ("/note list 额外", "/note del", "/note del a b"):
+            with self.subTest(command=command):
+                self.assertEqual(await self._reply(command, user_id=7), notes_ops.USAGE_TEXT)
+        self.assertEqual(await notes.list_for_chat(self.connection, chat_id=-100), [])
+
+    async def test_oversized_name_and_body_are_rejected(self) -> None:
+        name = "好" * 51
+        self.assertEqual(
+            await self._reply(f"/note {name}", user_id=7), "笔记名过长：上限 50 字符（当前 51）"
+        )
+        body = "好" * 501
+        self.assertEqual(
+            await self._reply(f"/note 部署 {body}", user_id=7),
+            "笔记内容过长：上限 500 字符（当前 501）",
+        )
+        self.assertEqual(await notes.list_for_chat(self.connection, chat_id=-100), [])
+
+    async def test_write_failure_is_reported_without_leaking_details(self) -> None:
+        with mock.patch.object(notes, "upsert", side_effect=aiosqlite.Error("database is locked")):
+            text = await self._reply("/note 部署 生产用 systemd 托管", user_id=7)
+        self.assertEqual(text, NOTE_FAILED_TEXT)
+        assert text is not None
+        self.assertNotIn("locked", text)
+
+    async def test_notes_are_isolated_per_chat(self) -> None:
+        await self._reply("/note 部署 生产用 systemd 托管", user_id=7)
+        self.assertEqual(await notes.list_for_chat(self.connection, chat_id=-200), [])
+        self.assertIsNone(await notes.get(self.connection, chat_id=-200, name="部署"))
 
 
 if __name__ == "__main__":

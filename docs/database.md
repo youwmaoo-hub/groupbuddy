@@ -131,6 +131,7 @@ CREATE VIRTUAL TABLE notes_fts     USING fts5(tokens, content='notes',     conte
 ## 3. 关系与不变量
 
 - `messages/summaries/notes/stickers/chat_settings/usage/tool_failures` 都以 `chat_id` 为租户键；跨群读取属于缺陷。
+- `notes_fts` 是**外部内容表**（无触发器，由 repo 显式同步）：写入前先删旧 `tokens`，删除笔记时同步删（**已实现** `notes.delete`）；`tokens` 由 `term_tokens`（CJK bigram + 拉丁词）产生。
 - `(chat_id, message_id)` 唯一：同一条 Telegram 消息即使重复 ingest 也只落一行。
 - `update_id` 是主键：`INSERT OR IGNORE` 失败即视为重复，直接丢弃更新。
 - `chat_settings` 缺失时按默认值处理（不强制预建行）。
@@ -144,6 +145,7 @@ CREATE VIRTUAL TABLE notes_fts     USING fts5(tokens, content='notes',     conte
 | `updates` | 48 小时 | 删除更早行（幂等只需覆盖重放窗口；**已实现** `updates.purge_old`，housekeeping 启动时执行） |
 | `tool_failures` | 7 天 | 删除更早行（**已实现** `tool_failures.purge_old`，启动时与每小时 housekeeping 各执行一次） |
 | `messages` | 默认全保留 | 群主 `/clear` 可按群清理；清理后摘要保留 |
+| `notes` | 默认全保留 | 群主 `/note` 同名覆盖（`version` +1）或 `/note del <名称>` 删除（**已实现** `notes.delete`，同步清 `notes_fts`） |
 | `summaries` | 每群保留最近 50 条 | 超出归档删除最旧（**已实现**：`SUMMARY_KEEP=50`，摘要写成功后立即 prune） |
 | 维护 | 每周 | **未实现**：`PRAGMA optimize`；体积明显膨胀时 `VACUUM`（离线执行） |
 

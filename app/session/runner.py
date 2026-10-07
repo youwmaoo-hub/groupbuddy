@@ -15,6 +15,7 @@ from app.gate.filters import screen
 from app.gate.limits import ProactiveLimiter
 from app.gate.trigger import TriggerDetector
 from app.llm.loop import Outcome, Responder
+from app.llm.prompts import fit_reply
 from app.llm.routing import PURPOSE_CHAT, ModelRouter, tool_round_limit
 from app.ops.commands import Command, CommandService, parse_command
 from app.ops.health import HealthState
@@ -203,13 +204,15 @@ class SessionRunner:
             return
 
         latest = batch.items[-1]
+        # 长度上限（docs/token.md §5）：提示词之外再裁一刀，prompt 与 DB/出站三处一致
+        text = fit_reply(outcome.text, self._settings.reply_max_chars)
         await self._outbound.enqueue(
             chat_id=batch.chat_id,
             chat_type=latest.chat_type,
-            text=outcome.text,
+            text=text,
             reply_to_message_id=latest.message_id,
         )
-        await self._store_assistant(batch, outcome.text)
+        await self._store_assistant(batch, text)
         if batch.proactive:
             self._limiter.record(batch.chat_id)  # 只有真的说出口才占冷却与窗口额度
 

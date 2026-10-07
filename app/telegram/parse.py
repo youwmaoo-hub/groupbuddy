@@ -22,6 +22,8 @@ class IncomingMessage:
     is_bot_author: bool
     reply_to_bot: bool
     mentions_bot: bool
+    #: 本条消息回复的是"另一个 Bot"（不是本 Bot）：别人对着别的 Bot 说话，闸门不主动插嘴
+    reply_to_other_bot: bool = False
 
 
 def parse_update(
@@ -42,6 +44,7 @@ def parse_update(
 
     text = getattr(message, "text", None) or getattr(message, "caption", None) or ""
     mention_names = tuple(name.casefold() for name in (bot_username, *aliases) if name)
+    reply_to_bot, reply_to_other_bot = _reply_target(message, bot_id)
 
     return IncomingMessage(
         update_id=int(getattr(update, "update_id", 0)),
@@ -52,17 +55,23 @@ def parse_update(
         text=str(text),
         thread_id=getattr(message, "message_thread_id", None),
         is_bot_author=bool(getattr(author, "is_bot", False)),
-        reply_to_bot=_reply_to_bot(message, bot_id),
+        reply_to_bot=reply_to_bot,
         mentions_bot=_mentions_bot(message, text, bot_id, mention_names),
+        reply_to_other_bot=reply_to_other_bot,
     )
 
 
-def _reply_to_bot(message: object, bot_id: int) -> bool:
+def _reply_target(message: object, bot_id: int) -> tuple[bool, bool]:
+    """返回（回复的是本 Bot, 回复的是另一个 Bot）；没有回复对象时是 (False, False)。"""
     replied = getattr(message, "reply_to_message", None)
     if replied is None:
-        return False
+        return False, False
     author = getattr(replied, "from_user", None)
-    return author is not None and int(getattr(author, "id", 0)) == bot_id
+    if author is None:
+        return False, False
+    if int(getattr(author, "id", 0)) == bot_id:
+        return True, False
+    return False, bool(getattr(author, "is_bot", False))
 
 
 def _mentions_bot(message: object, text: str, bot_id: int, names: tuple[str, ...]) -> bool:

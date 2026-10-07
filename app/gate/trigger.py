@@ -3,7 +3,8 @@
 阶段 2（F2.2–F2.5）：强触发 → 可解释内容 → 上下文追问 → 冷却/窗口闸门。
 阶段 8（群宠体验升级）：人类中心——Bot 作者直接 ignore；普通消息增加
 「同话题 / 情绪反应 / 久静后开口」三条弱触发以提高合理活跃度，冷却与窗口
-上限不变（见 docs/requirements.md §2.1，本节唯一权威实现）。
+上限不变；回复「其他 Bot」的消息只在强触发时回应（见 docs/requirements.md §2.1，
+本节唯一权威实现）。
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ REASON_TOPIC = "topic"
 REASON_EMOTION = "emotion"
 REASON_QUIET_OPEN = "quiet_open"
 REASON_BOT_AUTHOR = "bot_author"
+REASON_OTHER_BOT_REPLY = "other_bot_reply"
 REASON_NOT_ADDRESSED = "not_addressed"
 
 # 弱触发：内容值得回应，但必须先过冷却/窗口闸门（强触发不受限）
@@ -112,9 +114,16 @@ class TriggerDetector:
         bot_last_text＝Bot 上一条发言的文本，仅用于「同话题」弱触发。
         其他 Bot 的消息在 `app/gate/filters.py` 已被丢弃（不入库、不进冷却），
         这里再挡一次：Bot 作者永远 ignore，避免 Bot↔Bot 循环（人类中心）。
+        群友回复「另一个 Bot」的消息同理只当背景：除非明确点名/叫别名（强触发），
+        否则不插嘴——否则用户跟别的 Bot 对话时本 Bot 会莫名其妙接话。
         """
         if message.is_bot_author:
             return TriggerDecision("ignore", REASON_BOT_AUTHOR)
+        if message.reply_to_other_bot:
+            strong = self._strong(message)
+            if strong is None:
+                return TriggerDecision("ignore", REASON_OTHER_BOT_REPLY)
+            return TriggerDecision("respond", strong)
         strong = self._strong(message)
         if strong is not None:
             return TriggerDecision("respond", strong)

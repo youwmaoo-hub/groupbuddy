@@ -153,6 +153,35 @@ class PipelineTests(DbTestCase):
         self.assertEqual([item["text"] for item in self.sender.sent], ["本大肥鱼在的"])
         self.assertEqual(len(self.llm.calls), 1)
 
+    async def test_long_reply_is_trimmed_before_sending_and_storing(self) -> None:
+        # 模型写小作文时按 REPLY_MAX_CHARS 兜底裁剪，出站与入库是同一份文本（docs/token.md §5）
+        self._build("甲" * 200 + "。" + "乙" * 200)
+        await self._send(["@bot 讲讲"])
+        await self._flush()
+        expected = "甲" * 200 + "。"
+        self.assertEqual([item["text"] for item in self.sender.sent], [expected])
+        rows = await messages.recent(self.connection, chat_id=1, limit=10)
+        self.assertEqual(rows[-1].text, expected)
+
+    async def test_reply_to_another_bot_is_not_answered_end_to_end(self) -> None:
+        self._build("不该被发出来")
+        await self.runner.handle(
+            make_incoming(
+                update_id=100,
+                chat_id=1,
+                message_id=10,
+                text="这个怎么解决",
+                mentions_bot=False,
+                reply_to_other_bot=True,
+            )
+        )
+        batches = await self._flush()
+        self.assertEqual(batches, [])
+        self.assertEqual(self.llm.calls, [])
+        self.assertEqual(self.sender.sent, [])
+        rows = await messages.recent(self.connection, chat_id=1, limit=10)
+        self.assertEqual(len(rows), 1)  # 人类消息照常入库，只是不进模型
+
     async def test_pure_noise_never_calls_the_model(self) -> None:
         self._build("不该出现")
         await self.runner.handle(

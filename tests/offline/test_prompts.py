@@ -5,7 +5,12 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
-from app.llm.prompts import GLOBAL_PERSONA, build_messages, build_system_prompt
+from app.llm.prompts import (
+    GLOBAL_PERSONA,
+    build_messages,
+    build_system_prompt,
+    fit_reply,
+)
 
 PERSONA_DOC = Path(__file__).resolve().parents[2] / "docs" / "persona.md"
 FENCE = chr(96) * 3
@@ -62,6 +67,43 @@ class MoodTests(unittest.TestCase):
 
     def test_blank_mood_is_ignored(self) -> None:
         self.assertEqual(len(build_messages(build_system_prompt(), [], mood="   ")), 1)
+
+
+class ReplyLengthTests(unittest.TestCase):
+    """回复字数上限：提示词里加约束，超长由 fit_reply 兜底（docs/token.md §5）。"""
+
+    def test_length_rule_is_included_when_limited(self) -> None:
+        prompt = build_system_prompt(reply_limit=280)
+        self.assertIn("280 字以内", prompt)
+        self.assertLess(prompt.index("280 字以内"), prompt.index("不需要回应时只输出"))
+
+    def test_no_length_rule_when_unlimited(self) -> None:
+        self.assertNotIn("字以内", build_system_prompt())
+        self.assertNotIn("字以内", build_system_prompt(reply_limit=0))
+
+    def test_zero_limit_keeps_the_reply(self) -> None:
+        text = "字" * 500
+        self.assertEqual(fit_reply(text, 0), text)
+
+    def test_short_reply_is_untouched(self) -> None:
+        self.assertEqual(fit_reply("在的，咋了", 280), "在的，咋了")
+
+    def test_long_reply_is_cut_at_the_last_sentence_end(self) -> None:
+        text = "甲" * 200 + "。" + "乙" * 200
+        cut = fit_reply(text, 280)
+        self.assertEqual(cut, "甲" * 200 + "。")
+        self.assertLessEqual(len(cut), 280)
+
+    def test_long_reply_without_sentence_end_is_hard_cut(self) -> None:
+        cut = fit_reply("字" * 400, 280)
+        self.assertEqual(cut, "字" * 279 + "…")
+        self.assertLessEqual(len(cut), 280)
+
+    def test_early_sentence_end_is_not_used(self) -> None:
+        # 句末太靠前（不到一半）时不采用，否则会砍掉大半条有用回复
+        text = "嗯。" + "字" * 400
+        cut = fit_reply(text, 280)
+        self.assertEqual(cut, "嗯。" + "字" * 277 + "…")
 
 
 class PersonaDocTests(unittest.TestCase):

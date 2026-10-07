@@ -37,6 +37,7 @@ STATS = "stats"
 HEALTH = "health"
 CLEAR = "clear"
 NOTE = "note"
+HELP = "help"
 
 #: 非管理员只看到这一句：不泄露设置内容，也不透露内部判定原因。
 DENIED_TEXT = "这个命令只有群管理员能用。"
@@ -114,6 +115,37 @@ def usage_text(field_names: str = FIELD_NAMES) -> str:
 USAGE_TEXT = usage_text()
 
 
+def help_text() -> str:
+    """`/help`：把所有指令和该找谁用写清楚（指令可发现性；命令本身各自鉴权）。"""
+    return "\n".join(
+        (
+            "我是本群的群宠助手，指令都在群里直接发给我：",
+            f"/{HELP} —— 看这份指令表",
+            f"/{SETTINGS} —— 看本群设置（模式、工具开关、贴纸冷却）",
+            f"/{SETTINGS} <字段> <值> —— 改设置，例如 /{SETTINGS} search_web on、/{SETTINGS} mode smart",
+            f"    可用字段：{OWNER_FIELD_NAMES}",
+            f"/{NOTE} —— 记笔记：/{NOTE} 列表、/{NOTE} <名称> 查看、/{NOTE} <名称> <内容> 记住、/{NOTE} del <名称> 删除",
+            f"/{STATS} —— 本群运行统计",
+            f"/{HEALTH} —— 运行健康状态",
+            f"/{CLEAR} —— 清空本群已存的消息原文（摘要与统计保留）",
+            f"权限：/{SETTINGS}、/{STATS}、/{HEALTH}、/{CLEAR}、/{NOTE} 只认本群管理员，人设覆盖只认群主；",
+            f"/{HELP} 所有人都能用。",
+            "不点我也能聊：@我、回复我、或者叫我「大肥鱼 / 鲸鱼娘」我必应；平时我会看情绪和话题偶尔插一句。",
+        )
+    )
+
+
+#: Telegram 指令菜单（`bot.set_my_commands`）：名称小写，描述越短越好（手机上会截断）。
+BOT_COMMANDS: tuple[tuple[str, str], ...] = (
+    (HELP, "看全部指令怎么用"),
+    (SETTINGS, "查看或修改本群设置（管理员）"),
+    (NOTE, "记笔记（管理员）"),
+    (STATS, "本群运行统计（管理员）"),
+    (HEALTH, "运行健康状态（管理员）"),
+    (CLEAR, "清空本群已存消息原文（管理员）"),
+)
+
+
 @dataclass(frozen=True, slots=True)
 class Command:
     """已解析的命令；`name` 为小写、不含 `/` 与 `@Bot` 后缀。"""
@@ -155,6 +187,7 @@ def render_settings(group: dict[str, object], *, can_set_persona: bool = False) 
     if can_set_persona:
         override = persona.sanitize(str(group.get(PERSONA) or ""))
         lines.append(f"人设覆盖：{f'已设置（{len(override)} 字）' if override else '未设置'}")
+    lines.append(f"指令：/{HELP} 查看全部指令")
     return "\n".join(lines)
 
 
@@ -231,6 +264,10 @@ class CommandService:
 
     async def reply_text(self, *, chat_id: int, user_id: int, command: Command) -> str | None:
         """返回要发送的文本；None 表示静默丢弃（未知命令或未装配的数据源）。"""
+        if command.name == HELP:
+            # 指令表公开：不知道命令怎么用是可用性问题，不设管理员门槛
+            logger.info("查看指令表 chat_id=%s user_id=%s", chat_id, user_id)
+            return help_text()
         if command.name not in (SETTINGS, STATS, HEALTH, CLEAR, NOTE):
             logger.debug("未实现的命令 chat_id=%s name=%s", chat_id, command.name)
             return None

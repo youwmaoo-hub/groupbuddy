@@ -9,6 +9,7 @@ from typing import Callable
 
 import aiosqlite
 from aiogram import Bot, Dispatcher
+from aiogram.types import BotCommand
 from pydantic import ValidationError
 
 from app.config import Settings, load_settings
@@ -21,7 +22,7 @@ from app.llm.client import DeepSeekClient
 from app.llm.loop import Responder
 from app.logging_setup import setup_logging
 from app.ops.admin import AdminRegistry
-from app.ops.commands import CommandService
+from app.ops.commands import BOT_COMMANDS, CommandService
 from app.ops.health import HEALTH_FILENAME, HEALTH_INTERVAL_SECONDS, HealthState, health_loop
 from app.ops.quota import QuotaGuard
 from app.outbound.queue import OutboundQueue
@@ -105,6 +106,14 @@ class Application:
             me.id,
             settings.llm_model,
         )
+        # 指令菜单：让群里的人知道有哪些命令可用（可发现性，docs/requirements.md §2.3）；
+        # 失败只降级成没有菜单，绝不挡住启动。
+        try:
+            await bot.set_my_commands(
+                [BotCommand(command=name, description=desc) for name, desc in BOT_COMMANDS]
+            )
+        except Exception:
+            logger.warning("设置指令菜单失败", exc_info=True)
 
         limiter = RateLimiter(
             group_per_minute=settings.send_rate_group_per_minute,

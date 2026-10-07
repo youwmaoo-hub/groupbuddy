@@ -46,6 +46,7 @@
 - 唯一业务入口 `app/ops/commands.py`：先解析 `/name[@Bot] [参数]`，再做管理员判定，最后由 `app/session/runner.py` 交给 `app/outbound/queue.py` 发送（出站仍只有一个出口）。
 - **管理员只认 Telegram**：管理员集合来自 `getChatAdministrators`（含 creator），经 `app/telegram/admins.py` 取值，由 `AdminRegistry` 在进程内缓存 300 秒；**同一次查询里 `status == "creator"` 的账号是群主**（`is_owner`），普通 `administrator` 不算——管理员与群主读同一份缓存，失败时两者一起被拒。**查询失败按拒绝处理**（fail-closed，失败结果短缓存 30 秒，避免刷命令时反复请求）；不采用 `owner_user_id` 自举，也不接受前端传入的身份。
 - 命令**不进模型、不写 `messages`、0 token**；未知命令静默丢弃，不回复。
+- **指令可发现（阶段 8 收尾）**：`/help` **公开**（不设管理员门槛）——只回指令清单、各命令该找谁用与最小用法，不含任何设置内容、管理员名单或内部状态；`/settings` 无参数时最后一行也提示「指令：/help 查看全部指令」。启动时用 `bot.set_my_commands` 注册同一个清单（`BOT_COMMANDS`，唯一来源 `app/ops/commands.py`）作为 Telegram 指令菜单，失败只降级为没有菜单、不挡启动。可发现性不改变鉴权：每个命令仍各自判定管理员 / 群主。
 - 非管理员得到一句固定拒绝文案，**不泄露**设置内容、管理员名单或内部原因（§11 第 4 条）。
 - 私聊、自身/其他 Bot 的消息仍按入口硬过滤丢弃（§12）。
 - **改设置（F5.1）**：`/settings <字段> <值>`，管理员限定。允许的字段只有 F5.1 列出的范围：

@@ -101,6 +101,7 @@ Prompt 结构固定为"固定段在前、动态段在后"：
 
 - **窗口**：economy 固定 10 条、smart / unrestricted 固定 50 条；normal 不固定，沿用原有按意图分档（复杂 50 / 闲聊 10 / 默认 20，`docs/memory.md` §2）。模式窗口优先于意图分档，未知模式按 normal 处理。
 - **输出上限**：economy 短（256 tokens），normal / smart 用 `LLM_MAX_OUTPUT_TOKENS`（默认 1024），unrestricted 不发送 `max_tokens`（不限）。
+- **回复长度（群消息字数）**：`REPLY_MAX_CHARS`（默认 280，0 = 不限）——`app/session/context.py` 把它传给 `build_system_prompt(reply_limit=)`，在「输出规则」段前置一句字数约束；模型没照做时由 `app/llm/prompts.py::fit_reply` 按句末兜底裁剪（切不到句末就硬截加 `…`），裁剪后的文本同时用于出站与入库，保证 prompt、聊天、DB 三处一致。只约束群里的自然语言回复，不改工具输出与 `max_tokens`。
 - **工具档位**：economy 只放 L0（群开关仍然生效）；normal 完全由群开关决定；smart 在群开关之上额外放行 L0 只读工具；unrestricted 放行全部已注册工具、不看群开关。贴纸只有 economy 关。
 - **谁能改模式**：只有群管理员能通过 `/settings mode <值>` 修改（`docs/security.md` §2.1）；改完对下一条消息立即生效，不需要重启。模型不能提升自己的权限：模式决定的是「上限」，注册表、schema 校验、超时、沙箱仍是硬约束。
 - 仍未做：无（链 3 的工具轮次分档已实施，见 §5.2）。

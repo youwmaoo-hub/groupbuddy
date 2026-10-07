@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     llm_timeout_seconds: float = Field(default=60.0, alias="LLM_TIMEOUT_SECONDS")
     llm_temperature: float = Field(default=0.7, alias="LLM_TEMPERATURE")
     llm_max_output_tokens: int = Field(default=1024, alias="LLM_MAX_OUTPUT_TOKENS")
+    #: 群回复字数上限：提示词按此约束，超长再按句末裁一刀（0 = 不限；docs/token.md §5）。
+    reply_max_chars: int = Field(default=280, ge=0, alias="REPLY_MAX_CHARS")
 
     # --- 路径 ---
     data_dir: Path = Field(default=Path("storage"), alias="DATA_DIR")

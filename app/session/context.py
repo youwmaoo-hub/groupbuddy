@@ -33,6 +33,7 @@ class ContextBuilder:
         group: dict[str, object] | None = None,
         allowed_tools: tuple[str, ...] = (),
         mood: str | None = None,
+        reply_limit: int | None = None,
     ) -> list[dict[str, str]]:
         """窗口按 chat_id 过滤，绝不跨群；本轮用户消息永不丢。
 
@@ -42,6 +43,7 @@ class ContextBuilder:
         group 由调用方传入可避免重复查询；allowed_tools 决定 System3 里可选的工具；
         mood 非空时作为动态段末条注入（docs/persona.md §2、docs/token.md 链 2）。
         mode 同时决定窗口大小（docs/token.md §5）。
+        reply_limit 为 None 时用配置 `REPLY_MAX_CHARS`（0 = 不限）。
         """
         current = group if group is not None else await chat_settings.get(self._connection, batch.chat_id)
         mode = modes.normalize(current.get("mode"))
@@ -49,6 +51,7 @@ class ContextBuilder:
             persona=persona.resolve(current, self._settings.persona),
             mode=mode,
             allowed_tools=allowed_tools,
+            reply_limit=self._settings.reply_max_chars if reply_limit is None else reply_limit,
         )
         until_id = await messages.max_id(self._connection, chat_id=batch.chat_id)
         history = await messages.recent(

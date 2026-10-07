@@ -170,6 +170,43 @@ class CommandServiceTests(DbTestCase):
         self.assertIsNone(await service.reply_text(chat_id=-100, user_id=7, command=Command("nope")))
 
 
+class HelpCommandTests(DbTestCase):
+    """/help：公开的指令表（可发现性），不泄露设置内容（docs/security.md §2.1）。"""
+
+    async def test_help_is_public_and_lists_every_command(self) -> None:
+        await chat_settings.upsert(self.connection, -100, mode="smart")
+        service = make_service(self.connection, {7})
+        text = await service.reply_text(chat_id=-100, user_id=9, command=Command("help"))
+        assert text is not None
+        for command in ("/help", "/settings", "/note", "/stats", "/health", "/clear"):
+            self.assertIn(command, text)
+        self.assertIn(FIELD_NAMES.split("、")[0], text)  # 可用字段（mode）
+        self.assertIn("管理员", text)
+        self.assertIn("群主", text)
+
+    async def test_help_does_not_leak_settings(self) -> None:
+        # 指令表只讲怎么用，不回显本群当前设置（示例里的值不算泄露）
+        await chat_settings.upsert(self.connection, -100, mode="economy", allow_write=1)
+        service = make_service(self.connection, {7})
+        text = await service.reply_text(chat_id=-100, user_id=9, command=Command("help"))
+        assert text is not None
+        for leaked in ("模式：", "economy", "write_file：开", "贴纸冷却："):
+            self.assertNotIn(leaked, text)
+
+    async def test_settings_screen_points_at_help(self) -> None:
+        service = make_service(self.connection, {7})
+        text = await service.reply_text(chat_id=-100, user_id=7, command=Command("settings"))
+        assert text is not None
+        self.assertTrue(text.endswith("指令：/help 查看全部指令"))
+
+    async def test_help_reaches_everyone_even_without_admins(self) -> None:
+        # 管理员查询失败也不该挡住指令表：/help 不判定身份
+        service = make_service(self.connection, set())
+        text = await service.reply_text(chat_id=-100, user_id=9, command=Command("help"))
+        assert text is not None
+        self.assertIn("/help", text)
+
+
 class _RecordingOutbound:
     """只记录出站内容；真实实现是 app/outbound/queue.py。"""
 
@@ -249,6 +286,25 @@ class RunnerCommandTests(DbTestCase):
             make_incoming(update_id=2, chat_id=-100, message_id=6, user_id=9, text="/settings")
         )
         self.assertEqual([entry["text"] for entry in outbound.sent], [DENIED_TEXT])
+
+    async def test_help_from_a_member_is_answered_without_admins(self) -> None:
+        # 指令表公开：普通成员也能看到怎么用（可发现性），但仍不进模型、不写历史
+        llm = FakeLLMClient()
+        outbound = _RecordingOutbound()
+        runner = build_runner(
+            self.connection,
+            self.settings,
+            outbound=outbound,
+            llm=llm,
+            commands=make_service(self.connection, set()),
+        )
+        await runner.handle(
+            make_incoming(update_id=9, chat_id=-100, message_id=9, user_id=9, text="/help")
+        )
+        self.assertEqual(len(outbound.sent), 1)
+        self.assertIn("/settings", str(outbound.sent[0]["text"]))
+        self.assertEqual(llm.calls, [])
+        self.assertEqual(await messages.recent(self.connection, chat_id=-100, limit=10), [])
 
     async def test_unknown_command_is_silently_dropped(self) -> None:
         outbound = _RecordingOutbound()

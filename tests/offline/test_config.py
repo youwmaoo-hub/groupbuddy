@@ -53,6 +53,11 @@ class ConfigTests(unittest.TestCase):
         settings = make_settings(self.tmp, BOT_ALIASES="小助手，helper , ,")
         self.assertEqual(settings.aliases, ("小助手", "helper"))
 
+    def test_reply_max_chars_defaults_to_280_and_can_be_disabled(self) -> None:
+        self.assertEqual(make_settings(self.tmp).reply_max_chars, 280)
+        self.assertEqual(make_settings(self.tmp, REPLY_MAX_CHARS="0").reply_max_chars, 0)
+        self.assertEqual(make_settings(self.tmp, REPLY_MAX_CHARS="120").reply_max_chars, 120)
+
     def test_today_follows_timezone(self) -> None:
         settings = make_settings(self.tmp, TIMEZONE="Asia/Shanghai")
         moment = datetime(2026, 1, 1, 16, 30, tzinfo=timezone.utc)  # 北京时间次日 00:30

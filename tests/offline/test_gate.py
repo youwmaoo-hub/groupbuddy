@@ -193,6 +193,35 @@ class TriggerTests(unittest.TestCase):
         self.assertFalse(decision.should_respond)
         self.assertEqual(decision.reason, "not_addressed")
 
+    def test_reply_to_another_bot_is_background(self) -> None:
+        # 人类在跟别的 Bot 对话时本 Bot 不插嘴：不前进模型、不占冷却（docs/requirements.md §2.1）
+        decision = self.detector.decide(
+            make_incoming(
+                update_id=20,
+                chat_id=1,
+                message_id=20,
+                text="这个怎么解决",
+                mentions_bot=False,
+                reply_to_other_bot=True,
+            )
+        )
+        self.assertEqual(decision.verdict, "ignore")
+        self.assertEqual(decision.reason, "other_bot_reply")
+
+    def test_reply_to_another_bot_still_answers_when_addressed(self) -> None:
+        decision = self.detector.decide(
+            make_incoming(
+                update_id=21,
+                chat_id=1,
+                message_id=21,
+                text="小助手你看",
+                mentions_bot=False,
+                reply_to_other_bot=True,
+            )
+        )
+        self.assertTrue(decision.should_respond)
+        self.assertEqual(decision.reason, "alias")
+
     def test_unaddressed_question_is_a_proactive_candidate(self) -> None:
         decision = self.detector.decide(
             make_incoming(update_id=11, chat_id=1, message_id=11, text="这个怎么解决", mentions_bot=False)
@@ -442,6 +471,29 @@ class ParseTests(unittest.TestCase):
         )
         assert incoming is not None
         self.assertTrue(incoming.reply_to_bot)
+        self.assertFalse(incoming.reply_to_other_bot)
+
+    def test_reply_to_another_bot_is_flagged_as_background(self) -> None:
+        reply = SimpleNamespace(from_user=SimpleNamespace(id=888, is_bot=True))
+        incoming = parse_update(
+            make_update(update_id=8, text="继续", reply_to=reply),
+            bot_id=999,
+            bot_username="my_bot",
+        )
+        assert incoming is not None
+        self.assertFalse(incoming.reply_to_bot)
+        self.assertTrue(incoming.reply_to_other_bot)
+
+    def test_reply_to_a_human_is_not_flagged(self) -> None:
+        reply = SimpleNamespace(from_user=SimpleNamespace(id=777, is_bot=False))
+        incoming = parse_update(
+            make_update(update_id=9, text="继续", reply_to=reply),
+            bot_id=999,
+            bot_username="my_bot",
+        )
+        assert incoming is not None
+        self.assertFalse(incoming.reply_to_bot)
+        self.assertFalse(incoming.reply_to_other_bot)
 
     def test_bot_author_is_flagged(self) -> None:
         incoming = parse_update(

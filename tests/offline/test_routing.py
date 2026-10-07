@@ -1,4 +1,4 @@
-"""模型档位路由：默认档、复杂任务升级、fail-safe，以及意图分档规则（docs/token.md §5）。"""
+"""按意图的最小规则分发：模型档位、工具轮次分档、fail-safe，以及意图规则（docs/token.md §5）。"""
 
 from __future__ import annotations
 
@@ -15,6 +15,7 @@ from app.llm.routing import (
     PURPOSE_CHAT,
     PURPOSE_SUMMARY,
     ModelRouter,
+    tool_round_limit,
 )
 from app.session.context import ContextBuilder
 from tests.offline.helpers import DbTestCase, make_incoming, make_settings
@@ -82,6 +83,42 @@ class RouterTests(unittest.TestCase):
         with self.assertLogs("app.llm.routing", level="ERROR"):
             with mock.patch.object(ModelRouter, "_decide", side_effect=RuntimeError("坏配置")):
                 self.assertEqual(router.choose(intent=INTENT_COMPLEX), "deepseek-flash")
+
+
+class ToolRoundTests(unittest.TestCase):
+    """工具轮次分档（docs/token.md §3 链 3 + §5.2）：只调低全局上限，不突破部署方设置。"""
+
+    def setUp(self) -> None:
+        self._tmp = tempfile.TemporaryDirectory()
+        self.tmp = Path(self._tmp.name)
+
+    def tearDown(self) -> None:
+        self._tmp.cleanup()
+
+    def _limit(self, intent: str, **overrides: object) -> int:
+        return tool_round_limit(intent, make_settings(self.tmp, **overrides))
+
+    def test_chitchat_gets_one_tool_round(self) -> None:
+        """闲聊 1 轮（不是链 3 原表的 0 轮）：0 轮会连 send_sticker 一起关掉。"""
+        self.assertEqual(self._limit(INTENT_CHITCHAT), 1)
+
+    def test_default_and_complex_keep_the_global_cap(self) -> None:
+        self.assertEqual(self._limit(INTENT_DEFAULT), 2)
+        self.assertEqual(self._limit(INTENT_COMPLEX), 2)
+
+    def test_complex_follows_the_global_cap_when_it_is_raised(self) -> None:
+        """链 3 表的「代码调试 4 轮」= 部署方把 `TOOL_MAX_ROUNDS` 提到 4。"""
+        self.assertEqual(self._limit(INTENT_COMPLEX, TOOL_MAX_ROUNDS=4), 4)
+        self.assertEqual(self._limit(INTENT_CHITCHAT, TOOL_MAX_ROUNDS=4), 1)  # 闲聊仍只有 1 轮
+
+    def test_unknown_intent_falls_back_to_the_global_cap(self) -> None:
+        self.assertEqual(self._limit("whatever"), 2)
+        self.assertEqual(self._limit("whatever", TOOL_MAX_ROUNDS=3), 3)
+
+    def test_tier_never_exceeds_the_global_cap(self) -> None:
+        self.assertEqual(self._limit(INTENT_CHITCHAT, TOOL_MAX_ROUNDS=0), 0)
+        self.assertEqual(self._limit(INTENT_CHITCHAT, TOOL_MAX_ROUNDS=1), 1)
+        self.assertEqual(self._limit(INTENT_DEFAULT, TOOL_MAX_ROUNDS=1), 1)
 
 
 class IntentTests(DbTestCase):

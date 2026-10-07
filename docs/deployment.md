@@ -29,6 +29,7 @@
 - 只有 `app/config.py` 读取环境变量；其余模块只接收 `Settings`（见 `docs/architecture.md` §2）。
 - 必填只有 `BOT_TOKEN` 与 `LLM_API_KEY`（无默认值，缺失拒绝启动）；其余键都有代码默认值（`LLM_BASE_URL`、`LLM_MODEL`、`LLM_MODEL_STRONG`、`DATA_DIR`、`DB_PATH`、`WORKSPACE_ROOT`、`LOG_DIR`、`SANDBOX_TEMP_DIR`、`TIMEZONE` 等）。生产环境建议把路径类键显式写出来（见 §12.4）。
 - 模型档位（可选）：`LLM_MODEL_STRONG` 留空 = 不升级，所有轮次都用 `LLM_MODEL`（默认行为，与升级前完全一致）；填了才会对规则判定为复杂的轮次用该模型（见 `docs/token.md` §5.1）。改完按 §12.5 核对启动日志里的 `配置加载完成` 一行（未配置时显示 `LLM_MODEL_STRONG=(未配置)`）。
+- 工具轮次（可选）：`TOOL_MAX_ROUNDS` 是**全局上限**（默认 2，可选 0–4），按意图分档只在这个上限之下调低（闲聊 1 轮，复杂任务与无法判断用全局上限）；想把链 3 的「代码调试 4 轮」放开就把它设为 4（见 `docs/token.md` §5.2）。
 - 实例身份：`BOT_INSTANCE_ID`（默认 `default`）。多实例部署时每实例注入不同的 `DATA_DIR`/`DB_PATH`/`WORKSPACE_ROOT`，互不共享目录（见 `docs/domain.md` §2）。
 - 配额（阶段 8 F5.3）：`QUOTA_DAILY_TOKENS` / `QUOTA_MONTHLY_TOKENS`，**0 或未配置 = 不限额**；按 `chat_id` 按 `TIMEZONE` 的自然日/自然月统计该群已用 token，超额时本轮不调用模型（语义见 `docs/token.md` §4.1）。配额不随群设置变化，只能由部署方改 `.env`。
 - `.env.example` 列出常用键与默认值；`.env` 只写需要覆盖的键。键名拼错会被**静默忽略**（走默认值），改完按 §12.5 核对启动日志里的 `配置加载完成` 一行。

@@ -358,6 +358,69 @@ class PipelineTests(DbTestCase):
         await self._flush()
         self.assertIn("send_sticker", self.llm.tool_names[0])
 
+    async def test_chitchat_gets_one_tool_round_then_must_answer(self) -> None:
+        """链式工具轮次按意图分档（docs/token.md §3 链 3 + §5.2）：闲聊最多 1 轮工具。"""
+        self._build(tool_reply("calc", {"expression": "1+1"}), "算好了")
+        await self._send(["@bot 哈哈"])
+        await self._flush()
+        # 第 2 次调用不再下发工具（第 1 次仍然下发），所以闲聊最多用掉一轮工具
+        self.assertEqual(self.llm.tool_names, [["calc", "read_file"], None])
+        self.assertEqual(len(self.llm.calls), 2)
+        self.assertEqual([item["text"] for item in self.sender.sent], ["算好了"])
+        self.assertEqual((await self._usage())["tool_calls"], 1)
+
+    async def test_chitchat_still_offers_send_sticker(self) -> None:
+        """闲聊取 1 轮而不是链 3 原表的 0 轮：0 轮会连贴纸一起关掉，这里钉住不回归。"""
+        await chat_settings.upsert(self.connection, 1, allow_sticker=1)
+        await stickers.register(
+            self.connection,
+            chat_id=1,
+            file_id="F1",
+            file_unique_id="U1",
+            valence=1.0,
+            arousal=1.0,
+            tags=["开心"],
+        )
+        self._build(tool_reply("send_sticker", {"valence": 1.0, "arousal": 1.0, "tags": ["开心"]}), "发了个贴纸")
+        await self._send(["@bot 哈哈哈哈"])
+        await self._flush()
+        self.assertIn("send_sticker", self.llm.tool_names[0])
+        self.assertEqual([item["file_id"] for item in self.sender.stickers], ["F1"])
+
+    async def test_ordinary_task_keeps_the_global_round_cap(self) -> None:
+        """普通任务不降档：仍允许 2 轮工具（default 覆盖常见的 read→write 两步链）。"""
+        self._build(
+            tool_reply("calc", {"expression": "1+1"}),
+            tool_reply("calc", {"expression": "2+2"}, call_id="call-2"),
+            "算好了",
+        )
+        await self._send(["@bot 这是一句普通的日常对话内容"])
+        await self._flush()
+        self.assertEqual(
+            self.llm.tool_names, [["calc", "read_file"], ["calc", "read_file"], None]
+        )
+        self.assertEqual(len(self.llm.calls), 3)
+        self.assertEqual([item["text"] for item in self.sender.sent], ["算好了"])
+        self.assertEqual((await self._usage())["tool_calls"], 2)
+
+    async def test_complex_task_uses_the_raised_global_cap(self) -> None:
+        """复杂任务跟随全局上限：`TOOL_MAX_ROUNDS=3` 时能连做 3 轮工具（链 3 表的「代码调试 4 轮」同理）。"""
+        self.settings = make_settings(self.tmp, TOOL_MAX_ROUNDS=3)
+        self._build(
+            tool_reply("calc", {"expression": "1+1"}),
+            tool_reply("calc", {"expression": "2+2"}, call_id="call-2"),
+            tool_reply("calc", {"expression": "3+3"}, call_id="call-3"),
+            "算好了",
+        )
+        await self._send(["@bot 看这段代码 ```print(1)```"])
+        await self._flush()
+        self.assertEqual(
+            self.llm.tool_names,
+            [["calc", "read_file"], ["calc", "read_file"], ["calc", "read_file"], None],
+        )
+        self.assertEqual(len(self.llm.calls), 4)
+        self.assertEqual((await self._usage())["tool_calls"], 3)
+
     async def test_rapid_messages_merge_into_one_model_call(self) -> None:
         self._build("好的，收到")
         await self._send(["你好 @bot", "在吗", "帮我看看", "回复一下"])

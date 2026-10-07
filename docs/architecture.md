@@ -129,7 +129,7 @@ Telegram Update
 - 崩溃重启后：Telegram 会重发未确认更新，靠 `updates` 表幂等吸收（"至少一次，但只回复一次"）。
 - 未完成的回复不重放历史对话，只处理新到达的更新。
 - 数据库写入使用事务；同一形态的写入可重复执行而不产生重复行（唯一键 + `INSERT OR IGNORE`）。
-  **已知偏差（技术债）**：迁移已按块使用显式事务（见 `docs/database.md` §1）；各 repo 仍自己 `commit()`，多语句写可能半提交、无 `rollback`（见 `docs/database.md` §6 与 `TODO.md` T9）。
+  写入事务边界已统一（T9，`1826d89`）：迁移按块使用显式事务（见 `docs/database.md` §1），各 repo 的写入统一走 `app/storage/tx.py` 的 `SAVEPOINT` 事务（成功 `RELEASE`、失败整体回滚），不再自己 `commit()`、不会半提交（见 `docs/database.md` §6 与 `app/storage/repo/*.py`）。
 
 ## 7. 扩展预留（现在不实现，只留缝）
 

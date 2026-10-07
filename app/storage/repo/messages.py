@@ -147,6 +147,23 @@ async def since_last_assistant(connection: aiosqlite.Connection, *, chat_id: int
     return int(row[1])
 
 
+async def last_assistant_text(connection: aiosqlite.Connection, *, chat_id: int) -> str | None:
+    """Bot 上一条发言的原文；从未发言或原文为空返回 None。
+
+    只用于「同话题」弱触发（阶段 8）：判断新消息是否在接着 Bot 自己的话题聊。
+    """
+    cursor = await connection.execute(
+        "SELECT text FROM messages WHERE chat_id = ? AND role = 'assistant' "
+        "AND text IS NOT NULL ORDER BY id DESC LIMIT 1",
+        (chat_id,),
+    )
+    row = await cursor.fetchone()
+    await cursor.close()
+    if row is None or not str(row[0]).strip():
+        return None
+    return str(row[0])
+
+
 async def clear_chat(connection: aiosqlite.Connection, chat_id: int) -> int:
     """/clear 用：删除该群消息原文，不影响其他群。"""
     async with transaction(connection):

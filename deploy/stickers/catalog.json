@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "note": "情绪槽位定义，不含素材本体。素材由部署方按 deploy/stickers/README.md 的规格与许可政策自行准备；source/license 未填写会在导入时被警告。",
+  "stickers": [
+    {"key": "happy", "emotion": "开心", "emoji": "😄", "tags": ["开心", "高兴", "好耶", "太棒"], "valence": 0.8, "arousal": 0.6, "asset": "happy.webm"},
+    {"key": "laugh", "emotion": "笑", "emoji": "😆", "tags": ["笑", "好笑", "笑死", "哈哈"], "valence": 0.9, "arousal": 0.8, "asset": "laugh.webm"},
+    {"key": "shy", "emotion": "害羞", "emoji": "😳", "tags": ["害羞", "不好意思", "脸红"], "valence": 0.4, "arousal": 0.6, "asset": "shy.webm"},
+    {"key": "angry", "emotion": "生气", "emoji": "😠", "tags": ["生气", "气死", "火大"], "valence": -0.7, "arousal": 0.8, "asset": "angry.webm"},
+    {"key": "confused", "emotion": "疑惑", "emoji": "🤔", "tags": ["疑惑", "不懂", "问号"], "valence": -0.1, "arousal": 0.4, "asset": "confused.webm"},
+    {"key": "speechless", "emotion": "无语", "emoji": "😑", "tags": ["无语", "服了", "尴尬"], "valence": -0.3, "arousal": 0.3, "asset": "speechless.webm"},
+    {"key": "cry", "emotion": "哭", "emoji": "😭", "tags": ["哭", "难受", "泪目"], "valence": -0.8, "arousal": 0.7, "asset": "cry.webm"},
+    {"key": "wronged", "emotion": "委屈", "emoji": "🥺", "tags": ["委屈", "可怜", "求求"], "valence": -0.5, "arousal": 0.5, "asset": "wronged.webm"},
+    {"key": "cute", "emotion": "卖萌", "emoji": "🐳", "tags": ["卖萌", "可爱", "贴贴"], "valence": 0.7, "arousal": 0.6, "asset": "cute.webm"},
+    {"key": "thumbsup", "emotion": "点赞", "emoji": "👍", "tags": ["点赞", "厉害", "赞同", "牛"], "valence": 0.7, "arousal": 0.5, "asset": "thumbsup.webm"},
+    {"key": "thanks", "emotion": "谢谢", "emoji": "🙏", "tags": ["谢谢", "感谢", "多谢"], "valence": 0.6, "arousal": 0.4, "asset": "thanks.webm"},
+    {"key": "hug", "emotion": "抱抱", "emoji": "🤗", "tags": ["抱抱", "安慰", "抱"], "valence": 0.7, "arousal": 0.5, "asset": "hug.webm"},
+    {"key": "morning", "emotion": "早安", "emoji": "🌅", "tags": ["早安", "早上好"], "valence": 0.6, "arousal": 0.4, "asset": "morning.webm"},
+    {"key": "night", "emotion": "晚安", "emoji": "🌙", "tags": ["晚安", "睡了"], "valence": 0.5, "arousal": 0.2, "asset": "night.webm"},
+    {"key": "sleepy", "emotion": "困", "emoji": "😴", "tags": ["困", "睡觉", "好累"], "valence": 0.0, "arousal": 0.2, "asset": "sleepy.webm"},
+    {"key": "eat", "emotion": "吃饭", "emoji": "🍚", "tags": ["吃饭", "白饭", "饿了", "干饭"], "valence": 0.6, "arousal": 0.4, "asset": "eat.webm"},
+    {"key": "slack", "emotion": "摸鱼", "emoji": "🐟", "tags": ["摸鱼", "偷懒", "摆烂"], "valence": 0.4, "arousal": 0.3, "asset": "slack.webm"},
+    {"key": "cheer", "emotion": "加油", "emoji": "💪", "tags": ["加油", "冲", "支持"], "valence": 0.7, "arousal": 0.7, "asset": "cheer.webm"},
+    {"key": "fail", "emotion": "失败", "emoji": "💥", "tags": ["失败", "寄了", "完了", "崩了"], "valence": -0.6, "arousal": 0.7, "asset": "fail.webm"},
+    {"key": "think", "emotion": "思考", "emoji": "🧠", "tags": ["思考", "想想", "大脑宕机"], "valence": 0.1, "arousal": 0.5, "asset": "think.webm"},
+    {"key": "fear", "emotion": "惊恐", "emoji": "😱", "tags": ["惊恐", "吓人", "害怕"], "valence": -0.6, "arousal": 0.9, "asset": "fear.webm"},
+    {"key": "proud", "emotion": "得意", "emoji": "😎", "tags": ["得意", "骄傲", "本大肥鱼"], "valence": 0.7, "arousal": 0.6, "asset": "proud.webm"},
+    {"key": "wow", "emotion": "震惊", "emoji": "😲", "tags": ["震惊", "离谱", "真的假的"], "valence": -0.1, "arousal": 0.8, "asset": "wow.webm"},
+    {"key": "broke", "emotion": "破防", "emoji": "🫠", "tags": ["破防", "绷不住", "顶不住"], "valence": -0.5, "arousal": 0.8, "asset": "broke.webm"}
+  ]
+}

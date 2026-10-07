@@ -116,7 +116,10 @@ class SessionRunner:
             return
 
         since_bot_reply = await messages.since_last_assistant(self._connection, chat_id=incoming.chat_id)
-        decision = self._detector.decide(incoming, since_bot_reply=since_bot_reply)
+        bot_last_text = await messages.last_assistant_text(self._connection, chat_id=incoming.chat_id)
+        decision = self._detector.decide(
+            incoming, since_bot_reply=since_bot_reply, bot_last_text=bot_last_text
+        )
         if decision.should_respond:
             self._debouncer.add(incoming.chat_id, incoming, proactive=decision.proactive)
         logger.debug(

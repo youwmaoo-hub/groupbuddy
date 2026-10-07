@@ -135,6 +135,65 @@ class PipelineTests(DbTestCase):
         summary = await self._usage()
         self.assertEqual(summary["tool_calls"], 1)
 
+    async def test_unaddressed_interesting_message_triggers_a_proactive_reply(self) -> None:
+        # 普通群消息（没有 @、也不回复 Bot）：靠低成本 gate 命中情绪弱触发后主动接话
+        self._build("本大肥鱼在的")
+        await self.runner.handle(
+            make_incoming(
+                update_id=100,
+                chat_id=1,
+                message_id=10,
+                text="刚上线就崩了，我破防了",
+                mentions_bot=False,
+            )
+        )
+        batches = await self._flush()
+        self.assertEqual(len(batches), 1)
+        self.assertTrue(batches[0].proactive)
+        self.assertEqual([item["text"] for item in self.sender.sent], ["本大肥鱼在的"])
+        self.assertEqual(len(self.llm.calls), 1)
+
+    async def test_pure_noise_never_calls_the_model(self) -> None:
+        self._build("不该出现")
+        await self.runner.handle(
+            make_incoming(update_id=100, chat_id=1, message_id=10, text="哈哈哈哈", mentions_bot=False)
+        )
+        batches = await self._flush()
+        self.assertEqual(batches, [])
+        self.assertEqual(self.llm.calls, [])
+        self.assertEqual(self.sender.sent, [])
+
+    async def test_proactive_reply_cools_down_before_the_next_one(self) -> None:
+        self._build("本大肥鱼在的", "又怎么了")
+        await self.runner.handle(
+            make_incoming(update_id=100, chat_id=1, message_id=10, text="刚上线就崩了，我破防了", mentions_bot=False)
+        )
+        await self._flush()
+        self.assertEqual(len(self.llm.calls), 1)
+        # 冷却期内（默认 20 秒，`_flush` 只推进 2 秒）同样的消息只进 `wait`，不再调用模型
+        await self.runner.handle(
+            make_incoming(update_id=101, chat_id=1, message_id=11, text="刚刚又崩了，我破防了", mentions_bot=False)
+        )
+        batches = await self._flush()
+        self.assertEqual(batches, [])
+        self.assertEqual(len(self.llm.calls), 1)
+
+    async def test_another_bot_is_never_answered(self) -> None:
+        self._build("不该出现")
+        await self.runner.handle(
+            make_incoming(
+                update_id=100,
+                chat_id=1,
+                message_id=10,
+                text="刚上线就崩了，我破防了",
+                mentions_bot=False,
+                is_bot_author=True,
+            )
+        )
+        batches = await self._flush()
+        self.assertEqual(batches, [])
+        self.assertEqual(self.llm.calls, [])
+
     async def test_search_web_not_exposed_by_default(self) -> None:
         self._build("好")
         await self._send(["@bot 帮我查一下"])

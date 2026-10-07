@@ -223,8 +223,8 @@ class TriggerTests(unittest.TestCase):
         )
         self.assertEqual((decision.verdict, decision.reason), ("respond", "followup"))
 
-    def test_followup_outside_window_is_ignored(self) -> None:
-        for gap in (None, 0, 6):
+    def test_followup_outside_window_is_not_a_followup(self) -> None:
+        for gap in (0, 6):
             with self.subTest(gap=gap):
                 decision = self.detector.decide(
                     make_incoming(
@@ -232,7 +232,82 @@ class TriggerTests(unittest.TestCase):
                     ),
                     since_bot_reply=gap,
                 )
-                self.assertEqual(decision.verdict, "ignore")
+                self.assertFalse(decision.should_respond)
+                self.assertEqual(decision.reason, "not_addressed")
+
+    def test_bot_author_is_never_answered(self) -> None:
+        """人类中心（阶段 8）：其他 Bot 的消息即使 @ 本 Bot 也不回，避免 Bot↔Bot 循环。"""
+        decision = self.detector.decide(
+            make_incoming(
+                update_id=50,
+                chat_id=1,
+                message_id=50,
+                text="@bot 你好",
+                mentions_bot=True,
+                is_bot_author=True,
+            )
+        )
+        self.assertEqual((decision.verdict, decision.reason), ("ignore", "bot_author"))
+
+    def test_topic_message_after_bot_reply_is_a_candidate(self) -> None:
+        decision = self.detector.decide(
+            make_incoming(update_id=60, chat_id=1, message_id=60, text="爬山记得带防晒霜", mentions_bot=False),
+            since_bot_reply=3,
+            bot_last_text="周末去爬山我带帐篷",
+        )
+        self.assertEqual((decision.verdict, decision.reason), ("respond", "topic"))
+        self.assertTrue(decision.proactive)
+
+    def test_topic_window_and_stopwords(self) -> None:
+        cases = (
+            (9, "周末去爬山我带帐篷", "爬山记得带防晒霜"),  # 超出同话题窗口
+            (3, "这样就可以了吧", "这个东西可以吗"),  # 只共享停用 2 字组
+        )
+        for index, (gap, bot_text, text) in enumerate(cases):
+            with self.subTest(gap=gap):
+                decision = self.detector.decide(
+                    make_incoming(update_id=70 + index, chat_id=2, message_id=70 + index, text=text),
+                    since_bot_reply=gap,
+                    bot_last_text=bot_text,
+                )
+                self.assertNotEqual(decision.reason, "topic")
+
+    def test_emotion_message_is_a_candidate(self) -> None:
+        decision = self.detector.decide(
+            make_incoming(update_id=80, chat_id=1, message_id=80, text="刚上线就崩了，我破防了", mentions_bot=False)
+        )
+        self.assertEqual((decision.verdict, decision.reason), ("respond", "emotion"))
+
+    def test_quiet_open_after_a_long_silence(self) -> None:
+        cases = ((None, True), (20, True), (19, False))
+        for index, (gap, expected) in enumerate(cases):
+            with self.subTest(gap=gap):
+                decision = self.detector.decide(
+                    make_incoming(
+                        update_id=90 + index,
+                        chat_id=3,
+                        message_id=90 + index,
+                        text="周末准备去爬山，爬完回来吃火锅",
+                        mentions_bot=False,
+                    ),
+                    since_bot_reply=gap,
+                )
+                self.assertEqual(decision.reason == "quiet_open", expected)
+
+    def test_quiet_open_needs_a_message_with_substance(self) -> None:
+        decision = self.detector.decide(
+            make_incoming(update_id=95, chat_id=3, message_id=95, text="嗯嗯，行", mentions_bot=False),
+            since_bot_reply=None,
+        )
+        self.assertFalse(decision.should_respond)
+        self.assertEqual(decision.reason, "not_addressed")
+
+    def test_new_weak_triggers_still_respect_the_limiter(self) -> None:
+        self.limiter.record(4)
+        decision = self.detector.decide(
+            make_incoming(update_id=96, chat_id=4, message_id=96, text="今天摸鱼摸得有点过分", mentions_bot=False)
+        )
+        self.assertEqual((decision.verdict, decision.reason), ("wait", "cooldown"))
 
     def test_cooldown_suppresses_proactive_reply(self) -> None:
         self.limiter.record(1)

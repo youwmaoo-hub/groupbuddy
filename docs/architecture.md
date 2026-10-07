@@ -41,7 +41,7 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | | `app/telegram/sender.py` | send/edit/typing；4096 字符安全分段 |
 | 闸门 | `app/gate/dedupe.py` | `update_id` 幂等 |
 | | `app/gate/filters.py` | 入口硬过滤：自身/其他 Bot、无文本、命令（`allow_commands` 只给命令通道）；私聊默认丢弃（§2.2） |
-| | `app/gate/trigger.py` | 发言判定：强触发 → 可解释内容 → 上下文追问 → 冷却/窗口闸门；输出 RESPOND / WAIT / IGNORE |
+| | `app/gate/trigger.py` | 发言判定：强触发 → 可解释内容 → 上下文追问 → 话题延续 / 情绪 / 安静后开场 → 冷却/窗口闸门；输出 RESPOND / WAIT / IGNORE；首行丢弃其他 Bot（`bot_author`） |
 | | `app/gate/limits.py` | 主动发言的冷却与每窗口上限（进程内状态，按 `chat_id` 隔离） |
 | | `app/gate/debounce.py` | 静默窗合并多条消息；批次带"是否全部未点名"标记（`proactive`） |
 | | `app/gate/queue.py` | per-chat 串行 actor；运行期间新消息合并为下一轮一批 |
@@ -75,6 +75,7 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | | `app/ops/text.py` | 命令文本单行化唯一实现（人设与笔记共用）：控制字符折成空格 + 空白归一化；纯函数，无 aiogram / 无数据库 |
 | | `app/ops/notes.py` | 长期笔记（`/note`）的解析与文案：列表/查看/记住/删除、名称与正文上限、时间戳渲染；只做纯文本，授权与读写不在这里 |
 | | `app/ops/commands.py` | 群主命令通道：解析、管理员判定、读写本群设置、只读运行指标、清理本群消息与长期笔记（`/settings`、`/stats`、`/health`、`/clear`、`/note`；`persona_override` 与 `/note` 只认群主；不进模型、0 token） |
+| | `app/ops/sticker_catalog.py` | 贴纸 catalog / manifest 的校验与一次性批量导入（运维侧，运行期不 import）：manifest 读取与必填校验、素材名路径穿越防护、按 emoji 匹配 Telegram 贴纸包、幂等 UPSERT（`scripts/register_sticker.py`、`scripts/import_sticker_set.py`，见 `deploy/stickers/README.md`） |
 | | `app/ops/quota.py` | 配额判定：调用模型前按 `chat_id` 检查日/月已用 token；`0` 或未配置 = 不限额 |
 | | `app/ops/health.py` | 健康状态唯一来源：`HealthState` 快照 + `storage/health.json` 心跳 + `/health` 共用；只读、原子写 |
 | | `app/ops/metrics.py` | `/stats` 文案渲染：当日 token 用量、工具调用/失败（错误率）、配额余量；只读不新建统计体系 |
@@ -114,7 +115,7 @@ Telegram Update
 - **本轮（round）边界**：一轮只以"开始处理时已入库"的消息为输入（`messages.max_id` 快照）；模型调用期间新到的消息只落库，不并入本轮。
 - **运行期间合并**：每个 `chat_id` 最多只有一个待处理批次，新消息并入其中并只保留最新 N 条（`debounce_max_messages`，默认 5），因此"Bot 正在思考"不会持续产生新的模型调用。
 - **每轮一次**：同一群同时只有一个回复任务，一轮最多一次模型调用（阶段 3 起为一次工具循环内不超过轮次上限）与一次回复。
-- **主动发言闸门**：未点名的候选消息（`question`/`troubleshoot`/`resource`/`followup`）先过冷却与每窗口上限，被压住即 `wait`（0 token、只入库）；被点名不受限制（`docs/requirements.md` §2.1）。
+- **主动发言闸门**：未点名的候选消息（`question`/`troubleshoot`/`resource`/`followup`/`topic`/`emotion`/`quiet_open`）先过冷却与每窗口上限，被压住即 `wait`（0 token、只入库）；被点名不受限制（`docs/requirements.md` §2.1）。后三条弱触发是阶段 8「群宠体验升级」追加的低成本规则（话题延续按与上一条 assistant 文本共享的非停用二字组、情绪词表、安静条数阈值），只增加候选量、不改冷却与上限；其他 Bot 的消息在判定首行就被丢弃，且不计入冷却与额度（`docs/security.md` §12）。
 - **出站串行**：同一群的文本与贴纸发送共用一把锁（`app/outbound/queue.py`）；贴纸走独立的 1 条/20 秒限速通道。
 - **摘要调度**：后台任务 `summary-scheduler` 按 `chat_id` 串行、异步、可重试、幂等，随关闭信号停止，不阻塞回复（`app/session/summary.py`）。
 - **健康心跳**：后台任务 `health-heartbeat` 每 60 秒原子重写 `storage/health.json`（`app/ops/health.py`）；只读探测、不调用模型，写失败只告警。
@@ -158,7 +159,7 @@ Docker 只支持 Tier A | 独立沙箱服务 / microVM（确有必要时） |
 - `tests/offline/` 用标准库 `unittest`，不需要网络、不需要真实 Bot Token、不需要 API Key。
 - 本地开发（Windows）与生产（Linux VPS）跑同一套代码，不维护平台分支。
 - **证据分级**：本地离线 `unittest` 通过只证明本机逻辑；沙箱与平台行为必须由**真机证据**证明（VPS 上跑同一套测试 + `scripts/verify_sandbox.py`）。两类证据分别记录在 `docs/status.md`，不得互相替代（见 `AGENTS.md` 证据纪律）。
-- **覆盖率现状**：594 个测试方法覆盖闸门/会话/工具/沙箱/存储/记忆/命令/运行指标/进程入口/模型档位路由/工具轮次分档。原先零覆盖的关键路径已补齐（T25）：`app/logging_setup.py`（`SecretFilter` 的 msg/tuple/dict 三条脱敏路径 + 根 logger 装配与轮转文件、噪声库降级）、`app/telegram/sender.py`（异常 → `RateLimited`/`SendFailed`、不设 `parse_mode`）、`app/telegram/handlers.py`（update → runner、异常不外抛）、`app/llm/client.py`（请求组装、usage/tool_calls 提取、错误翻译）、`app/main.py`（数据库探测、工具失败留痕、`stop()` 收尾与信号注册、每小时清理）与 `CliBackend.run`（真实子进程的退出码与超时销毁）；对应 `tests/offline/test_logging.py`、`test_telegram_sender.py`、`test_handlers.py`、`test_client.py`、`test_main.py`、`test_sandbox.py::CliBackendRunTests`。真机验收脚本 `scripts/verify_sandbox.py` 的判定逻辑（负向断言的探针标记与错误签名、`Tier A`/`Tier B` 按显式归属聚合）由 `tests/offline/test_verify_sandbox.py` 用假后端离线覆盖（T7）。仍需覆盖的是需要真实 Telegram/容器/真机的路径（由真机证据证明，见本文件本节的证据分级）。写入事务边界（T9，`tests/offline/test_transactions.py`）与 `PRAGMA optimize` 的维护节奏（`tests/offline/test_storage.py`、`tests/offline/test_main.py`）也已有离线覆盖；容器运行时保留退出码 125/126/127 到 `execution_failed` 的映射（T4）由 `tests/offline/test_sandbox.py::RunnerTests` 覆盖；贴纸 `last_used_at` 写 Unix 秒而非进程相对秒（T10）由 `tests/offline/test_stickers.py` 覆盖；验收脚本新增的能力集（`CapBnd`=0）与提权位（`NoNewPrivs`=1）两项检查及其负路径（T6）由 `tests/offline/test_verify_sandbox.py` 覆盖。模型档位路由（`app/llm/routing.py` 的默认档 / 升级档 / fail-safe，以及 `ContextBuilder.intent` 的复杂度规则）由 `tests/offline/test_routing.py`（12 条）与 `tests/offline/test_pipeline.py` 的 5 条端到端用例（升级并记账、普通任务默认档、无强模型回退、配额优先、模式语义不变）覆盖；工具轮次分档（`app/llm/routing.py::tool_round_limit` 的闲聊 1 轮 / 未登记意图沿用全局上限 / `min` 不突破上限）由 `tests/offline/test_routing.py::ToolRoundTests`（5 条）与 `tests/offline/test_pipeline.py` 的 4 条端到端用例（闲聊 1 轮后不再下发工具、闲聊仍下发 `send_sticker` 并真的发出、普通任务仍 2 轮、`TOOL_MAX_ROUNDS=3` 时复杂任务用满 3 轮）覆盖。
+- **覆盖率现状**：624 个测试方法覆盖闸门/会话/工具/沙箱/存储/记忆/命令/运行指标/进程入口/模型档位路由/工具轮次分档/贴纸目录导入。原先零覆盖的关键路径已补齐（T25）：`app/logging_setup.py`（`SecretFilter` 的 msg/tuple/dict 三条脱敏路径 + 根 logger 装配与轮转文件、噪声库降级）、`app/telegram/sender.py`（异常 → `RateLimited`/`SendFailed`、不设 `parse_mode`）、`app/telegram/handlers.py`（update → runner、异常不外抛）、`app/llm/client.py`（请求组装、usage/tool_calls 提取、错误翻译）、`app/main.py`（数据库探测、工具失败留痕、`stop()` 收尾与信号注册、每小时清理）与 `CliBackend.run`（真实子进程的退出码与超时销毁）；对应 `tests/offline/test_logging.py`、`test_telegram_sender.py`、`test_handlers.py`、`test_client.py`、`test_main.py`、`test_sandbox.py::CliBackendRunTests`。真机验收脚本 `scripts/verify_sandbox.py` 的判定逻辑（负向断言的探针标记与错误签名、`Tier A`/`Tier B` 按显式归属聚合）由 `tests/offline/test_verify_sandbox.py` 用假后端离线覆盖（T7）。仍需覆盖的是需要真实 Telegram/容器/真机的路径（由真机证据证明，见本文件本节的证据分级）。写入事务边界（T9，`tests/offline/test_transactions.py`）与 `PRAGMA optimize` 的维护节奏（`tests/offline/test_storage.py`、`tests/offline/test_main.py`）也已有离线覆盖；容器运行时保留退出码 125/126/127 到 `execution_failed` 的映射（T4）由 `tests/offline/test_sandbox.py::RunnerTests` 覆盖；贴纸 `last_used_at` 写 Unix 秒而非进程相对秒（T10）由 `tests/offline/test_stickers.py` 覆盖；验收脚本新增的能力集（`CapBnd`=0）与提权位（`NoNewPrivs`=1）两项检查及其负路径（T6）由 `tests/offline/test_verify_sandbox.py` 覆盖。模型档位路由（`app/llm/routing.py` 的默认档 / 升级档 / fail-safe，以及 `ContextBuilder.intent` 的复杂度规则）由 `tests/offline/test_routing.py`（12 条）与 `tests/offline/test_pipeline.py` 的 5 条端到端用例（升级并记账、普通任务默认档、无强模型回退、配额优先、模式语义不变）覆盖；工具轮次分档（`app/llm/routing.py::tool_round_limit` 的闲聊 1 轮 / 未登记意图沿用全局上限 / `min` 不突破上限）由 `tests/offline/test_routing.py::ToolRoundTests`（5 条）与 `tests/offline/test_pipeline.py` 的 4 条端到端用例（闲聊 1 轮后不再下发工具、闲聊仍下发 `send_sticker` 并真的发出、普通任务仍 2 轮、`TOOL_MAX_ROUNDS=3` 时复杂任务用满 3 轮）覆盖。阶段 8「群宠体验升级」的三项改动由 `tests/offline/test_gate.py`（话题延续 / 情绪表达 / 安静后开场 / Bot 作者永不回复四条新规则及其与闸门的交互）、`tests/offline/test_pipeline.py`（未被点名的信息量消息真的触发主动回复、纯噪声 0 次模型调用、主动回复后进入冷却、其他 Bot 消息不回复）、`tests/offline/test_prompts.py`（`GLOBAL_PERSONA` 与 `docs/persona.md` §4 逐字一致）与 `tests/offline/test_sticker_catalog.py`（19 条：manifest 文件/目录校验、非法条目拒绝、素材名路径穿越防护、按 emoji 匹配贴纸包、幂等 UPSERT 与 `--dry-run` 不写库）覆盖。
 - Windows 上软链接/硬链接相关用例会 `skipTest`（平台能力差异），因此「拒绝符号链接/硬链接」在 Windows 上是**条件跳过**、在 Linux 真机上才真正执行。
 
 ## 9. 可部署性约束（细节见 `docs/deployment.md`）

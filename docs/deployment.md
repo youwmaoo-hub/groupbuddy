@@ -12,7 +12,11 @@
 - 禁止把本机路径、用户名、主机名、IP、域名写进代码或文档。
 - 路径一律用 `pathlib` + 配置项拼接，不用字符串硬编码盘符或斜杠。
 - 支持部署方式：Docker/Podman 容器，或 systemd 直接跑 Python。
-- 贴纸登记属一次性本地运维操作：`python scripts/register_sticker.py --chat-id … --file-id … --file-unique-id … --valence … --arousal … [--tags a,b] [--db storage/bot.db]`；只读写 SQLite、不读 `.env`，数据库 schema 版本需要 ≥2（先启动一次 Bot 应用迁移）；输出不回显 `file_id`。
+- 贴纸登记属一次性本地运维操作，三种方式都只读写 SQLite、不读 `.env`，schema 版本需要 ≥2（先启动一次 Bot 应用迁移）：
+  - 单张：`python scripts/register_sticker.py --chat-id … --file-id … --file-unique-id … --valence … --arousal … [--tags a,b] [--db storage/bot.db]`；输出不回显 `file_id`。
+  - 本地目录批量（推荐）：把素材放进 `deploy/stickers/assets/`（已 `.gitignore`），`python scripts/register_sticker.py --chat-id … --manifest deploy/stickers/catalog.json [--asset-dir deploy/stickers/assets] [--dry-run]`；`--asset-dir` 会拒绝路径穿越、校验素材存在与可选 `sha256`。
+  - 从 Telegram 贴纸包导入：`BOT_TOKEN=… python scripts/import_sticker_set.py --set-name <短名> --chat-id … [--catalog deploy/stickers/catalog.json] [--dry-run]`；按 emoji 匹配 `catalog.json` 的槽位，失败只报类型或 Telegram `description`，**不回显 Token**。
+  - 三种方式共用同一个幂等 UPSERT（唯一键 `(chat_id, file_unique_id)`），可重复执行；规格、来源与许可政策、核对 SQL 见 `deploy/stickers/README.md`。Telegram 自己的贴纸包与本项目 `stickers` 表是两回事：只有登记进表，`send_sticker` 才能按情绪取到。
 - 笔记登记同样属一次性本地运维操作：`python scripts/register_note.py --chat-id … --name … --text "…" [--db storage/bot.db]`；只读写 SQLite、不需要凭据，schema 版本需要 ≥3。日常增删改用群内 `/note`（仅群主，`/note del <名称>` 删除），脚本只用于迁移与应急。
 - 单机单进程优先；不引入 Kubernetes、微服务、Redis（明确不做清单见 §11）。
 
@@ -31,6 +35,12 @@
 - 模型档位（可选）：`LLM_MODEL_STRONG` 留空 = 不升级，所有轮次都用 `LLM_MODEL`（默认行为，与升级前完全一致）；填了才会对规则判定为复杂的轮次用该模型（见 `docs/token.md` §5.1）。改完按 §12.5 核对启动日志里的 `配置加载完成` 一行（未配置时显示 `LLM_MODEL_STRONG=(未配置)`）。
 - 工具轮次（可选）：`TOOL_MAX_ROUNDS` 是**全局上限**（默认 2，可选 0–4），按意图分档只在这个上限之下调低（闲聊 1 轮，复杂任务与无法判断用全局上限）；想把链 3 的「代码调试 4 轮」放开就把它设为 4（见 `docs/token.md` §5.2）。
 - 实例身份：`BOT_INSTANCE_ID`（默认 `default`）。多实例部署时每实例注入不同的 `DATA_DIR`/`DB_PATH`/`WORKSPACE_ROOT`，互不共享目录（见 `docs/domain.md` §2）。
+- 主动接话（阶段 8「群宠体验升级」，全部是纯规则、0 token，见 `docs/requirements.md` §2.1）：
+  - `BOT_ALIASES`：Bot 的昵称列表（逗号分隔，默认空）。**建议显式配置**（如 `DeepSeek,大肥鱼,深蓝大肥鱼,鲸鱼娘`）：别名既用于"被叫到"的强触发，也参与 `@名字` 识别；不要写 `bot` 这类通用词，否则 `@其他bot` 会被误判成叫本 Bot。
+  - `PROACTIVE_TOPIC_MAX_MESSAGES`（默认 8）：与 Bot 上一条发言共享关键词的"话题延续"窗口，按条数计。
+  - `PROACTIVE_QUIET_MESSAGES`（默认 20）：安静多久之后允许"新话题开场"，按条数计；这两个键只提高候选量，**不改**冷却与窗口上限。
+  - 冷却与窗口上限仍是 `PROACTIVE_COOLDOWN_SECONDS`（默认 20 秒）、`PROACTIVE_WINDOW_SECONDS`（默认 300）、`PROACTIVE_MAX_PER_WINDOW`（默认 3）；追问窗口是 `FOLLOWUP_MAX_MESSAGES`（默认 5）。没有被点名时的回复才计入这些额度。
+  - 群消息接收前提见 §12.10（Telegram 侧 Privacy Mode / 管理员）——不满足时普通群消息根本到不了进程，主动接话不会生效。
 - 配额（阶段 8 F5.3）：`QUOTA_DAILY_TOKENS` / `QUOTA_MONTHLY_TOKENS`，**0 或未配置 = 不限额**；按 `chat_id` 按 `TIMEZONE` 的自然日/自然月统计该群已用 token，超额时本轮不调用模型（语义见 `docs/token.md` §4.1）。配额不随群设置变化，只能由部署方改 `.env`。
 - `.env.example` 列出常用键与默认值；`.env` 只写需要覆盖的键。键名拼错会被**静默忽略**（走默认值），改完按 §12.5 核对启动日志里的 `配置加载完成` 一行。
 
@@ -275,3 +285,13 @@ sudo -u "$U" env XDG_RUNTIME_DIR=/run/user/$(id -u "$U") systemctl --user show -
 - 用户级 `journalctl --user` 在目标机上不保证有 journal 文件（实测 `No journal files were found`），
   排查以 `storage/logs/bot.log` 为准；`storage/health.json` 的 `checked_at` 每 60 秒推进、重启后 `uptime_s` 归零。
 - 容器托管（`compose.yaml` / `Dockerfile`）属阶段 9 的后续可选路径，本阶段未采用，也不在本阶段验收。
+
+### 12.10 群消息接收前提（Privacy Mode / 群管理员）
+
+- Telegram 默认给 Bot 开启 **Privacy Mode**：群里只有 @ 到它、回复它或命令才会把 update 推给它，**普通聊天消息根本不会到达进程**。这时 `docs/requirements.md` §2.1 里的弱触发（主动接话）在真机上完全不生效——这是 Telegram 侧配置，不是代码缺陷；进程侧不需要也不应该绕过。
+- 二选一的最小运维处理（都不改代码、不改 `.env`）：
+  1. BotFather 关掉隐私模式：`/mybots` → 选 Bot → `Bot Settings` → `Group Privacy` → `Turn off`（等价于 `/setprivacy` → 选 Bot → `Disable`）；此后它在所有群里都能收到普通消息。
+  2. 或把该 Bot 设为这个群的管理员（管理员身份会绕过 Privacy Mode）。注意：这属于 Telegram 侧管理员，与本项目用 `getChatAdministrators` 做的群主命令判定（`docs/security.md` §2.1）互不影响。
+- 验证（不改代码）：把 Bot 拉进群后发一条普通消息（不 @、不回复），看 `storage/logs/bot.log` 有无该 `update_id` 的处理记录、`messages` 表是否新增该条；若完全没有，就是 Privacy Mode 未关。
+- 进程侧不额外配置：`app/main.py` 用 `start_polling(...)` 默认接收全部 update，不设 `drop_pending_updates`、不按 `allowed_updates` 过滤；`app/telegram/handlers.py` 只处理消息类 update。
+- 其他 Bot 的消息即使到达也会在触发判定前被丢弃（`docs/security.md` §12），既不触发回复也不占用冷却与额度。

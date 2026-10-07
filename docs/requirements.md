@@ -40,8 +40,12 @@
 | F2.3 | 上下文追问：接着 Bot 上一轮发言的续问（距 Bot 上次发言 ≤ `FOLLOWUP_MAX_MESSAGES`，默认 5 条，且含疑问词或承接词） | P1 | 未点名的追问会接话 |
 | F2.4 | 冷却与每窗口回复上限（默认冷却 20 秒、每 300 秒最多 3 次主动发言；强触发不受限） | P1 | 高频群里 Bot 不会连续插话 |
 | F2.5 | 允许不回复：模型返回 `NO_REPLY` 即 0 输出；程序侧判定为 `wait`/`ignore` 的消息 0 token | P1 | 纯捧场消息 0 次模型调用、0 输出（噪声入库但不进上下文见 F3.2） |
+| F2.8 | 话题延续：与 Bot 上一条发言共享非停用关键词，且距 Bot 上次发言 ≤ `PROACTIVE_TOPIC_MAX_MESSAGES`（默认 8 条） | P2 | 接着 Bot 刚才的话题说话的人类消息会接话 |
+| F2.9 | 情绪表达：消息含情绪 / 反应词（非噪声） | P2 | 明显有趣、带情绪的人类消息更容易触发 |
+| F2.10 | 安静后开场：距 Bot 上次发言 ≥ `PROACTIVE_QUIET_MESSAGES`（默认 20 条）或 Bot 从未发言，且本条有信息量 | P2 | 长时间安静后的新话题可以适度主动参与 |
+| F2.11 | 人类中心：其他 Bot 的消息永不触发（`bot_author`），也不计入本 Bot 的冷却、窗口额度与"话题已被回答"判断 | P1 | 群里另有 3–5 个 Bot 时，本 Bot 不参与 Bot↔Bot 对话，也不会因其他 Bot 活跃而永久潜水 |
 
-F2.1 只覆盖强触发；"不需要 @ 也能主动回复"（§2.1 第 1 条）在阶段 2 由 F2.2/F2.3 生效。
+F2.1 只覆盖强触发；"不需要 @ 也能主动回复"（§2.1 第 1 条）在阶段 2 由 F2.2/F2.3 生效，F2.8–F2.10 是阶段 8「群宠体验升级」在原有闸门之下追加的低成本弱触发（只提高活跃度，冷却与上限不变，判定全部是纯规则、0 token）。
 
 ### F3 对话与记忆（阶段 6）
 
@@ -109,10 +113,16 @@ F2.1 只覆盖强触发；"不需要 @ 也能主动回复"（§2.1 第 1 条）�
 | 3 | 报错 / 异常 / 失败类关键词 | 候选 → 过闸门 | `troubleshoot` |
 | 4 | 链接 / 文件 / 命令 / 配置类关键词 | 候选 → 过闸门 | `resource` |
 | 5 | 距 Bot 上次发言 ≤ `FOLLOWUP_MAX_MESSAGES`（含本条，默认 5 条）且含承接词 | 候选 → 过闸门 | `followup` |
-| 6 | 候选通过闸门 | 回应，计入冷却与窗口额度 | 上述原因码 |
-| 7 | 候选被冷却或窗口上限压住 | `wait`：本轮 0 token，只入库 | `cooldown` / `quota` |
-| 8 | 其余（闲聊、捧场、无信息量） | `ignore`：0 token | `not_addressed` |
+| 6 | 与 Bot 上一条发言共享非停用关键词，且距 Bot 上次发言 ≤ `PROACTIVE_TOPIC_MAX_MESSAGES`（含本条，默认 8 条） | 候选 → 过闸门 | `topic` |
+| 7 | 消息含情绪 / 反应词（非噪声） | 候选 → 过闸门 | `emotion` |
+| 8 | Bot 从未发言、或距上次发言 ≥ `PROACTIVE_QUIET_MESSAGES`（默认 20 条），且本条 ≥6 字 | 候选 → 过闸门 | `quiet_open` |
+| 9 | 候选通过闸门 | 回应，计入冷却与窗口额度 | 上述原因码 |
+| 10 | 候选被冷却或窗口上限压住 | `wait`：本轮 0 token，只入库 | `cooldown` / `quota` |
+| 11 | 其余（闲聊、捧场、无信息量） | `ignore`：0 token | `not_addressed` |
 
+- 判定顺序严格从上到下：第 2–8 条是"候选"，命中第一条即停；顺序本身是契约，改动需同步 `tests/offline/test_gate.py`。
+- 第 6–8 条是阶段 8 追加的弱触发，语料以 `app/gate/trigger.py` 里的词表为唯一来源；它们**不改变**第 9–10 条的冷却（默认 20 秒）与窗口上限（每 300 秒最多 3 次），只是让原本直接 `ignore` 的消息有机会成为候选。
+- 其他 Bot 的消息（`is_bot_author`）在第 1 步之前就被丢弃（原因码 `bot_author`）：既不触发回复，也不占用本 Bot 的冷却与额度——"别人（无论人还是 Bot）是否已经说话"与"本 Bot 是否该说话"是两个独立问题（`docs/security.md` §12）。
 - `wait` 不是"稍后自动回复"：被压住的消息只入库，等后续新消息重新触发判定。
 - 闸门状态（上次主动发言时间、本窗口已用次数）按 `chat_id` 隔离，存在于进程内存中，重启后归零。
 - 被点名的回应不占冷却与窗口额度：被叫到才说话不算"插话"。
@@ -156,7 +166,7 @@ F2.1 只覆盖强触发；"不需要 @ 也能主动回复"（§2.1 第 1 条）�
 |---|---|---|
 | 1 | `search_web` 后端 | 接口已冻结；默认 `SEARCH_BACKEND=none`（不注册、不下发）；`fake` 仅离线测试；真实后端候选 Tavily 或自建 SearXNG（未定） |
 | 2 | 是否做模型档位路由 | **已定（2026-10-07）：做最小规则型路由，已实施（`app/llm/routing.py`，契约见 `docs/token.md` §5.1）**。原评估是暂不做（真实使用成本 < $0.01、无质量不足证据、`deepseek-v4-pro` 价格未核实）；随后按用户批处理指令改为落地最小规则型路由：默认 `LLM_MODEL`（flash），summary / 后台任务与无法判断的任务一律默认档，只有纯规则判定为复杂（代码块 / 单条 ≥400 字 / 含链接 / 检索类措辞）且配置了 `LLM_MODEL_STRONG` 时才升级，选择失败 fail-safe 回默认。不额外调用模型、不新增分类器与新依赖，不绕过 quota / 工具档位 / 沙箱 / 权限。缝保留：`LLM_MODEL`（默认档）与 `LLM_MODEL_STRONG`（升级档）两个键即可换模型与厂商（`docs/architecture.md` §7 扩展预留）。同一入口还落地了链 3 的工具轮次分档（`tool_round_limit`，`a5bf651`）：只把全局 `TOOL_MAX_ROUNDS` 调低，闲聊 1 轮（原表 0 轮会连贴纸工具一起关掉）、其余沿用全局上限（契约见 `docs/token.md` §5.2） |
-| 3 | 贴纸素材来源 | 群主手动登记，模型只给 valence/arousal/tags |
+| 3 | 贴纸素材来源 | **已定（2026-10-08）：素材不入 Git，走 catalog + 一次性导入**。`deploy/stickers/catalog.json` 定义 24 个情绪槽位（key / emotion / emoji / tags / valence / arousal / asset / source / license），素材放 `deploy/stickers/assets/`（已 `.gitignore`）；导入用 `scripts/register_sticker.py --manifest`（本地目录）或 `scripts/import_sticker_set.py`（按 emoji 从 Telegram 贴纸包匹配，只读 `BOT_TOKEN` 环境变量），两者都幂等且保留 emotion/tags/去重；运行期仍只读 `stickers` 表，模型只给 valence/arousal/tags，`send_sticker` 核心逻辑不变（规格与许可政策见 `deploy/stickers/README.md`） |
 | 4 | 复杂度/追问判定方式 | 纯规则（正则 + 距离阈值），不引入分类模型 |
 | 5 | 部署形态 | **已定**：阶段 7 完成真机部署与验收（Debian 12 + rootless Podman 4.3.1 + Python 3.11.2，Tier A 7/7、Tier B 4/4，见 `docs/status.md`）；容器运行时仍是可选依赖：没有 Podman/Docker 时 `run_code` 自动 fail-closed，其余功能不受影响 |
 | 6 | 语言约定 | 文档与注释中文；标识符与工具名英文 |

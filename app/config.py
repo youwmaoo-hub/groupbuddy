@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     proactive_cooldown_seconds: float = Field(default=20.0, alias="PROACTIVE_COOLDOWN_SECONDS")
     proactive_window_seconds: float = Field(default=300.0, alias="PROACTIVE_WINDOW_SECONDS")
     proactive_max_per_window: int = Field(default=3, alias="PROACTIVE_MAX_PER_WINDOW")
+    # 群宠体验升级（阶段 8）：同话题窗口、久静后开口阈值（弱触发，仍受上面闸门限制）
+    proactive_topic_max_messages: int = Field(default=8, ge=1, alias="PROACTIVE_TOPIC_MAX_MESSAGES")
+    proactive_quiet_messages: int = Field(default=20, ge=1, alias="PROACTIVE_QUIET_MESSAGES")
 
     # --- 记忆（阶段 6，docs/memory.md） ---
     history_budget_chars: int = Field(default=6000, alias="HISTORY_BUDGET_CHARS")
@@ -163,6 +166,8 @@ class Settings(BaseSettings):
             "PROACTIVE_COOLDOWN_SECONDS": self.proactive_cooldown_seconds,
             "PROACTIVE_WINDOW_SECONDS": self.proactive_window_seconds,
             "PROACTIVE_MAX_PER_WINDOW": self.proactive_max_per_window,
+            "PROACTIVE_TOPIC_MAX_MESSAGES": self.proactive_topic_max_messages,
+            "PROACTIVE_QUIET_MESSAGES": self.proactive_quiet_messages,
             "TOOL_MAX_ROUNDS": self.tool_max_rounds,
             "SEARCH_BACKEND": self.search_backend,
             "QUOTA_DAILY_TOKENS": self.quota_daily_tokens,

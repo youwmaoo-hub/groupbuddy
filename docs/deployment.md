@@ -22,7 +22,7 @@
 - `storage/`（持久数据）：`bot.db`、`workspaces/<chat_id>/`、`logs/`、`backups/`。
 - 容器部署必须把 `storage/` 挂成 volume 或绑定挂载，容器重建/升级不得丢数据。
 - 目录真值以 `.env.example` 为准：`DATA_DIR`、`DB_PATH`、`WORKSPACE_ROOT`、`LOG_DIR`、`SANDBOX_TEMP_DIR`；默认值是相对路径，按**进程工作目录**解析，VPS 上建议写绝对路径（见 §12.4）。
-- 首次启动由程序创建缺失目录；目录不可写时拒绝启动（fail-closed）。
+- 首次启动由程序创建缺失目录；目录不可写时拒绝启动（fail-closed）。`backups/` 由备份脚本按需创建（见 `docs/database.md` §5）。
 
 ## 3. 配置注入
 
@@ -43,7 +43,8 @@
 - 全部外部调用有上限：LLM 请求、工具执行、沙箱执行、Telegram 出站、数据库忙等；禁止无限等待。
 - SIGTERM/SIGINT：停止接收新更新 → 限时排空当前任务与出站队列 → 落库并关闭数据库与 HTTP 连接。
 - 排空超时后强制退出；出站队列中未发送的消息**不重试**（避免重复发送）。
-- 所有后台任务（清理、摘要、备份）必须可停止、可恢复，不依赖手动 Ctrl+C。
+- 所有后台任务（清理、摘要、健康心跳）必须可停止、可恢复，不依赖手动 Ctrl+C。
+- 备份不走后台任务（阶段 9）：`scripts/backup_db.py` 只读源库、可随时执行，见 `docs/database.md` §5。
 
 ## 6. 进程管理与自愈
 
@@ -69,6 +70,24 @@
 - 更新 = 拉取新代码 / 重建镜像 → 停旧起新 → 迁移在启动时前进；数据目录不动。
 - 回滚 = 起上一个镜像或提交；回滚前先备份数据库（见 `docs/database.md` §5）。
 - `user_version` 高于代码支持的版本（降级运行）时拒绝启动，不静默改库。
+
+### 8.1 本地 git bundle 更新流程（阶段 9 已实测，不需要正式远端）
+
+1. 本机产出 bundle 并核对：`git bundle create <本地临时目录>/dsh_deploy_<短sha>.bundle main`。
+2. 传到目标机并比对校验和：`scp -i <部署用私钥> <bundle> root@<vps>:/tmp/`，两端 `sha256sum` 必须一致。
+3. 远端以 Bot 用户操作（`root` 直接在该仓库跑 git 会报 `dubious ownership`）：
+   `sudo -u bot bash -lc 'cd <APP_DIR> && git bundle verify /tmp/<bundle> && git fetch /tmp/<bundle> main:refs/remotes/origin/main && git remote set-url origin /tmp/<bundle> && git checkout <完整sha>'`
+   （`bash -lc` 的内容必须用单引号，双引号会让外层 shell 先展开 `$()`/`$?`，实测会导致 `cd` 不生效。）
+4. 重启并核对启动成功：`sudo -u bot env XDG_RUNTIME_DIR=/run/user/$(id -u bot) systemctl --user restart groupbuddy`；
+   `is-active` 与 `ActiveState` 应为 `active`，`storage/logs/bot.log` 尾部应出现 `Bot 就绪` 与 `启动完成`。
+5. 数据不动：更新前后对比 `storage/bot.db`（`user_version`、关键表行数）与 `storage/workspaces/`，必须一致。
+
+- 回滚 = 把第 3 步的 `<完整sha>` 换成上一个已知可用提交，再走第 4、5 步；**回滚前先备份**（`docs/database.md` §5）。
+- 新版本启动失败时按同样四步回到上一提交；失败证据看
+  `systemctl --user show groupbuddy -p NRestarts -p ExecMainStatus -p ActiveState`（真机没有 journal 文件，`journalctl --user` 不可用）
+  与 `storage/logs/bot.log`。
+- 阶段 9 演练结论：更新成功、故意坏版本启动失败可检出、回滚后 systemd 恢复 `active`、`bot.db` 与 workspace 全程未丢
+  （证据见 `docs/status.md` §4.4）。
 
 ## 9. 可迁移
 
@@ -188,7 +207,7 @@ cd <项目根>
 
 ### 12.8 24/7 运行注意（当前实现已具备）
 
-- 数据全在 `storage/`：SQLite（WAL + `busy_timeout=5000`）、每群 `workspaces/`、`logs/`、`sandbox/`；备份与恢复见 §8 与 `docs/database.md` §5（自动备份任务属阶段 9，当前需人工 `sqlite3 .backup`；WAL 模式下不要直接 `cp` 数据库文件）。
+- 数据全在 `storage/`：SQLite（WAL + `busy_timeout=5000`）、每群 `workspaces/`、`logs/`、`sandbox/`；备份与恢复见 §8 与 `docs/database.md` §5（阶段 9 已实现 `scripts/backup_db.py`，只读源库、可在运行中备份；WAL 模式下不要直接 `cp` 数据库文件）。
 - 日志：`LOG_DIR` 下 5 MB × 3 轮转，统一经 SecretFilter 脱敏；日常 `LOG_LEVEL=INFO` 足够，排查时临时改 DEBUG。
 - 沙箱临时文件用后即删；启动时清理带 `groupbuddy=1` 标签的残留容器；被 `SIGKILL` 后可能留下空临时目录，直接清空 `SANDBOX_TEMP_DIR` 即可。
 - 健康检查（`storage/health.json`）与 `/health` 已在阶段 8 F5.4 落地（见 §7）；人工检查仍是「进程存活 + 日志 + `scripts/verify_sandbox.py` 是否通过」。

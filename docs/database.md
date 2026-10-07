@@ -145,16 +145,24 @@ CREATE VIRTUAL TABLE notes_fts     USING fts5(tokens, content='notes',     conte
 | `tool_failures` | 7 天 | 删除更早行（**已实现** `tool_failures.purge_old`，启动时与每小时 housekeeping 各执行一次） |
 | `messages` | 默认全保留 | 群主 `/clear` 可按群清理；清理后摘要保留 |
 | `summaries` | 每群保留最近 50 条 | 超出归档删除最旧（**已实现**：`SUMMARY_KEEP=50`，摘要写成功后立即 prune） |
-| 维护 | 每周 | **阶段 9 计划，无代码**：`PRAGMA optimize`；体积明显膨胀时 `VACUUM`（离线执行） |
+| 维护 | 每周 | **未实现**：`PRAGMA optimize`；体积明显膨胀时 `VACUUM`（离线执行） |
 
 ## 5. 备份与恢复
 
-- **状态：阶段 9 计划，尚无任何代码**（本节描述目标形态，`BACKUP_*` 配置键与备份任务都不存在；`docs/deployment.md` §11 同样把它列为阶段 9）。
-- 备份 = 冷快照：用标准库 `sqlite3` 打开 `DB_PATH` 并调 `Connection.backup()` 写入
-  `storage/backups/bot.db.YYYYMMDD-HHMM`（不走 `aiosqlite` 连接，避免与工作连接抢锁）。
-- 频率：程序内默认每周 1 次，保留最近 `BACKUP_KEEP`（默认 7）份，更旧的删除；失败只 `WARN`，不阻塞服务。
-- 备份在低优先级后台任务中执行，必须有超时，且随关闭信号停止（见 `docs/deployment.md` §5）。
-- 恢复：停进程 → 用快照替换 `bot.db` → 启动时自动跑迁移（旧版本由迁移升级，版本高于代码时拒绝启动）。
+- **状态：阶段 9 已实现**：`app/storage/backup.py`（能力）+ `scripts/backup_db.py`（运维入口）。
+- 备份 = 冷快照：用标准库 `sqlite3` 以只读方式打开 `DB_PATH` 并调 `Connection.backup()` 写入
+  `storage/backups/bot.db.YYYYMMDD-HHMM`（不走 `aiosqlite` 连接，避免与工作连接抢锁；同一分钟内重复执行追加 `-2`、`-3` 后缀）。
+- 快照必须是**单个自洽文件**：源库是 WAL 时 `Connection.backup()` 会把 WAL 标志一起复制到目标，
+  `copy_database()` 因此复制完成后把目标改回回滚日志模式并清掉残留 `-wal`/`-shm`（恢复时只需这一个文件）。
+- 校验：写完立刻只读打开做 `PRAGMA integrity_check`，并统计 8 张关键表（`chat_settings`/`messages`/`notes`/`stickers`/
+  `summaries`/`tool_failures`/`updates`/`usage`）的行数；`integrity != ok` 时脚本退出码 1。
+- 保留：默认最近 7 份（`DEFAULT_KEEP=7`），更旧的删除；`--keep 0` 表示不清理。
+- 触发方式：`python scripts/backup_db.py [--db storage/bot.db] [--dest storage/backups] [--keep 7]`；
+  只读源库、不读 `.env`、不需要凭据，**可在 Bot 运行中执行**（不阻塞服务，不影响 polling 与健康心跳）。
+- 恢复：停进程 → 用快照替换 `bot.db`（`cp storage/backups/bot.db.<时间戳> storage/bot.db`）→ 启动时自动跑迁移
+  （旧版本由迁移升级，版本高于代码时拒绝启动）。演练时把快照复制到独立目录再打开，不动线上库。
+- **未实现（阶段 9 明确未做）**：程序内每周自动备份任务与 `BACKUP_INTERVAL_SECONDS` / `BACKUP_KEEP` 环境键；
+  当前由运维触发，复用同一份 `create_backup()`（新增配置键属部署契约变化，需要单独确认）。
 - 逐步走：不做 WAL 增量归档、不做主从、不做跨机实时同步；需要异地容灾时再单独评估。
 
 ## 6. 写入规则

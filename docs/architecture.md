@@ -65,6 +65,7 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | | `app/sandbox/preflight.py` | 代码预扫描，仅记日志（不是安全边界） |
 | 存储 | `app/storage/db.py` | aiosqlite 连接、WAL、`user_version` 迁移 |
 | | `app/storage/repo/*.py` | messages / chat_settings / usage / stickers / summaries / notes / updates / tool_failures 读写（同名模块逐表一个文件） |
+| | `app/storage/backup.py` | 冷备份能力（阶段 9）：只读源库 `Connection.backup()` → 单文件快照 → `integrity_check` + 行数统计 → 保留最近 N 份；运维入口 `scripts/backup_db.py` |
 | 领域 | `app/domain/bot_instance.py` | 领域对象：`BotInstance` 与 `LLMCredentials`（凭据唯一归属，见 `docs/domain.md` §1、§4） |
 | 模式（阶段 8） | `app/modes.py` | 四模式档位唯一权威表：窗口 / 输出上限 / 工具档位 / 贴纸（`docs/token.md` §5）；未知值按 normal |
 | 运维/权限（阶段 8） | `app/ops/admin.py` | 本群管理员判定唯一入口：Telegram 管理员 + 进程内缓存，查询失败 fail-closed |

@@ -8,13 +8,13 @@
 
 | 项 | 值 |
 |---|---|
-| 代码 commit | `78ae9cff6f733f87ab5b0c63d6cc8d1294ff3b4e`（短 `78ae9cf`，分支 `main`；阶段 8 四模式代码 + 契约文档。**阶段 9 最小生产闭环未改任何代码**，只改部署与状态文档） |
-| 跟踪文件数 | 132（`git ls-files`） |
-| 提交数 | 30（阶段提交 + 文档治理 `b529741` + A1–A3 修复 `f7f34b5` + 文档同步 `3347301` + 部署记录 + 阶段 8 F5.2 `7382639` + F5.1 `c49fdc5` + F5.3 `1d649b8` + F5.4 `101c26c` + 基线 `ad560f4` + F4.7 `de73b57` + 四模式 `78ae9cf` + 四模式基线 `88531d2` + 真机验收记录 `d5e48f0` + 阶段 9 托管文档 `5a5b6d5` + 本次阶段 9 基线记录） |
-| 本机工作树 | 干净（`git status --porcelain` 无输出）；本机 `main` HEAD 为本次阶段 9 基线记录提交，代码内容与真机 `88531d2` 一致（阶段 9 无代码改动） |
-| 真机仓库 | `/home/bot/app` = detached HEAD @ `88531d2`（**代码内容 = 本机 `78ae9cf`**，与本机一致），工作树干净，属主 `bot:bot`，跟踪文件 132；**Bot 已在真机运行**：systemd 用户级单元 `groupbuddy.service`（`ActiveState=active`、`Restart=always`，见 §4.3） |
-| 真机远端 | `origin` = VPS `/tmp/dsh_deploy_88531d2.bundle`（文件存在，可 `git fetch`；仍未配置正式远端，未建 GitHub remote、未 push） |
-| 运行时目录 | 真机 `storage/`：`bot.db`（118784 字节，`user_version`=4）、`logs/bot.log`、`health.json`（60 秒心跳）、`sandbox/`、`workspaces/`，属主 `bot:bot`；真实 `.env` 在 `/home/bot/app/.env`（`600`、`bot:bot`，**内容与凭据值一律不记录**） |
+| 代码 commit | `bc31c41db098f1aad61841cfca2ed1c59f80b221`（短 `bc31c41`，分支 `main`；阶段 9：SQLite 冷备份 + 校验 + 保留，`app/storage/backup.py`、`scripts/backup_db.py`，见 `docs/database.md` §5） |
+| 跟踪文件数 | 135（`git ls-files`） |
+| 提交数 | 32（阶段提交 + 文档治理 `b529741` + A1–A3 修复 `f7f34b5` + 文档同步 `3347301` + 部署记录 + 阶段 8 F5.2 `7382639` + F5.1 `c49fdc5` + F5.3 `1d649b8` + F5.4 `101c26c` + 基线 `ad560f4` + F4.7 `de73b57` + 四模式 `78ae9cf` + 四模式基线 `88531d2` + 真机验收记录 `d5e48f0` + 阶段 9 托管文档 `5a5b6d5` + 阶段 9 基线 `cb30c10` + 备份与校验 `bc31c41` + 本次阶段 9 演练记录） |
+| 本机工作树 | 干净（`git status --porcelain` 无输出）；本机 `main` HEAD 为本次阶段 9 演练记录提交，代码内容与真机 `bc31c41` 一致 |
+| 真机仓库 | `/home/bot/app` = detached HEAD @ `bc31c41`（与上表代码 commit 完全一致），工作树干净，属主 `bot:bot`，跟踪文件 135；**Bot 已在真机运行**：systemd 用户级单元 `groupbuddy.service`（`ActiveState=active`、`Restart=always`，见 §4.3） |
+| 真机远端 | `origin` = VPS `/home/bot/bundles/dsh_deploy_bc31c41.bundle`（Bot 用户持久目录，`/tmp` 会被清理；bundle 含 `refs/heads/main` 与演练用分支 `stage9-broken-probe`，可 `git fetch`；仍未配置正式远端，未建 GitHub remote、未 push） |
+| 运行时目录 | 真机 `storage/`：`bot.db`（118784 字节，`user_version`=4，另有 WAL 的 `-wal`/`-shm`）、存储日志 `logs/bot.log`、`health.json`（60 秒心跳）、`sandbox/`、`workspaces/`、`backups/`（两份已验证快照，见 §4.4），属主 `bot:bot`；真实 `.env` 在 `/home/bot/app/.env`（`600`、`bot:bot`，**内容与凭据值一律不记录**） |
 
 ## 2. 已完成阶段与能力
 
@@ -29,14 +29,14 @@
 | 6 | 已完成 | 记忆：分档窗口 + 字符预算、噪声标记、模板化摘要、FTS5 检索 |
 | 7 | 已完成 | 沙箱 `run_code`：固定 argv、rootless Podman / Docker、Tier A/B、fail-closed；真机部署与验收已完成 |
 | 8 | 已完成 | 权限/配额/运维：**群主命令最小闭环、群设定写入、日/月配额与运行指标**（`app/ops/admin.py` 管理员判定 + `/settings` 回显/写入 + `app/ops/quota.py` 配额判定 + `app/ops/metrics.py` `/stats` + `app/ops/health.py` `/health` 与 `storage/health.json` 同一状态，见 `docs/security.md` §2.1、`docs/token.md` §4.1、`docs/deployment.md` §7；F5.1/F5.2/F5.3/F5.4 + T12 + T15）；**F4.7 `host_info` 已实现**（`app/tools/builtin/host_info.py`，L4 + `allow_host_info` 默认关，见 `docs/tools.md` §host_info）；**token 四模式完整生效**（`app/modes.py` 唯一权威表：economy 10 条窗口 / 只 L0 / 256 输出 / 贴纸关；normal 意图分档 + 群开关；smart 50 条 + 额外 L0 只读；unrestricted 50 条 + 全部工具 + 输出不限；模式只由管理员 `/settings mode` 修改，见 `docs/token.md` §5、`docs/security.md` §2.2） |
-| 9 | 进行中（**最小生产闭环已完成并真机验证**） | 部署与 24/7：systemd **用户级单元** `groupbuddy.service`（`Restart=always`，开机自启，见 `docs/deployment.md` §12.9）、真实 `.env`（`600`）、启动时 migration（`user_version`=4）、`storage/health.json` 心跳、Telegram 真机收发、stop/start/restart 与 `SIGKILL` 自动重启均已实测通过（见 §4.3）；**剩**备份/恢复演练与更新回滚流程（`TODO.md` §阶段 9 待做），未采用容器托管 |
+| 9 | 进行中（**最小生产闭环 + 备份/恢复 + 更新/回滚均已真机验证**） | 部署与 24/7：systemd **用户级单元** `groupbuddy.service`（`Restart=always`，开机自启，见 `docs/deployment.md` §12.9）、真实 `.env`（`600`）、启动时 migration（`user_version`=4）、`storage/health.json` 心跳、Telegram 真机收发、stop/start/restart 与 `SIGKILL` 自动重启均已实测通过（见 §4.3）；SQLite 冷备份 + 校验 + 保留（`scripts/backup_db.py`，`docs/database.md` §5）、恢复副本与线上一致性、更新成功与坏版本失败可检出、回滚恢复 `active` 且数据未丢（见 §4.4）；**剩**容器托管（可选路径）、程序内自动备份任务与 `BACKUP_*` 环境键、`PRAGMA optimize`/`VACUUM` |
 | 10 | 未开始 | 控制面板与多实例（仅架构预留） |
 
 ## 3. 本机验证（Windows，开发环境）
 
 - 解释器：Python 3.13.15（仓库内 `.venv`）；`openai 3.24.0`；**沙箱走 FakeBackend，不跑真实容器**。
 - 命令：`python -m unittest discover -s tests -t .`
-- 结果：`Ran 416 tests` / `OK (skipped=2)` / 退出码 0（293 原有 + 22 条 F5.2 + 11 条 F5.1 + 20 条 F5.3 + 32 条 F5.4 + 19 条 F4.7：`host_info` 冻结字段集与 schema、L4 默认关与群开关、不可得字段与 `/proc` 缺失回退、不泄露环境变量/主机名/路径；19 条四模式：档位表逐列、economy/smart/unrestricted 的工具档位、模式窗口与 normal 意图分档、输出上限透传，含 3 条端到端：`/settings mode` 改完立即影响下一条消息的输出上限与工具清单、smart 解锁只读工具、economy 与 smart 的历史窗口差异体现在发给模型的上下文里）。
+- 结果：`Ran 422 tests` / `OK (skipped=2)` / 退出码 0（293 原有 + 22 条 F5.2 + 11 条 F5.1 + 20 条 F5.3 + 32 条 F5.4 + 19 条 F4.7：`host_info` 冻结字段集与 schema、L4 默认关与群开关、不可得字段与 `/proc` 缺失回退、不泄露环境变量/主机名/路径；19 条四模式：档位表逐列、economy/smart/unrestricted 的工具档位、模式窗口与 normal 意图分档、输出上限透传，含 3 条端到端：`/settings mode` 改完立即影响下一条消息的输出上限与工具清单、smart 解锁只读工具、economy 与 smart 的历史窗口差异体现在发给模型的上下文里；6 条阶段 9 备份：在线库生成已验证快照且源库不受影响、保留份数与 `removed`、`keep=0` 不清理、同分钟第二次快照加后缀、缺库时 CLI 退出码 2、CLI 输出含 `integrity=ok` 且不含凭据）。
 - 2 条 skip 为平台条件跳过（Windows 上软/硬链接相关用例，见 `TODO.md` T28）。
 - 覆盖缺口（已知）：`app/main.py`、`app/logging_setup.py`、`app/telegram/handlers.py`、`app/telegram/sender.py` 无测试（见 `TODO.md` T25）。
 
@@ -57,7 +57,8 @@
 | 检查 | 命令 | 结果 |
 |---|---|---|
 | 全量离线测试 | `sudo -u bot bash -lc 'cd /home/bot/app && .venv/bin/python -m unittest discover -s tests -t .'` | **`Ran 416 tests` / `OK` / 退出码 0**（真机 checkout `88531d2`；Linux 上无 skip；`FAILED`/`ERROR:` 行 0 条，逐项无失败） |
-| 沙箱真机验收 | `sudo -u bot bash -lc 'cd /home/bot/app && .venv/bin/python scripts/verify_sandbox.py'` | **13 项全 PASS，失败 0 项**，退出码 0；`Tier A：PASS`、`Tier B：PASS`（`88531d2`；与阶段 7 `3347301` 相比无回归） |
+| 全量离线测试（阶段 9 新版本） | 同上命令，真机 checkout `bc31c41` | **`Ran 422 tests` / `OK` / 退出码 0**（32.2s；`FAILED`/`ERROR:` 行 0 条、skip 0 条） |
+| 沙箱真机验收 | `sudo -u bot bash -lc 'cd /home/bot/app && .venv/bin/python scripts/verify_sandbox.py'` | **13 项全 PASS，失败 0 项**，退出码 0；`Tier A：PASS`、`Tier B：PASS`；阶段 8 验收（`88531d2`）与阶段 9 演练后在 `bc31c41` 上复跑结果一致，与阶段 7 `3347301` 相比无回归 |
 | migration 4 真机检查 | 临时库上 `apply_migrations` + `PRAGMA user_version` + `sqlite_master` | 加载/应用/`user_version` = 4；`tool_failures`、`idx_tool_failures_tool_time`、`idx_tool_failures_chat_time` 均存在；真机 `storage/bot.db` 尚未创建（Bot 未启动，属预期） |
 | `host_info` Linux 实测 | bot 用户直调 `HostInfoTool`（默认全字段 + `fields` 选择） | cpu=2、memory=4105363456（= `/proc/meminfo` MemTotal）、disk_free=35596984320、python=`3.11.2`、uptime_s=68691（= `/proc/uptime`，非进程时长回退）；`fields` 选择生效；返回键恰为冻结五字段 |
 | 证据日志 | 本机临时目录 `<本地临时目录>` 下的 `dsh_tests_vps_88531d2.log`（stdout）与 `dsh_verify_vps_88531d2.log`（13 项逐项输出）；VPS 上未落盘日志文件 | 验收执行后容器数 0、`storage/sandbox` 为空、`storage/workspaces` 仅 `999001`/`999002` |
@@ -88,14 +89,35 @@ Tier B 4/4：本群 workspace 读写（非 root）、宿主侧可见、其他群
 
 排查注意：目标机用户级 `journalctl --user` 无 journal 文件（`No journal files were found`），运行日志以 `storage/logs/bot.log` 为准。`/settings` 的回显文案由用户目视确认（非阻塞项）。
 
-本阶段明确未做：容器托管（`Dockerfile`/`compose.yaml`）、正式远端（GitHub）、备份/恢复演练、更新回滚流程、T25/T9/T7、任何架构重构。
+本阶段明确未做：容器托管（`Dockerfile`/`compose.yaml`，可选路径）、正式远端（GitHub）、T25/T9/T7、任何架构重构；备份/恢复与更新回滚演练已在同阶段补齐（见 §4.4）。
+
+### 4.4 阶段 9 备份/恢复与更新/回滚演练（2026-10-07，真机实测）
+
+演练在 Bot **在线**的情况下进行；备份与恢复都在副本上操作，现有 `storage/bot.db` 未被替换。演练用的坏版本是本地一次性分支 `stage9-broken-probe`（`7474c42`，只加 4 行「模拟新版本启动失败」，**永不合并进 `main`**），已随 bundle 传到真机以便复现。
+
+| 检查 | 命令/手段 | 结果 |
+|---|---|---|
+| 在线备份 | `sudo -u bot bash -lc 'cd /home/bot/app && .venv/bin/python scripts/backup_db.py'`（Bot 未停机） | 快照 `storage/backups/bot.db.20261007-2051`（118784 字节）；输出 `user_version=4 integrity=ok chat_settings=0 messages=2 notes=0 stickers=0 summaries=1 tool_failures=0 updates=2 usage=2`；同目录另有 `bot.db.20261007-2046`；`sidecar_files=0`（快照是单文件，无 `-wal`/`-shm`） |
+| 快照可重复 | 两轮备份后比对 SHA256 | 同一份快照两轮 `49735a608bd3f739bd028ad129a150546f9efcfaf9134f7c832b63606c6faef0` 一致 |
+| 恢复出独立数据库 | 以 `bot` 复制快照到 `/tmp/dsh_restore_probe/bot.db`（118784，`bot:bot`；**必须以 bot 身份**，否则 WAL 切换报 `attempt to write a readonly database`） | 只读探针：`user_version`=4、8 表行数与线上逐项一致、`integrity`=ok、`first_user`/`last_assistant` 原文一致 → `IDENTICAL=yes`（与线上对照 diff 为空） |
+| 恢复库可被应用层打开 | `PYTHONPATH=. DB_PATH=<副本> .venv/bin/python /tmp/dsh_appcheck.py`（走 `load_settings()`+`open_db`+`apply_migrations`） | `app_open_ok db_path=/tmp/dsh_restore_probe/bot.db migrations_version=4 messages=2` |
+| 演练不影响运行中的 Bot | 演练前后 `systemctl --user show` 与 `health.json` | `MainPID=48310 NRestarts=0 active/running` 前后一致；`checked_at` 1791377465.213371 → 1791377525.241856（60 秒心跳继续推进，`uptime_s` 300.07→360.10）；日志 `warn_error_traceback=0` |
+| 更新到新版本 | 按 `docs/deployment.md` §8.1 用 bundle 把 `88531d2`（上一可工作版本）更新到 `bc31c41` | HEAD `bc31c41`、`dirty=0`、跟踪文件 132→135；日志 `配置加载完成`→`Bot 就绪`→`沙箱状态`→`启动完成`；`MainPID=48310 NRestarts=0 ExecMainStatus=0 active/running`；`bot.db` 行数与演练前完全一致、`integrity`=ok；`workspaces/` 未变 |
+| 坏版本启动失败可检出 | 部署 `7474c42`（见上行同流程） | `MainPID=0 Result=exit-code NRestarts=1 ExecMainStatus=1 ActiveState=activating SubState=auto-restart`；日志两条 `ERROR app.main 阶段 9 更新演练：模拟新版本启动失败`（发生在 `配置加载完成` 之后、`Bot 就绪` 之前）；无存活 `app.main` 进程；`Restart=always` 在自动重试 |
+| 回滚到上一版本 | `stop` + `reset-failed` → `git checkout 88531d2` → `start` | `MainPID=48739 Result=success NRestarts=0 ExecMainStatus=0 active/running`；日志 `Bot 就绪`/`启动完成`；`user_version`=4、8 表行数与演练前完全一致、`integrity`=ok、`workspaces/` 仍为 `999001 999002` |
+| 演练后回到好版本 | 再次按 §8.1 部署 `bc31c41` | HEAD `bc31c41`、`dirty=0`、跟踪文件 135；`MainPID=48814 NRestarts=0 ExecMainStatus=0 active/running`；`health.json` `ok=true`；`storage/backups/` 两份快照仍在；日志 `warn_error_traceback=2`（＝演练故意注入的 2 条 ERROR，属预期） |
+| Telegram 连通性（演练后） | bot 用户 `Bot.get_me()`（只打印 username/id） | `getMe ok username=xiaoguNo1_bot id=8974124020` |
+| 无 Secret 泄漏 | 对 `storage/logs/bot.log` 做形状扫描（只报计数） | `telegram_token_like=0`、`api_key_like=0`、`[redacted]` 标记 15 处；`.env` = `600 bot:bot` 997 字节，`git ls-files .env` 未跟踪 |
+| bundle 持久化 | 把两个 bundle 复制到 Bot 用户持久目录并重指 `origin` | `/home/bot/bundles/dsh_deploy_88531d2.bundle`（334645 字节）、`dsh_deploy_bc31c41.bundle`（351723 字节）；`origin` = 后者，`git fetch origin` 成功、`git branch -r` 见 `origin/main` 与 `origin/stage9-broken-probe`；`git bundle verify` = `complete history` |
+
+演练结论：备份可恢复、恢复库可读且与线上一致、更新成功、坏版本失败可检出并可回滚、回滚后 Bot 恢复 `active`、`bot.db` 与 workspace 全程未丢、日志与错误消息无 Secret。
 
 ## 5. 尚未做 / 尚未上线（重要）
 
 - **Bot 已在真机 24/7 运行**：systemd 用户级单元 `groupbuddy.service`（`Restart=always`、`RestartSec=5`，配合 `Linger=yes` 开机自启），真机证据见 §4.3，部署契约见 `docs/deployment.md` §12.9。
 - **真实 `.env` 已就位**：`/home/bot/app/.env`（`600`、`bot:bot`，只写覆盖项，绝对路径）；仓库内仍只有 `.env.example`，本文件与所有文档都不记录任何凭据值。
-- **未配置正式远端**：代码同步通过临时 git bundle + SSH 完成，`origin` 不可用。
-- 备份/恢复任务与恢复演练、更新回滚流程、`PRAGMA optimize` / `VACUUM`：属阶段 9 的未完成部分，尚未实现（阶段 8 的能力见 §2）。
+- **未配置正式远端**：代码同步通过 git bundle + SSH 完成；bundle 已从 `/tmp` 移到 Bot 用户持久目录（真机 `origin` = `/home/bot/bundles/dsh_deploy_bc31c41.bundle`），仍未建 GitHub remote、未 push。
+- 备份/恢复与更新/回滚演练已完成（见 §4.4）；**仍未实现**：程序内自动备份任务与 `BACKUP_INTERVAL_SECONDS`/`BACKUP_KEEP` 环境键（当前只能手工跑 `scripts/backup_db.py`）、`PRAGMA optimize` / `VACUUM`、容器托管（`Dockerfile`/`compose.yaml`，可选路径）。
 - 阶段 8 内明确留到后续的项：`/clear`（群主清理本群消息原文）、链 3 的工具轮次按意图分档（`TOOL_MAX_ROUNDS` 仍为全局 2）、模型档位路由（未决问题 #2）。
 - 未引入 CI、lint、类型检查、锁文件（见 `TODO.md` T27）。
 
@@ -116,7 +138,7 @@ Tier B 4/4：本群 workspace 读写（非 root）、宿主侧可见、其他群
 ## 7. 下一步
 
 1. **阶段 8 已全部完成并通过真机验收**（真机 `88531d2`：416 条全量 OK、沙箱 13 项全 PASS、migration 4 与 `host_info` Linux 行为符合契约）：F5.2（管理员判定 + 命令通道 + T12）、F5.1（`/settings <字段> <值>` 写入、即时生效）、F5.3（日/月配额）、F5.4（`/stats` + `/health`，`tool_failures` 留痕与 7 天清理，与 `storage/health.json` 同一内部状态）、F4.7（`host_info`：`cpu`/`memory`/`disk_free`/`python`/`uptime_s`，L4 + `allow_host_info` 默认关）与四模式（`78ae9cf`：窗口 / 输出上限 / 工具档位，`docs/token.md` §5）。阶段 8 内明确留到后续的只有 `/clear`、链 3 轮次分档、模型档位路由。
-2. **阶段 9（部署与 24/7）进行中**：最小生产闭环已完成并真机验证（systemd 用户级单元、真实 `.env`、启动时 migration、health 心跳、Telegram 真机收发、stop/start/restart 与 `SIGKILL` 自动重启，见 §4.3 与 `docs/deployment.md` §12.9）。阶段 9 未完成部分：备份与恢复演练、更新回滚流程、容器托管（`Dockerfile`/`compose.yaml`，可选路径）。
+2. **阶段 9（部署与 24/7）进行中**：最小生产闭环已完成并真机验证（systemd 用户级单元、真实 `.env`、启动时 migration、health 心跳、Telegram 真机收发、stop/start/restart 与 `SIGKILL` 自动重启，见 §4.3）；备份/恢复与更新/回滚演练已通过（`scripts/backup_db.py`、`docs/deployment.md` §8.1，证据见 §4.4），真机当前跑 `bc31c41`（422 条 OK、沙箱 13 项全 PASS）。阶段 9 未完成部分：程序内自动备份任务与 `BACKUP_*` 环境键、`PRAGMA optimize`/`VACUUM`、容器托管（可选路径）。
 3. 是否立项修 B 组技术债（`TODO.md` T4 / T7 / T9 / T10 / T25 等；T1–T3 已随 `f7f34b5`、T12 已随 `7382639`、T15 已随 `101c26c` 修复）。
 4. 是否配置正式远端（GitHub），以便后续换 Agent 维护。
 
@@ -155,6 +177,27 @@ sudo -u bot bash -lc 'cd /home/bot/app && git bundle verify /tmp/dsh_deploy_<sha
   && git fetch /tmp/dsh_deploy_<sha>.bundle main:refs/remotes/origin/main \
   && git remote set-url origin /tmp/dsh_deploy_<sha>.bundle && git checkout <sha>'
 ```
+
+备份与恢复（阶段 9；`<快照>` 取 `storage/backups/` 下最新一份）：
+
+```bash
+# 在线备份（Bot 不停机），输出 path/bytes/user_version/integrity/各表行数
+sudo -u bot bash -lc 'cd /home/bot/app && .venv/bin/python scripts/backup_db.py'
+
+# 恢复演练：必须以 bot 身份复制（否则 WAL 切换报 attempt to write a readonly database），
+# 且只对副本操作，不替换线上 bot.db
+sudo -u bot mkdir -p /tmp/dsh_restore_probe
+sudo -u bot cp /home/bot/app/storage/backups/<快照> /tmp/dsh_restore_probe/bot.db
+# 校验副本：用现有脚本对副本再做一次快照，输出的 bytes/user_version/integrity/各表行数即为副本实况
+sudo -u bot bash -lc 'cd /home/bot/app && .venv/bin/python scripts/backup_db.py --db /tmp/dsh_restore_probe/bot.db --dest /tmp/dsh_restore_probe/verify'
+```
+
+副本与线上逐项对照（`user_version`、8 表行数、`first_user`/`last_assistant` 片段）应完全一致（`IDENTICAL=yes`）；
+应用层可读性用临时探针验证：`load_settings()` → `open_db()` → `apply_migrations()`（阶段 9 实测 `migrations_version=4`、`messages=2`），
+探针脚本属一次性产物，不入库。
+
+更新与回滚按 `docs/deployment.md` §8.1 五步执行；bundle 传到 `/tmp` 后建议复制到 Bot 用户持久目录并把 `origin` 指过去
+（真机当前为 `/home/bot/bundles/dsh_deploy_bc31c41.bundle`），这样后续 `git fetch` 不依赖 `/tmp`。
 
 约束：`/home/bot/app` 属主是 `bot`，root 直接执行 git 会报 `dubious ownership`，所有 git 操作必须经 `sudo -u bot bash -lc '…'`；
 `podman images` / `podman ps` 必须在 `bot` 用户可读的目录（如 `/home/bot/app`）里执行，否则会因 `cannot chdir to /root` 而失败；

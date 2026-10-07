@@ -88,6 +88,9 @@
   与 `storage/logs/bot.log`。
 - 阶段 9 演练结论：更新成功、故意坏版本启动失败可检出、回滚后 systemd 恢复 `active`、`bot.db` 与 workspace 全程未丢
   （证据见 `docs/status.md` §4.4）。
+- bundle 放在 `/tmp` 只适合当次传输，重启或清理后即消失：部署完成后把 bundle 复制到 Bot 用户的持久目录
+  （如 `/home/bot/bundles/`）并把 `origin` 指过去，后续 `git fetch` 就不再依赖 `/tmp`；回滚本身只依赖本地已有的提交历史，
+  与 bundle 是否还在无关。
 
 ## 9. 可迁移
 

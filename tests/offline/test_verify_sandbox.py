@@ -1,11 +1,13 @@
-"""离线测试 `scripts/verify_sandbox.py` 的判定口径（技术债 T7）。
+"""离线测试 `scripts/verify_sandbox.py` 的判定口径（技术债 T7、T6）。
 
 真机执行需要 Linux + rootless Podman；本文件用假后端在离线环境里验证判定逻辑本身：
 
 - 负向断言（无网络 / 只读根）必须同时看到探针标记与预期错误签名，「容器没起来 /
   解释器缺失」不能再 PASS；
 - `Tier A` / `Tier B` 结论按显式 tier 归属聚合（不再靠名字前缀），任何一项 FAIL 都会
-  翻转对应结论。
+  翻转对应结论；
+- 能力集（`--cap-drop=ALL`）与提权位（`no-new-privileges`）两项检查必须真的读
+  `/proc/self/status` 并在容器仍带能力位 / 允许提权时 FAIL（T6）。
 
 脚本只被 import（`__main__` 守卫拦住），不启动任何进程。
 """
@@ -31,6 +33,8 @@ HAPPY_PATH: list[tuple[str, int, str, str, bool]] = [
     ("time.sleep(60)", -1, "", "", True),
     ("hello from sandbox", 0, "hello from sandbox\n", "", False),
     ("print('UID'", 0, "UID 65534\n", "", False),
+    ("CAPEFF", 0, "CAPEFF 0 CAPBND 0\n", "", False),
+    ("NNP", 0, "NNP 1\n", "", False),
     ("PROBE net", 1, "PROBE net\n", "TimeoutError: timed out\n", False),
     ("PROBE rofs", 1, "PROBE rofs\n", "OSError: [Errno 30] Read-only file system\n", False),
     ("FSIZE", 0, "FSIZE 8388608\n", "", False),
@@ -119,7 +123,9 @@ class VerifySandboxScriptTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(0, code)
         self.assertIn("Tier A：PASS", output)
         self.assertIn("Tier B：PASS", output)
-        self.assertIn("合计 13 项，失败 0 项", output)
+        self.assertIn("PASS [A] 能力集清空（cap-drop=ALL）", output)
+        self.assertIn("PASS [A] 禁止提权（no-new-privileges）", output)
+        self.assertIn("合计 15 项，失败 0 项", output)
         self.assertNotIn("FAIL", output)
 
     async def test_negative_checks_fail_when_the_probe_never_ran(self) -> None:
@@ -145,6 +151,24 @@ class VerifySandboxScriptTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(1, code)
         self.assertIn("FAIL [A] 非 root（uid != 0）", output)
         self.assertIn("容器内是 root", output)
+        self.assertIn("Tier A：FAIL", output)
+        self.assertIn("Tier B：PASS", output)
+
+    async def test_capability_and_privilege_checks_fail_when_the_flags_are_missing(self) -> None:
+        """T6：容器仍带能力位 / 仍允许提权时必须 FAIL，不能被当成通过。"""
+        responses = [
+            ("CAPEFF", 0, "CAPEFF 0 CAPBND 16777216\n", "", False)
+            if item[0] == "CAPEFF"
+            else ("NNP", 0, "NNP 0\n", "", False)
+            if item[0] == "NNP"
+            else item
+            for item in HAPPY_PATH
+        ]
+        code, output = await self._run(responses)
+
+        self.assertEqual(1, code)
+        self.assertIn("FAIL [A] 能力集清空（cap-drop=ALL）", output)
+        self.assertIn("FAIL [A] 禁止提权（no-new-privileges）", output)
         self.assertIn("Tier A：FAIL", output)
         self.assertIn("Tier B：PASS", output)
 

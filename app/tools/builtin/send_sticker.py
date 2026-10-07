@@ -106,11 +106,12 @@ class SendStickerTool:
         timeout_seconds=3.0,
     )
 
-    def __init__(self, store, outbound, mood, *, clock=None) -> None:
+    def __init__(self, store, outbound, mood, *, clock=None, wall_clock=None) -> None:
         self._store = store
         self._outbound = outbound
         self._mood = mood
-        self._clock = clock or time.monotonic
+        self._clock = clock or time.monotonic  # 冷却计时：进程相对秒，不受系统时间跳变影响
+        self._wall_clock = wall_clock or time.time  # last_used_at：Unix 秒（docs/database.md §1）
         self._last_sent: dict[int, float] = {}
 
     async def run(self, args: BaseModel, context: ToolContext) -> dict[str, object]:
@@ -143,7 +144,7 @@ class SendStickerTool:
             raise ToolError("internal_error", "贴纸发送失败")
 
         self._last_sent[context.chat_id] = now
-        await self._store.mark_used(matched.id, int(now))
+        await self._store.mark_used(matched.id, int(self._wall_clock()))
         self._mood.record(context.chat_id, float(args.valence), float(args.arousal))  # type: ignore[attr-defined]
         return {"sent": True, "sticker_id": matched.id}
 

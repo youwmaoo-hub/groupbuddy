@@ -84,6 +84,23 @@ async def main(argv: list[str]) -> int:
     uid_payload = await check("非 root（uid != 0）", "import os; print('UID', os.getuid())", contains="UID ")
     if uid_payload is not None and "UID 0" in str(uid_payload["stdout"]):
         flag_last("容器内是 root")
+    # T6：--cap-drop=ALL 与 no-new-privileges 此前只能人工读 spec.py，没有验收覆盖。
+    # 直接读 /proc/self/status 而不是靠 `capsh` 之类的额外工具（镜像里不一定有）。
+    # 断言用 CapBnd（bounding set）而不是 CapEff：容器内是非 root uid，CapEff 本来就是 0，
+    # 真正反映 `--cap-drop=ALL` 的是从容器 init 继承下来的 bounding set。
+    await check(
+        "能力集清空（cap-drop=ALL）",
+        "fields = dict(line.split(':', 1) for line in open('/proc/self/status') if ':' in line)\n"
+        "print('CAPEFF', int(fields['CapEff'].strip(), 16), 'CAPBND', int(fields['CapBnd'].strip(), 16))\n",
+        contains="CAPBND 0",
+    )
+    await check(
+        "禁止提权（no-new-privileges）",
+        "lines = open('/proc/self/status').read().splitlines()\n"
+        "nnp = [line.split(':', 1)[1].strip() for line in lines if line.startswith('NoNewPrivs')]\n"
+        "print('NNP', nnp[0] if nnp else 'missing')\n",
+        contains="NNP 1",
+    )
     # 探针先打印标记再触发被禁止的操作：标记必须出现（证明容器里的解释器确实运行了），
     # 同时 stderr 必须带预期的错误签名，否则判 FAIL。
     await check(

@@ -173,10 +173,13 @@ def context(**overrides: object) -> ToolContext:
 class SendStickerToolTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.clock = FakeClock()
+        self.wall = FakeClock(start=1_700_000_000.0)
         self.store = _Store([row(7, 1.0, 1.0, used=1)])
         self.outbound = _Outbound()
         self.mood = _Mood()
-        self.tool = SendStickerTool(self.store, self.outbound, self.mood, clock=self.clock.monotonic)
+        self.tool = SendStickerTool(
+            self.store, self.outbound, self.mood, clock=self.clock.monotonic, wall_clock=self.wall.monotonic
+        )
 
     def args(self, **overrides: object) -> SendStickerArgs:
         values: dict[str, object] = {"valence": 1.0, "arousal": 1.0}
@@ -188,9 +191,16 @@ class SendStickerToolTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(payload, {"sent": True, "sticker_id": 7})
         self.assertNotIn("file_id", payload)
         self.assertNotIn(FILE_ID, str(payload))
-        self.assertEqual(self.store.used, [(7, 1000)])
+        self.assertEqual(self.store.used, [(7, 1_700_000_000)])  # last_used_at 写墙钟 Unix 秒，不是进程相对秒（T10）
         self.assertEqual(self.mood.records, [(5, 1.0, 1.0)])
         self.assertEqual(self.outbound.calls, [(5, "supergroup", f"{FILE_ID}7")])
+
+    async def test_last_used_at_is_unix_seconds_not_uptime(self) -> None:
+        # 冷却用进程相对秒（1000.0），落库必须是 Unix 秒，重启后 tie-break 语义才不反转（T10）。
+        await self.tool.run(self.args(), context())
+        _, stored = self.store.used[0]
+        self.assertGreater(stored, 1_600_000_000)
+        self.assertNotEqual(stored, int(self.clock.monotonic()))
 
     async def test_cooldown_is_a_state_not_an_error(self) -> None:
         await self.tool.run(self.args(), context())

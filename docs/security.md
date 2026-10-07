@@ -118,8 +118,9 @@
 - 临时输出目录 `storage/sandbox/`：单次执行的正常、异常、超时、取消都会删除；进程被强杀（SIGKILL）时仍会残留（关停路径只销毁容器，不遍历临时文件），下次启动由 `cleanup_stale()` 清理带 `groupbuddy=1` 标签的残留容器。
 - 代码扫描（`app/sandbox/preflight.py`：`os.system`/`subprocess`/`eval`/`__import__`/网络/写入…）只作 **preflight 提示**（只记日志），不作为安全边界。
 - 真实验收：在目标机（Linux + rootless Podman）由**运行 Bot 的同一用户**执行 `scripts/verify_sandbox.py`，逐项验证无网络、非 root、
-  只读根、fsize 上限、cgroup 资源上限（256 MB / 0.5 CPU / 64 PIDs）、超时销毁、无残留容器、临时目录已清理、
-  其他群 workspace 不可见、宿主目录不可见。上线清单与 Tier A/B 判读见 `docs/deployment.md` §12；
+  只读根、fsize 上限、cgroup 资源上限（256 MB / 0.5 CPU / 64 PIDs）、能力集已清空（`--cap-drop=ALL`：容器内 `/proc/self/status`
+  的 `CapBnd`（bounding set）必须为 0；`CapEff` 因容器内非 root 本来就是 0，不作断言）、提权位已禁（`no-new-privileges`：`NoNewPrivs` 必须为 1；两项技术债 T6 已修，字段缺失即 FAIL）、
+  超时销毁、无残留容器、临时目录已清理、其他群 workspace 不可见、宿主目录不可见。上线清单与 Tier A/B 判读见 `docs/deployment.md` §12；
   判读口径（技术债 T7 已修，2026-10-07）：`无网络` 与 `只读根` 是「期望非零退出」的负向断言，脚本现在要求探针标记
   （`PROBE net`/`PROBE rofs`，证明容器里的解释器确实运行了）与预期错误签名同时出现，因此「容器根本没启动 / 解释器缺失」
   不再算 PASS；`Tier A：PASS` / `Tier B：PASS` 按显式 tier 归属聚合全部相关检查项，任一项 FAIL 都会翻转结论。

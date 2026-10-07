@@ -9,7 +9,7 @@
 - SQLite（`aiosqlite`），文件：`storage/bot.db`。
 - 连接 PRAGMA：`journal_mode=WAL`、`synchronous=NORMAL`、`foreign_keys=ON`、`busy_timeout=5000`。
 - 时间统一存 Unix 秒（`INTEGER`），不存本地时间字符串。
-- **已知偏差**：`stickers.last_used_at` 目前写的是 `time.monotonic()`（进程相对秒）而非 Unix 秒，重启后"优先未近期使用"的 tie-break 语义反转（技术债见 `TODO.md`）。
+- 时钟口径：`stickers.last_used_at` 也写 Unix 秒（`app/tools/builtin/send_sticker.py` 落库用 `time.time`；同一工具的群内冷却仍用 `time.monotonic`，那是进程相对秒、不落库）。修复前的进程相对秒只会残留在本机开发库（真机 `stickers` 为 0 行），残留值比 Unix 秒小，仍会被当作「很久没用过」，不会反转 tie-break（T10 已修）。
 - 时间语义：内部一律 UTC；展示与"按天"归集再按 `TIMEZONE` 配置转换（默认 `Asia/Shanghai`，见 `docs/deployment.md` §4）。
 - 迁移：使用 `PRAGMA user_version` + 代码内有序迁移列表（`app/storage/db.py`）；
   每次启动比对版本并逐条应用，迁移脚本只追加不修改。

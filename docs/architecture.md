@@ -68,6 +68,7 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | 领域 | `app/domain/bot_instance.py` | 领域对象：`BotInstance` 与 `LLMCredentials`（凭据唯一归属，见 `docs/domain.md` §1、§4） |
 | 运维/权限（阶段 8） | `app/ops/admin.py` | 本群管理员判定唯一入口：Telegram 管理员 + 进程内缓存，查询失败 fail-closed |
 | | `app/ops/commands.py` | 群主命令通道：解析、管理员判定、读写本群设置（`/settings`；不进模型、0 token） |
+| | `app/ops/quota.py` | 配额判定：调用模型前按 `chat_id` 检查日/月已用 token；`0` 或未配置 = 不限额 |
 | 控制面（阶段 10） | `app/control/*` | HTTP 适配器：面板 API，只调服务层（现不存在） |
 | 服务（阶段 10） | `app/services/*` | 业务唯一入口（instances / credentials / chat_settings / usage / memory_admin / workspace_admin / status） |
 | 出站 | `app/outbound/queue.py` | 统一出口；重试与退避 |
@@ -86,6 +87,7 @@ Telegram Update
   → trigger（RESPOND | WAIT | IGNORE；冷却/窗口闸门是程序侧判定）
   → debounce（静默窗合并，上限条数）
   → per-chat 队列（同群串行；运行期间新消息合并为下一轮一批）
+  → 配额判定（`chat_id` 日/月用量达到上限：只回提示并结束，本轮不调用模型、不记账）
   → ContextBuilder（本轮边界快照 + 全局人格 + 群设定 + 工具策略 + 动态历史 + 摘要/检索）
   → LLM 循环（可选 tool call）
         → registry 裁剪清单 → policy 判定 → executor 执行（sandbox 必要时）

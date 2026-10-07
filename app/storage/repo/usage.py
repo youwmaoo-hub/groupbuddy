@@ -43,6 +43,32 @@ async def record(
     await connection.commit()
 
 
+async def tokens_used(
+    connection: aiosqlite.Connection,
+    *,
+    chat_id: int,
+    day_prefix: str,
+    purpose: str | None = None,
+) -> int:
+    """按 `day` 前缀汇总该群已用 token（`2026-10-07`=当天，`2026-10`=当月），供配额判定复用。
+
+    口径 = `input_tokens + output_tokens`；`cached_tokens` 已包含在 `input_tokens`（prompt_tokens）里，
+    不重复计入。`purpose=None` 表示该群当期的全部模型调用（含摘要等后台调用）。
+    """
+    sql = (
+        "SELECT COALESCE(SUM(input_tokens),0) + COALESCE(SUM(output_tokens),0) FROM usage "
+        "WHERE chat_id = ? AND day LIKE ? || '%'"
+    )
+    params: list[object] = [chat_id, day_prefix]
+    if purpose is not None:
+        sql += " AND purpose = ?"
+        params.append(purpose)
+    cursor = await connection.execute(sql, params)
+    row = await cursor.fetchone()
+    await cursor.close()
+    return int(row[0] or 0) if row is not None else 0
+
+
 async def summary_for_day(
     connection: aiosqlite.Connection,
     day: str,

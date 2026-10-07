@@ -67,6 +67,11 @@ class Settings(BaseSettings):
     # search_web 后端未定（docs/requirements.md §4 #1）：none = 不注册该工具
     search_backend: Literal["none", "fake"] = Field(default="none", alias="SEARCH_BACKEND")
 
+    # --- 配额（阶段 8 F5.3，docs/token.md §4.1） ---
+    # 0 或未配置 = 不限额（与 SEARCH_BACKEND=none / SANDBOX_BACKEND=none 的"关闭"写法一致）
+    quota_daily_tokens: int = Field(default=0, ge=0, alias="QUOTA_DAILY_TOKENS")
+    quota_monthly_tokens: int = Field(default=0, ge=0, alias="QUOTA_MONTHLY_TOKENS")
+
     # --- 沙箱（阶段 7，docs/security.md §4） ---
     sandbox_backend: Literal["auto", "podman", "docker", "none"] = Field(default="auto", alias="SANDBOX_BACKEND")
     sandbox_image: str = Field(default="python:3.12-slim", alias="SANDBOX_IMAGE")
@@ -157,6 +162,8 @@ class Settings(BaseSettings):
             "PROACTIVE_MAX_PER_WINDOW": self.proactive_max_per_window,
             "TOOL_MAX_ROUNDS": self.tool_max_rounds,
             "SEARCH_BACKEND": self.search_backend,
+            "QUOTA_DAILY_TOKENS": self.quota_daily_tokens,
+            "QUOTA_MONTHLY_TOKENS": self.quota_monthly_tokens,
             "SANDBOX_BACKEND": self.sandbox_backend,
             "SANDBOX_IMAGE": self.sandbox_image,
             "SANDBOX_TIER_B": self.sandbox_tier_b,

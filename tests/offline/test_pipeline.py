@@ -14,6 +14,7 @@ from app.gate.trigger import TriggerDetector
 from app.llm.loop import Responder
 from app.ops.admin import AdminRegistry
 from app.ops.commands import CommandService
+from app.ops.quota import DAILY_EXHAUSTED_TEXT, QuotaGuard
 from app.outbound.queue import OutboundQueue
 from app.outbound.ratelimit import RateLimiter
 from app.session.context import ContextBuilder
@@ -48,6 +49,7 @@ class PipelineTests(DbTestCase):
         search_backend: str = "none",
         sticker_fail_times: int = 0,
         commands=None,
+        quota=None,
     ) -> None:
         self.clock = FakeClock()
         self.debouncer = Debouncer(quiet_seconds=1.2, max_messages=5, clock=self.clock)
@@ -85,6 +87,7 @@ class PipelineTests(DbTestCase):
             tools=self.tools,
             mood=self.mood,
             commands=commands,
+            quota=quota,
         )
     async def _send(self, texts, *, chat_id: int = 1, start_update: int = 100, start_message: int = 10) -> None:
         for index, text in enumerate(texts):
@@ -553,6 +556,87 @@ class PipelineTests(DbTestCase):
         self.assertEqual((group["mode"], group["allow_write"]), ("smart", 1))
         self.assertIn("write_file", self.llm.tool_names[0])  # 工具开关当轮生效
         self.assertIn("模式：smart", str(self.llm.calls[0][0]["content"]))  # 模式当轮进入固定段
+
+    async def _seed_tokens(self, tokens: int, *, chat_id: int = 1, purpose: str = "chat") -> None:
+        await usage.record(
+            self.connection,
+            chat_id=chat_id,
+            user_id=42,
+            day=today_in_timezone(self.settings),
+            model="deepseek-flash",
+            input_tokens=tokens,
+            purpose=purpose,
+        )
+
+    async def test_quota_exhaustion_skips_the_model_call(self) -> None:
+        """F5.3：达到上限时本轮不调用模型、不记账，只回一条明确提示。"""
+        self.settings = make_settings(self.tmp, QUOTA_DAILY_TOKENS=100)
+        await self._seed_tokens(100)
+        self._build("不该被调用", quota=QuotaGuard(self.connection, self.settings))
+        await self._send(["@bot 在吗"])
+        await self._flush()
+
+        self.assertEqual(self.llm.calls, [])  # 配额拒绝后不产生本次模型调用
+        self.assertEqual([item["text"] for item in self.sender.sent], [DAILY_EXHAUSTED_TEXT])
+        self.assertEqual((await self._usage())["calls"], 1)  # 只有预置的那次，本轮不记账
+        stored = await messages.recent(self.connection, chat_id=1, limit=10)
+        self.assertEqual([row.role for row in stored], ["user"])  # 没有 Bot 发言入库
+
+    async def test_quota_over_the_limit_skips_the_model_call(self) -> None:
+        self.settings = make_settings(self.tmp, QUOTA_DAILY_TOKENS=100)
+        await self._seed_tokens(250)
+        self._build("不该被调用", quota=QuotaGuard(self.connection, self.settings))
+        await self._send(["@bot 在吗"])
+        await self._flush()
+        self.assertEqual(self.llm.calls, [])
+        self.assertEqual([item["text"] for item in self.sender.sent], [DAILY_EXHAUSTED_TEXT])
+
+    async def test_quota_just_under_the_limit_is_allowed(self) -> None:
+        self.settings = make_settings(self.tmp, QUOTA_MONTHLY_TOKENS=100)
+        await self._seed_tokens(99)
+        self._build("好", quota=QuotaGuard(self.connection, self.settings))
+        await self._send(["@bot 在吗"])  # 99 < 100：本月额度还够
+        await self._flush()
+        self.assertEqual(len(self.llm.calls), 1)
+        self.assertEqual([item["text"] for item in self.sender.sent], ["好"])
+
+    async def test_quota_under_the_limit_still_calls_the_model(self) -> None:
+        self.settings = make_settings(self.tmp, QUOTA_DAILY_TOKENS=1000)
+        await self._seed_tokens(10)
+        self._build("好", quota=QuotaGuard(self.connection, self.settings))
+        await self._send(["@bot 在吗"])
+        await self._flush()
+        self.assertEqual(len(self.llm.calls), 1)
+        self.assertEqual([item["text"] for item in self.sender.sent], ["好"])
+
+    async def test_unconfigured_quota_is_unlimited_end_to_end(self) -> None:
+        self._build("好", quota=QuotaGuard(self.connection, self.settings))
+        await self._seed_tokens(1_000_000)
+        await self._send(["@bot 在吗"])
+        await self._flush()
+        self.assertEqual(len(self.llm.calls), 1)
+
+    async def test_settings_command_does_not_consume_quota(self) -> None:
+        """命令不调用模型，因此既不记账也不消耗该群配额。"""
+
+        async def fetch(_chat_id: int) -> set[int]:
+            return {42}
+
+        self.settings = make_settings(self.tmp, QUOTA_DAILY_TOKENS=100)
+        self._build(
+            "好",
+            commands=CommandService(self.connection, AdminRegistry(fetch)),
+            quota=QuotaGuard(self.connection, self.settings),
+        )
+        await self._send(["/settings mode smart"])
+        await self.outbound.drain(5.0)
+        self.assertEqual(self.llm.calls, [])
+        self.assertEqual((await self._usage())["calls"], 0)
+
+        await self._send(["@bot 在吗"], start_update=200, start_message=20)
+        await self._flush()
+        self.assertEqual(len(self.llm.calls), 1)  # 配额没被命令吃掉
+        self.assertEqual([item["text"] for item in self.sender.sent][-1], "好")
 
 
 if __name__ == "__main__":

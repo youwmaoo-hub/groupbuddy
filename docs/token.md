@@ -79,6 +79,14 @@ Prompt 结构固定为"固定段在前、动态段在后"：
 `output_tokens`、`tool_calls`、`tool_ms`，按 `chat_id` + `day` 聚合。
 用途：判断哪条链最贵（是上下文太长、工具太多，还是缓存没命中），而不是"感觉贵"。
 
+### 4.1 配额（阶段 8 F5.3）
+
+- 两个全局键：`QUOTA_DAILY_TOKENS` / `QUOTA_MONTHLY_TOKENS`，**按 `chat_id` 分别统计**（不新增 `chat_settings` 字段，配额是部署方的决定，不是群主的开关）。
+- `0` 或未配置 = **不限额**（与 `SEARCH_BACKEND=none` / `SANDBOX_BACKEND=none` 的"关闭"写法一致）。
+- 统计口径：该群 `usage` 表中 `input_tokens + output_tokens` 的合计（`cached_tokens` 已包含在 `input_tokens` 里，不重复计入；摘要等后台调用同样花该群的钱，一并计入）。日 = `TIMEZONE` 的自然日，月 = 自然月（`day` 的 `YYYY-MM` 前缀）。
+- 检查发生在**调用模型之前**：达到或超过上限（`>=`）时本轮不调用模型、不记账、不写入 Bot 发言，只回一条提示（日/月各一句，不含数据库或实现细节）。
+- 判定只读 `usage`，不写库、不缓存、不额外记账，因此正常轮次不会因为检查而多出记账行。
+
 ## 5. 模式（阶段 8）
 
 | 模式 | 窗口 | 工具 | 输出上限 | 贴纸 |

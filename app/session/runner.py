@@ -15,6 +15,7 @@ from app.gate.limits import ProactiveLimiter
 from app.gate.trigger import TriggerDetector
 from app.llm.loop import Outcome, Responder
 from app.ops.commands import Command, CommandService, parse_command
+from app.ops.quota import QuotaGuard
 from app.outbound.queue import OutboundQueue
 from app.session.context import ContextBuilder
 from app.session.mood import MoodTracker
@@ -48,6 +49,7 @@ class SessionRunner:
         tools: ToolExecutor | None = None,
         mood: MoodTracker | None = None,
         commands: CommandService | None = None,
+        quota: QuotaGuard | None = None,
         bot_username: str = "",
     ) -> None:
         self._settings = settings
@@ -62,6 +64,7 @@ class SessionRunner:
         self._tools = tools
         self._mood = mood
         self._commands = commands
+        self._quota = quota
         self._bot_username = bot_username
 
     async def handle(self, incoming: IncomingMessage) -> None:
@@ -140,7 +143,17 @@ class SessionRunner:
         )
 
     async def handle_batch(self, batch: Batch) -> None:
-        """Agent Loop：上下文 → 模型（可含工具循环）→ 出站 → 记账。"""
+        """Agent Loop：配额 → 上下文 → 模型（可含工具循环）→ 出站 → 记账。"""
+        notice = await self._quota_notice(batch)
+        if notice is not None:
+            latest = batch.items[-1]
+            await self._outbound.enqueue(
+                chat_id=batch.chat_id,
+                chat_type=latest.chat_type,
+                text=notice,
+                reply_to_message_id=latest.message_id,
+            )
+            return
         group = await chat_settings.get(self._connection, batch.chat_id)
         context = ToolContext(
             chat_id=batch.chat_id,
@@ -167,6 +180,15 @@ class SessionRunner:
         await self._store_assistant(batch, outcome.text)
         if batch.proactive:
             self._limiter.record(batch.chat_id)  # 只有真的说出口才占冷却与窗口额度
+
+    async def _quota_notice(self, batch: Batch) -> str | None:
+        """配额在调用模型之前判定（docs/token.md §4.1）；超额时本轮不调模型、不记账。"""
+        if self._quota is None:
+            return None
+        notice = await self._quota.check(batch.chat_id)
+        if notice is not None:
+            logger.info("配额已满，跳过本轮模型调用 chat_id=%s", batch.chat_id)
+        return notice
 
     async def _store_assistant(self, batch: Batch, text: str) -> None:
         """Bot 自己的发言也要入库（否则下一轮看不到自己说过什么）。"""

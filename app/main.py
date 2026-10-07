@@ -22,6 +22,7 @@ from app.llm.loop import Responder
 from app.logging_setup import setup_logging
 from app.ops.admin import AdminRegistry
 from app.ops.commands import CommandService
+from app.ops.quota import QuotaGuard
 from app.outbound.queue import OutboundQueue
 from app.outbound.ratelimit import RateLimiter
 from app.sandbox.backends import build_backend
@@ -96,6 +97,9 @@ class Application:
         # 群主命令：管理员只认 Telegram 返回的管理员，查询失败按拒绝处理（docs/security.md §2）
         commands = CommandService(connection, AdminRegistry(AiogramAdminSource(bot)))
 
+        # 配额：调用模型前按 chat_id 检查日/月用量，0 或未配置 = 不限额（docs/token.md §4.1）
+        quota = QuotaGuard(connection, settings)
+
         # 沙箱：启动时探测一次并固定后端（docs/security.md §4），运行期不再探测
         sandbox = SandboxRunner(build_backend(settings), settings)
         self._sandbox = sandbox
@@ -139,6 +143,7 @@ class Application:
             tools=tools,
             mood=mood,
             commands=commands,
+            quota=quota,
             bot_username=me.username or "",
         )
         chat_queue = ChatQueue(runner.handle_batch, max_batch_messages=settings.debounce_max_messages)

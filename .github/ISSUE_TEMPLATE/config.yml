@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 安全漏洞（私密渠道）
+    url: https://github.com/youwmaoo-hub/groupbuddy/security/advisories/new
+    about: 请不要为安全漏洞开公开 issue；用 GitHub 的私密漏洞报告。
+  - name: 先读文档入口
+    url: https://github.com/youwmaoo-hub/groupbuddy/blob/main/docs/README.md
+    about: 改动路由表与默认阅读顺序；提 issue 前建议先看这里。

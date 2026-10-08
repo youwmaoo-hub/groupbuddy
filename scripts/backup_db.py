@@ -4,7 +4,7 @@
 
 用法示例：
     python scripts/backup_db.py
-    python scripts/backup_db.py --db /home/bot/app/storage/bot.db --dest /home/bot/app/storage/backups --keep 7
+    python scripts/backup_db.py --db <bot-home>/app/storage/bot.db --dest <bot-home>/app/storage/backups --keep 7
 
 退出码：0 = 备份成功且完整性检查通过；1 = 备份或校验失败；2 = 参数/数据库缺失。
 """

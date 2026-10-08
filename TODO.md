@@ -35,11 +35,14 @@
 
 ### 阶段 2 · 发言闸门
 
-- 交付：F2.2–F2.5（可解释内容、上下文追问、冷却与每窗上限、`NO_REPLY`），
+- 交付：F2.2–F2.5（可解释内容、上下文追问、冷却、`NO_REPLY`），
   以及不要求 @ 的主动回复判定（`docs/requirements.md` §2.1 第 1 条）。
-  实现位置：`app/gate/trigger.py`（判定顺序与原因码）、`app/gate/limits.py`（冷却与每窗口上限）、
+  实现位置：`app/gate/trigger.py`（判定顺序与原因码）、`app/gate/limits.py`（冷却与重复过滤）、
   `app/session/runner.py`（追问距离查询与冷却记账）。
-- 验收：未点名的追问会接话；纯捧场消息 0 成本；高频群里 Bot 不会连续插话。
+- 现状（2026-10-08 调整）：词表不再决定"回不回"，只标注原因码，通过筛选的消息默认接话（兜底 `general`）；
+  「每 300 秒最多 3 次」的窗口上限已删除，剩下冷却（20 秒）+ 重复过滤（`DUPLICATE_WINDOW_SECONDS`）；
+  debounce 默认关闭（每条消息各自成批）。见 `docs/status.md` §4.11。
+- 验收：未点名的追问会接话；纯捧场消息 0 成本；高频群里 Bot 不会连续插话（仍受 20 秒冷却约束）。
   离线覆盖：`tests/offline/{test_gate,test_limits,test_pipeline}.py`。
 
 ### 阶段 3 · 工具主干

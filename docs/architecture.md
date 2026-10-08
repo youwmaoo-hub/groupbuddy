@@ -41,8 +41,8 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | | `app/telegram/sender.py` | send/edit/typing；4096 字符安全分段 |
 | 闸门 | `app/gate/dedupe.py` | `update_id` 幂等 |
 | | `app/gate/filters.py` | 入口硬过滤：自身/其他 Bot、无文本、命令（`allow_commands` 只给命令通道）；私聊默认丢弃（§2.2） |
-| | `app/gate/trigger.py` | 发言判定：强触发 → 可解释内容 → 上下文追问 → 话题延续 / 情绪 / 安静后开场 → 冷却/窗口闸门；输出 RESPOND / WAIT / IGNORE；首行丢弃其他 Bot（`bot_author`） |
-| | `app/gate/limits.py` | 主动发言的冷却与每窗口上限（进程内状态，按 `chat_id` 隔离） |
+| | `app/gate/trigger.py` | 发言判定：首行丢弃其他 Bot（`bot_author`）→ 强触发 → 重复过滤 → 冷却 → 通过即 RESPOND；弱规则（疑问/报错/资源/追问/话题/情绪/安静后开场）只标注原因码，都没命中落 `general` |
+| | `app/gate/limits.py` | 主动发言冷却（`ProactiveLimiter`）与重复消息过滤（`RepeatGuard`）；进程内状态，按 `chat_id` 隔离（不再有每窗口上限） |
 | | `app/gate/debounce.py` | 静默窗合并多条消息；批次带"是否全部未点名"标记（`proactive`） |
 | | `app/gate/queue.py` | per-chat 串行 actor；运行期间新消息合并为下一轮一批 |
 | 会话 | `app/session/runner.py` | 一轮编排：群主命令通道 → context → llm（输出上限按模式）→ tools → outbound |
@@ -113,9 +113,9 @@ Telegram Update
 - 每 `chat_id` 一个串行 worker（`gate/queue.py`）：同群严格排队，避免回复乱序与交叉上下文。
 - 不同群可并行；并行度受全局 LLM 并发信号量限制。
 - **本轮（round）边界**：一轮只以"开始处理时已入库"的消息为输入（`messages.max_id` 快照）；模型调用期间新到的消息只落库，不并入本轮。
-- **运行期间合并**：每个 `chat_id` 最多只有一个待处理批次，新消息并入其中并只保留最新 N 条（`debounce_max_messages`，默认 5），因此"Bot 正在思考"不会持续产生新的模型调用。
+- **运行期间合并**：默认**不合并**（`debounce_seconds=0`、`debounce_max_messages=1`，每条消息各自成批，见 `docs/requirements.md` §2.1 第 3 条）；显式调大后每个 `chat_id` 最多只有一个待处理批次，新消息并入其中并只保留最新 N 条，因此"Bot 正在思考"不会持续产生新的模型调用。
 - **每轮一次**：同一群同时只有一个回复任务，一轮最多一次模型调用（阶段 3 起为一次工具循环内不超过轮次上限）与一次回复。
-- **主动发言闸门**：未点名的候选消息（`question`/`troubleshoot`/`resource`/`followup`/`topic`/`emotion`/`quiet_open`）先过冷却与每窗口上限，被压住即 `wait`（0 token、只入库）；被点名不受限制（`docs/requirements.md` §2.1）。后三条弱触发是阶段 8「群宠体验升级」追加的低成本规则（话题延续按与上一条 assistant 文本共享的非停用二字组、情绪词表、安静条数阈值），只增加候选量、不改冷却与上限；其他 Bot 的消息在判定首行就被丢弃，且不计入冷却与额度（`docs/security.md` §12）。
+- **主动发言闸门**：通过入口过滤的人类消息默认接话；只有三道闸门会让人看不到回复——噪声（入库前丢弃，不进上下文）、其他 Bot 的消息（判定首行 `bot_author`，且不计入冷却）、`repeat`（同一人同一句话在 `DUPLICATE_WINDOW_SECONDS` 默认 300 秒内只接一次）与 `cooldown`（未点名回复默认 20 秒冷却，被压住即 `wait`，0 token、只入库）；被点名（@ / 回复 / 别名）不受重复与冷却限制（`docs/requirements.md` §2.1）。弱规则（`question`/`troubleshoot`/`resource`/`followup`/`topic`/`emotion`/`quiet_open`）只决定日志原因码，都没命中落 `general`——不再决定回不回，也不再维护"能触发"的词表。
 - **出站串行**：同一群的文本与贴纸发送共用一把锁（`app/outbound/queue.py`）；贴纸走独立的 1 条/20 秒限速通道。
 - **摘要调度**：后台任务 `summary-scheduler` 按 `chat_id` 串行、异步、可重试、幂等，随关闭信号停止，不阻塞回复（`app/session/summary.py`）。
 - **健康心跳**：后台任务 `health-heartbeat` 每 60 秒原子重写 `storage/health.json`（`app/ops/health.py`）；只读探测、不调用模型，写失败只告警。

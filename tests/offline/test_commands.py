@@ -232,7 +232,7 @@ class _RecordingOutbound:
 
 
 def build_runner(connection, settings, *, outbound, llm, commands) -> SessionRunner:
-    limiter = ProactiveLimiter(cooldown_seconds=20.0, window_seconds=300.0, max_per_window=3)
+    limiter = ProactiveLimiter(cooldown_seconds=20.0)
     return SessionRunner(
         settings=settings,
         connection=connection,

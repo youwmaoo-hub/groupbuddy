@@ -11,7 +11,7 @@ from types import SimpleNamespace
 from app.gate.debounce import Batch, Debouncer
 from app.gate.dedupe import UpdateDeduplicator
 from app.gate.filters import DROP_BOT_AUTHOR, DROP_COMMAND, DROP_NO_TEXT, DROP_PRIVATE, screen
-from app.gate.limits import ProactiveLimiter
+from app.gate.limits import ProactiveLimiter, RepeatGuard
 from app.gate.queue import ChatQueue
 from app.gate.trigger import TriggerDetector
 from app.telegram.parse import parse_update
@@ -157,10 +157,9 @@ class TriggerTests(unittest.TestCase):
         self._tmp = tempfile.TemporaryDirectory()
         self.settings = make_settings(Path(self._tmp.name), BOT_ALIASES="小助手")
         self.clock = FakeClock()
-        self.limiter = ProactiveLimiter(
-            cooldown_seconds=20.0, window_seconds=300.0, max_per_window=3, clock=self.clock
-        )
-        self.detector = TriggerDetector(self.settings, self.limiter)
+        self.limiter = ProactiveLimiter(cooldown_seconds=20.0, clock=self.clock)
+        self.repeats = RepeatGuard(window_seconds=300.0, clock=self.clock)
+        self.detector = TriggerDetector(self.settings, self.limiter, self.repeats)
 
     def tearDown(self) -> None:
         self._tmp.cleanup()
@@ -186,12 +185,13 @@ class TriggerTests(unittest.TestCase):
                 self.assertTrue(decision.should_respond)
                 self.assertEqual(decision.reason, expected)
 
-    def test_plain_chatter_is_ignored(self) -> None:
+    def test_plain_chatter_is_answered_generically(self) -> None:
+        """没命中任何内容原因码也接话：用 general 兜底（用户要求「大部分都接」）。"""
         decision = self.detector.decide(
             make_incoming(update_id=9, chat_id=1, message_id=9, text="哈哈哈哈", mentions_bot=False)
         )
-        self.assertFalse(decision.should_respond)
-        self.assertEqual(decision.reason, "not_addressed")
+        self.assertEqual((decision.verdict, decision.reason), ("respond", "general"))
+        self.assertTrue(decision.proactive)
 
     def test_reply_to_another_bot_is_background(self) -> None:
         # 人类在跟别的 Bot 对话时本 Bot 不插嘴：不前进模型、不占冷却（docs/requirements.md §2.1）
@@ -252,17 +252,21 @@ class TriggerTests(unittest.TestCase):
         )
         self.assertEqual((decision.verdict, decision.reason), ("respond", "followup"))
 
-    def test_followup_outside_window_is_not_a_followup(self) -> None:
+    def test_followup_outside_window_falls_back_to_general(self) -> None:
+        """追问窗口只决定「原因码」，不再决定「回不回」：窗口外照样接话，只是标 general。"""
         for gap in (0, 6):
             with self.subTest(gap=gap):
                 decision = self.detector.decide(
                     make_incoming(
-                        update_id=32, chat_id=1, message_id=32, text="然后继续讲讲", mentions_bot=False
+                        update_id=32 + gap,
+                        chat_id=1,
+                        message_id=32 + gap,
+                        text=f"然后继续讲讲{gap}",
+                        mentions_bot=False,
                     ),
                     since_bot_reply=gap,
                 )
-                self.assertFalse(decision.should_respond)
-                self.assertEqual(decision.reason, "not_addressed")
+                self.assertEqual((decision.verdict, decision.reason), ("respond", "general"))
 
     def test_bot_author_is_never_answered(self) -> None:
         """人类中心（阶段 8）：其他 Bot 的消息即使 @ 本 Bot 也不回，避免 Bot↔Bot 循环。"""
@@ -308,7 +312,8 @@ class TriggerTests(unittest.TestCase):
         self.assertEqual((decision.verdict, decision.reason), ("respond", "emotion"))
 
     def test_quiet_open_after_a_long_silence(self) -> None:
-        cases = ((None, True), (20, True), (19, False))
+        """久静后开口只是原因码：安静期不足也接话（general），够久才标 quiet_open。"""
+        cases = ((None, "quiet_open"), (20, "quiet_open"), (19, "general"))
         for index, (gap, expected) in enumerate(cases):
             with self.subTest(gap=gap):
                 decision = self.detector.decide(
@@ -316,20 +321,32 @@ class TriggerTests(unittest.TestCase):
                         update_id=90 + index,
                         chat_id=3,
                         message_id=90 + index,
-                        text="周末准备去爬山，爬完回来吃火锅",
+                        text=f"周末准备去爬山，爬完回来吃火锅（第{index}次）",
                         mentions_bot=False,
                     ),
                     since_bot_reply=gap,
                 )
-                self.assertEqual(decision.reason == "quiet_open", expected)
+                self.assertEqual((decision.verdict, decision.reason), ("respond", expected))
 
-    def test_quiet_open_needs_a_message_with_substance(self) -> None:
+    def test_short_ack_is_still_answered_at_gate_level(self) -> None:
+        """闸门不做「值不值得回」的取舍：短句兜底 general；噪声过滤在 runner 里更早完成。"""
         decision = self.detector.decide(
             make_incoming(update_id=95, chat_id=3, message_id=95, text="嗯嗯，行", mentions_bot=False),
             since_bot_reply=None,
         )
-        self.assertFalse(decision.should_respond)
-        self.assertEqual(decision.reason, "not_addressed")
+        self.assertEqual((decision.verdict, decision.reason), ("respond", "general"))
+
+    def test_repeated_message_from_same_user_is_ignored(self) -> None:
+        """去重：同一个人在同一群反复发同一句，只接第一次（用户要求「重复的过滤掉」）。"""
+        first = make_incoming(
+            update_id=97, chat_id=7, message_id=97, text="在吗", user_id=9, mentions_bot=False
+        )
+        again = make_incoming(
+            update_id=98, chat_id=7, message_id=98, text="在吗", user_id=9, mentions_bot=False
+        )
+        self.assertEqual(self.detector.decide(first).reason, "question")
+        decision = self.detector.decide(again)
+        self.assertEqual((decision.verdict, decision.reason), ("ignore", "repeat"))
 
     def test_new_weak_triggers_still_respect_the_limiter(self) -> None:
         self.limiter.record(4)
@@ -346,14 +363,20 @@ class TriggerTests(unittest.TestCase):
         self.assertEqual((decision.verdict, decision.reason), ("wait", "cooldown"))
         self.assertFalse(decision.should_respond)
 
-    def test_window_quota_suppresses_proactive_reply(self) -> None:
-        for _ in range(3):
+    def test_no_window_quota_any_more(self) -> None:
+        """窗口上限已删除：隔 21 秒连续接话 3 次后第 4 次仍然放行（用户要求删掉 300s/3 条）。"""
+        for index in range(3):
+            self.assertTrue(self.detector.decide(
+                make_incoming(
+                    update_id=42 + index, chat_id=1, message_id=42 + index, text=f"这个怎么弄{index}", mentions_bot=False
+                )
+            ).should_respond)
             self.limiter.record(1)
             self.clock.advance(21.0)
         decision = self.detector.decide(
-            make_incoming(update_id=42, chat_id=1, message_id=42, text="这个怎么弄", mentions_bot=False)
+            make_incoming(update_id=46, chat_id=1, message_id=46, text="这个怎么弄4", mentions_bot=False)
         )
-        self.assertEqual((decision.verdict, decision.reason), ("wait", "quota"))
+        self.assertEqual((decision.verdict, decision.reason), ("respond", "question"))
 
     def test_strong_trigger_ignores_cooldown(self) -> None:
         self.limiter.record(1)
@@ -365,6 +388,16 @@ class TriggerTests(unittest.TestCase):
 
 
 class DebounceTests(unittest.TestCase):
+    def test_max_one_gives_each_message_its_own_batch(self) -> None:
+        """生产默认（关掉合并）：DEBOUNCE_MAX_MESSAGES=1 + 0 秒静默 → 每条消息各自成批。"""
+        clock = FakeClock()
+        debouncer = Debouncer(quiet_seconds=0.0, max_messages=1, clock=clock)
+        for index in range(3):
+            debouncer.add(1, make_incoming(update_id=index, chat_id=1, message_id=index, text=f"m{index}"))
+        batches = debouncer.due()
+        self.assertEqual([[item.message_id for item in batch.items] for batch in batches], [[0], [1], [2]])
+        self.assertEqual(debouncer.due(), [])
+
     def test_rapid_messages_merge_into_one_batch(self) -> None:
         clock = FakeClock()
         debouncer = Debouncer(quiet_seconds=1.2, max_messages=5, clock=clock)

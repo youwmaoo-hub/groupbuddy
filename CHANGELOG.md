@@ -3,6 +3,18 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 的组织方式，
 版本号对应 `docs/status.md` 的提交基线。提交哈希可在 GitHub 直接打开。
 
+## [Unreleased]
+
+### Changed
+
+- 发言策略改为**默认接话**：通过入口过滤、噪声过滤、重复过滤与冷却闸门的人类消息默认回一句
+  （捧场、接梗、解释、吐槽都行），弱触发词表只用于标注原因码、兜底 `general`；沉默词表 `not_addressed` 移除。
+- 删除每窗口发言上限：`PROACTIVE_WINDOW_SECONDS` / `PROACTIVE_MAX_PER_WINDOW` 配置键与 `LIMIT_QUOTA` 原因码移除，
+  只保留冷却（默认 20 秒）与新增的重复消息过滤（`DUPLICATE_WINDOW_SECONDS`，默认 300 秒，`repeat`）。
+- 连发消息默认**不合并**：`DEBOUNCE_SECONDS=0`、`DEBOUNCE_MAX_MESSAGES=1`，每条消息各自成批，调大才恢复合并。
+- 输出规则改为"已决定接话就不许沉默"：首轮 `NO_REPLY` 时程序追加一句"必须回"的追问重跑一次；
+  人设里"插不上话就不说话"的措辞同步改为"接话自然一点"。
+
 ## [0.1.0] - 2026-10-08
 
 首个公开版本：单进程、单 Bot Token 的 Telegram 群宠，本机 `Ran 647 tests / OK (skipped=2)`。
@@ -10,7 +22,8 @@
 ### Added
 
 - 阶段 1 最小可运行闭环（`7052da4`）：Telegram 长轮询 + 去抖 + DeepSeek + SQLite。
-- 阶段 2 发言闸门（`4dc8bf3`）：主动回复判定、冷却与每窗口上限，被压住的消息 0 token。
+- 阶段 2 发言闸门（`4dc8bf3`）：主动回复判定、冷却与每窗口上限，被压住的消息 0 token
+  （窗口上限与"沉默词表"已于 2026-10-08 调整为默认接话，见 Unreleased）。
 - 阶段 3 工具主干（`6da5dcb`）：工具注册表、程序侧权限判定、执行器、`calc`、`search_web` 接口。
 - 阶段 4 工作区与文件（`4bc5b57`）：`read_file` / `write_file`，共享路径安全（限制在每群工作区）。
 - 阶段 5 贴纸（`5bb8935`）：`stickers` 表、情绪匹配、冷却、`send_sticker` 出站通道。

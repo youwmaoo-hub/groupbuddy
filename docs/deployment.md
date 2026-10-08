@@ -38,8 +38,9 @@
 - 主动接话（阶段 8「群宠体验升级」，全部是纯规则、0 token，见 `docs/requirements.md` §2.1）：
   - `BOT_ALIASES`：Bot 的昵称列表（逗号分隔，默认空）。**建议显式配置**（如 `DeepSeek,大肥鱼,深蓝大肥鱼,鲸鱼娘`）：别名既用于"被叫到"的强触发，也参与 `@名字` 识别；不要写 `bot` 这类通用词，否则 `@其他bot` 会被误判成叫本 Bot。
   - `PROACTIVE_TOPIC_MAX_MESSAGES`（默认 8）：与 Bot 上一条发言共享关键词的"话题延续"窗口，按条数计。
-  - `PROACTIVE_QUIET_MESSAGES`（默认 20）：安静多久之后允许"新话题开场"，按条数计；这两个键只提高候选量，**不改**冷却与窗口上限。
-  - 冷却与窗口上限仍是 `PROACTIVE_COOLDOWN_SECONDS`（默认 20 秒）、`PROACTIVE_WINDOW_SECONDS`（默认 300）、`PROACTIVE_MAX_PER_WINDOW`（默认 3）；追问窗口是 `FOLLOWUP_MAX_MESSAGES`（默认 5）。没有被点名时的回复才计入这些额度。
+  - `PROACTIVE_QUIET_MESSAGES`（默认 20）：安静多久之后算"新话题开场"，按条数计；这两个键（连同 `FOLLOWUP_MAX_MESSAGES` 追问窗口）**只影响日志里的原因码**，不再决定回不回。
+  - `PROACTIVE_COOLDOWN_SECONDS`（默认 20 秒）：未点名回复的冷却；`DUPLICATE_WINDOW_SECONDS`（默认 300 秒）：同一人同一句话在该窗口内只接第一次，0 = 关闭。**已删除** `PROACTIVE_WINDOW_SECONDS` / `PROACTIVE_MAX_PER_WINDOW`（不再有每窗口上限，`.env` 里留着也会被静默忽略）。被点名（@ / 回复 / 别名）不受冷却与重复过滤限制。
+  - `DEBOUNCE_SECONDS` / `DEBOUNCE_MAX_MESSAGES` 默认 **0 / 1**：连发消息不合并，每条各自成批，让每条消息都有接话机会；调大后恢复"静默窗口内合并"。合并与冷却无关，被合并的多条仍只产生一次回复。
   - 群消息接收前提见 §12.10（Telegram 侧 Privacy Mode / 管理员）——不满足时普通群消息根本到不了进程，主动接话不会生效。
 - 配额（阶段 8 F5.3）：`QUOTA_DAILY_TOKENS` / `QUOTA_MONTHLY_TOKENS`，**0 或未配置 = 不限额**；按 `chat_id` 按 `TIMEZONE` 的自然日/自然月统计该群已用 token，超额时本轮不调用模型（语义见 `docs/token.md` §4.1）。配额不随群设置变化，只能由部署方改 `.env`。
 - `.env.example` 列出常用键与默认值；`.env` 只写需要覆盖的键。键名拼错会被**静默忽略**（走默认值），改完按 §12.5 核对启动日志里的 `配置加载完成` 一行。

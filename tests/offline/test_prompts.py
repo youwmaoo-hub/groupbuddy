@@ -7,6 +7,8 @@ from pathlib import Path
 
 from app.llm.prompts import (
     GLOBAL_PERSONA,
+    NO_REPLY,
+    NO_REPLY_NUDGE,
     build_messages,
     build_system_prompt,
     fit_reply,
@@ -104,6 +106,26 @@ class ReplyLengthTests(unittest.TestCase):
         text = "嗯。" + "字" * 400
         cut = fit_reply(text, 280)
         self.assertEqual(cut, "嗯。" + "字" * 277 + "…")
+
+
+class DefaultReplyStanceTests(unittest.TestCase):
+    """默认接话（2026-10-08 用户要求）：通过了筛选就别沉默，NO_REPLY 只留「完全接不上」。"""
+
+    def test_default_stance_is_to_speak_up(self) -> None:
+        prompt = build_system_prompt()
+        self.assertIn("已经通过筛选、轮到你了", prompt)
+        self.assertIn("不要因为「没点名我」", prompt)
+        self.assertLess(prompt.index("已经通过筛选、轮到你了"), prompt.index(NO_REPLY))
+
+    def test_no_reply_is_narrowed_to_unanswerable_messages(self) -> None:
+        prompt = build_system_prompt()
+        self.assertIn("确实接不上时", prompt)
+        self.assertIn(NO_REPLY, prompt)
+
+    def test_no_reply_nudge_asks_for_a_second_try(self) -> None:
+        # runner 在模型首轮回 NO_REPLY 时用它追问一次：追问里必须明确「不要再输出 NO_REPLY」
+        self.assertIn(NO_REPLY, NO_REPLY_NUDGE)
+        self.assertIn("不要再输出", NO_REPLY_NUDGE)
 
 
 class ReplyTargetTests(unittest.TestCase):

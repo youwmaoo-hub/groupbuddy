@@ -15,7 +15,7 @@ from app.gate.filters import screen
 from app.gate.limits import ProactiveLimiter
 from app.gate.trigger import TriggerDetector
 from app.llm.loop import Outcome, Responder
-from app.llm.prompts import fit_reply
+from app.llm.prompts import NO_REPLY_NUDGE, fit_reply
 from app.llm.routing import PURPOSE_CHAT, ModelRouter, tool_round_limit
 from app.ops.commands import Command, CommandService, parse_command
 from app.ops.health import HealthState
@@ -200,6 +200,19 @@ class SessionRunner:
         )
         await self._record_usage(batch, outcome)  # 只要调用了模型就记账，哪怕本轮不说话
         if outcome.text is None:
+            # 已经过筛选、决定接话，模型却回了 NO_REPLY：再明确追问一次，
+            # 避免「说了却不说」（用户要求：沉默了就别触发，触发了就别静默）。
+            logger.info("模型首轮未接话，追问一次 chat_id=%s", batch.chat_id)
+            retry = await self._responder.reply(
+                [*payload, {"role": "user", "content": NO_REPLY_NUDGE}],
+                context=context,
+                model=model,
+                max_rounds=tool_round_limit(intent, self._settings),
+                max_output_tokens=modes.output_limit(profile, self._settings),
+            )
+            await self._record_usage(batch, retry)  # 追问也是真实调用，照实记账
+            outcome = retry
+        if outcome.text is None:
             logger.info("本轮不说话 chat_id=%s", batch.chat_id)
             return
 
@@ -214,7 +227,7 @@ class SessionRunner:
         )
         await self._store_assistant(batch, text)
         if batch.proactive:
-            self._limiter.record(batch.chat_id)  # 只有真的说出口才占冷却与窗口额度
+            self._limiter.record(batch.chat_id)  # 只有真的说出口才占冷却额度
 
     async def _quota_notice(self, batch: Batch) -> str | None:
         """配额在调用模型之前判定（docs/token.md §4.1）；超额时本轮不调模型、不记账。"""

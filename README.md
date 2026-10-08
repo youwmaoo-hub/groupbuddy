@@ -13,8 +13,8 @@ while every permission decision stays in code, never in the model.
 
 ## 它是什么
 
-- 一个**能插话但不吵**的群成员：先判定这条消息值不值得回（强触发 / 追问窗口 / 弱触发 / 冷却与窗口上限），
-  被压住的消息花 0 token；判定顺序与原因码见 [`docs/requirements.md`](docs/requirements.md) §2.1。
+- 一个**爱接话但不刷屏**的群成员：通过筛选的人类消息默认接一句（捧场、接梗、解释、吐槽都行），
+  只有噪声、重复刷屏和 20 秒冷却会让人看不到回复，被压住的消息花 0 token；判定顺序与原因码见 [`docs/requirements.md`](docs/requirements.md) §2.1。
 - 一个人格驱动的对话者：全局人设 + 群级覆盖 + 动态语气段三层分离（见 [`docs/persona.md`](docs/persona.md)），
   本轮只回应当前触发消息，被跳过的消息不补答。
 - 一个有记忆的成员：分档窗口、字符预算、模板化摘要、SQLite FTS5 检索（见 [`docs/memory.md`](docs/memory.md)）。
@@ -64,7 +64,7 @@ python -m unittest discover -s tests -t .
 
 ```
 app/
-  ├── gate/       发言闸门：筛选、触发、去抖、去重、冷却与窗口上限
+  ├── gate/       发言闸门：筛选、触发、去抖、去重、冷却
   ├── llm/        提示词、客户端、模型档位路由、工具轮次分档
   ├── session/    一轮回复的编排：上下文拼装、检索、情绪、摘要
   ├── tools/      工具注册表、程序侧权限判定、执行器、内置工具、共享工作区

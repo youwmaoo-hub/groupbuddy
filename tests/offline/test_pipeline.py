@@ -9,7 +9,7 @@ from app import modes
 from app.config import today_in_timezone
 from app.gate.debounce import Batch, Debouncer
 from app.gate.dedupe import UpdateDeduplicator
-from app.gate.limits import ProactiveLimiter
+from app.gate.limits import ProactiveLimiter, RepeatGuard
 from app.gate.queue import ChatQueue
 from app.gate.trigger import TriggerDetector
 from app.llm.loop import Responder
@@ -62,9 +62,8 @@ class PipelineTests(DbTestCase):
     ) -> None:
         self.clock = FakeClock()
         self.debouncer = Debouncer(quiet_seconds=1.2, max_messages=5, clock=self.clock)
-        self.proactive = ProactiveLimiter(
-            cooldown_seconds=20.0, window_seconds=300.0, max_per_window=3, clock=self.clock
-        )
+        self.proactive = ProactiveLimiter(cooldown_seconds=20.0, clock=self.clock)
+        self.repeats = RepeatGuard(window_seconds=300.0, clock=self.clock)
         self.llm = FakeLLMClient(*replies, fail=fail, on_complete=on_complete)
         self.sender = FakeSender(rate_limited_times=rate_limited_times, sticker_fail_times=sticker_fail_times)
         limiter = RateLimiter(
@@ -89,7 +88,7 @@ class PipelineTests(DbTestCase):
             settings=self.settings,
             connection=self.connection,
             deduplicator=UpdateDeduplicator(self.connection),
-            detector=TriggerDetector(self.settings, self.proactive),
+            detector=TriggerDetector(self.settings, self.proactive, self.repeats),
             limiter=self.proactive,
             debouncer=self.debouncer,
             context_builder=ContextBuilder(self.connection, self.settings),
@@ -559,12 +558,14 @@ class PipelineTests(DbTestCase):
         self.assertNotIn("A群的内容", second)
         self.assertEqual([item["chat_id"] for item in self.sender.sent], [1, 2])
 
-    async def test_no_reply_still_records_usage(self) -> None:
-        self._build("NO_REPLY")
+    async def test_no_reply_is_retried_once_and_still_records_usage(self) -> None:
+        """模型首轮回 NO_REPLY 会被追问一次（避免「说了却不说」）：两次调用都记账，仍然沉默。"""
+        self._build("NO_REPLY", "NO_REPLY")
         await self._send(["随便说说"])
         await self._flush()
         self.assertEqual(self.sender.sent, [])
-        self.assertEqual((await self._usage())["calls"], 1)
+        self.assertEqual((await self._usage())["calls"], 2)
+        self.assertIn("不要再输出", self.llm.calls[1][-1]["content"])
 
     async def test_model_failure_keeps_bot_silent(self) -> None:
         self._build(fail=True)
@@ -590,9 +591,11 @@ class PipelineTests(DbTestCase):
         """被跳过的旧消息只当背景：回复对象是本轮最新消息（docs/requirements.md §2.1 第 9–13 条）。
 
         旧消息留在历史里供理解语义，但不能成为回复对象，也不能被"补答"。
+        现在的「跳过」只发生在噪声/去重/重复/冷却这些程序侧闸门上。
         """
         self._build("在的")
-        # 4 字、非噪声、也命中不了弱触发（<6 字不进 quiet_open）→ ignore，但仍入库成为历史
+        # 冷却期内被跳过的消息（verdict=wait）只当背景：入库成为历史，但不进本轮批次、不能成为回复对象
+        self.proactive.record(1)
         await self.runner.handle(
             make_incoming(update_id=400, chat_id=1, message_id=40, text="今天很热", mentions_bot=False)
         )

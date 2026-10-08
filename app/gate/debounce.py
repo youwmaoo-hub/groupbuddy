@@ -1,9 +1,15 @@
-"""Debounce：1–2 秒内的连发合并成一次模型调用（省钱的主要杠杆）。"""
+"""Debounce：连发合并成一次模型调用。
+
+当前生产默认 `DEBOUNCE_SECONDS=0`、`DEBOUNCE_MAX_MESSAGES=1`（用户要求「关掉合并」）：
+每条消息各自成一个批次、各自一次模型调用，回复目标就是那条消息本身。
+`max_messages` 仍是通用旋钮：>1 时同一批内合并（省钱杠杆，测试与历史配置仍可用）。
+"""
 
 from __future__ import annotations
 
 import asyncio
 import time
+from collections import deque
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -35,14 +41,20 @@ class Debouncer:
     """纯逻辑；时间源注入，可离线测试且不真的等待。"""
 
     def __init__(self, *, quiet_seconds: float, max_messages: int, clock: Clock | None = None) -> None:
-        self._quiet = quiet_seconds
+        self._quiet = max(0.0, quiet_seconds)
         self._max = max(1, max_messages)
         self._clock = clock or MonotonicClock()
         self._pending: dict[int, Batch] = {}
+        # 已满、但还没被 due() 取走的批次：`max_messages=1`（关掉合并）时每条消息都走这里
+        self._ready: deque[Batch] = deque()
 
     def add(self, chat_id: int, item: IncomingMessage, *, proactive: bool = False) -> Batch:
         now = self._clock.monotonic()
         batch = self._pending.get(chat_id)
+        if batch is not None and batch.full:
+            # 上一批已经满了：先结算成独立批次，别把新消息并进去（关掉合并的关键）
+            self._ready.append(batch)
+            batch = None
         if batch is None:
             batch = Batch(chat_id=chat_id, last_at=now, proactive=proactive)
             self._pending[chat_id] = batch
@@ -55,9 +67,9 @@ class Debouncer:
         return batch
 
     def due(self) -> list[Batch]:
-        """取出静默期已到（或已满）的批次。"""
+        """取出静默期已到（或已满）的批次；先给已结算的，保持到达顺序。"""
         now = self._clock.monotonic()
-        ready: list[Batch] = []
+        ready: list[Batch] = [self._ready.popleft() for _ in range(len(self._ready))]
         for chat_id, batch in list(self._pending.items()):
             if batch.full or now - batch.last_at >= self._quiet:
                 ready.append(self._pending.pop(chat_id))
@@ -65,6 +77,8 @@ class Debouncer:
 
     def next_deadline(self) -> float | None:
         """最早一批到期所需等待秒数；无待处理返回 None。"""
+        if self._ready:
+            return 0.0
         if not self._pending:
             return None
         now = self._clock.monotonic()
@@ -74,16 +88,24 @@ class Debouncer:
         return min(waits) if waits else None
 
     def flush(self, chat_id: int) -> Batch | None:
-        return self._pending.pop(chat_id, None)
+        batch = self._pending.pop(chat_id, None)
+        if batch is not None:
+            return batch
+        for index, candidate in enumerate(self._ready):
+            if candidate.chat_id == chat_id:
+                del self._ready[index]
+                return candidate
+        return None
 
     def flush_all(self) -> list[Batch]:
-        batches = list(self._pending.values())
+        batches = [*self._ready, *self._pending.values()]
+        self._ready.clear()
         self._pending.clear()
         return batches
 
     @property
     def pending_chats(self) -> int:
-        return len(self._pending)
+        return len(self._pending) + len(self._ready)
 
 
 async def run_debounce_loop(

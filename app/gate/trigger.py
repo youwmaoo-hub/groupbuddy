@@ -1,10 +1,12 @@
 """发言闸门：程序侧判定 respond / wait / ignore，不调用模型（0 token）。
 
-阶段 2（F2.2–F2.5）：强触发 → 可解释内容 → 上下文追问 → 冷却/窗口闸门。
+阶段 2（F2.2–F2.5）：强触发 → 可解释内容 → 上下文追问 → 冷却闸门。
 阶段 8（群宠体验升级）：人类中心——Bot 作者直接 ignore；普通消息增加
-「同话题 / 情绪反应 / 久静后开口」三条弱触发以提高合理活跃度，冷却与窗口
-上限不变；回复「其他 Bot」的消息只在强触发时回应（见 docs/requirements.md §2.1，
-本节唯一权威实现）。
+「同话题 / 情绪反应 / 久静后开口」三条弱触发以提高合理活跃度。
+当前口径（用户要求「大部分可以接话的都回」）：只要通过入口过滤、噪声过滤、
+重复过滤与冷却闸门，人类文字消息默认接话——命中下面任一内容原因码就标那个码，
+都没命中就标 `general`（不再因为「没命中词表」而沉默）。回复「其他 Bot」的消息
+仍只在强触发时回应（见 docs/requirements.md §2.1，本节唯一权威实现）。
 """
 
 from __future__ import annotations
@@ -13,7 +15,7 @@ from dataclasses import dataclass
 from typing import Literal
 
 from app.config import Settings
-from app.gate.limits import LIMIT_OK, ProactiveLimiter
+from app.gate.limits import LIMIT_OK, ProactiveLimiter, RepeatGuard
 from app.telegram.parse import IncomingMessage
 
 Verdict = Literal["respond", "wait", "ignore"]
@@ -28,11 +30,12 @@ REASON_FOLLOWUP = "followup"
 REASON_TOPIC = "topic"
 REASON_EMOTION = "emotion"
 REASON_QUIET_OPEN = "quiet_open"
+REASON_GENERAL = "general"
 REASON_BOT_AUTHOR = "bot_author"
 REASON_OTHER_BOT_REPLY = "other_bot_reply"
-REASON_NOT_ADDRESSED = "not_addressed"
+REASON_REPEAT = "repeat"
 
-# 弱触发：内容值得回应，但必须先过冷却/窗口闸门（强触发不受限）
+# 内容原因码：用来标注「为什么接这一句」；都没命中时用 general 兜底，不沉默
 WEAK_REASONS = frozenset({
     REASON_QUESTION, REASON_TROUBLESHOOT, REASON_RESOURCE, REASON_FOLLOWUP,
     REASON_TOPIC, REASON_EMOTION, REASON_QUIET_OPEN,
@@ -51,7 +54,7 @@ RESOURCE_WORDS = (
     "http://", "https://", "www.", "链接", "文件", "代码", "命令", "配置",
     "安装", "部署", "日志",
 )
-# 追问承接词：单字（那/再）会带来误判，靠冷却与窗口上限兜底（F2.4）
+# 追问承接词：单字（那/再）会带来误判，靠冷却闸门兜底（F2.4）
 FOLLOWUP_WORDS = ("然后", "接着", "继续", "后来", "所以", "还有", "刚才", "上面", "那", "再")
 # 情绪/反应词（多字词，避免单字误判）：明显带情绪的消息更容易被接住
 EMOTION_WORDS = (
@@ -85,7 +88,7 @@ def _bigrams(text: str) -> set[str]:
 class TriggerDecision:
     verdict: Verdict
     reason: str
-    proactive: bool = False  # 弱触发（未点名）为 True：回复要计入冷却与窗口上限
+    proactive: bool = False  # 未点名的接话为 True：回复要计入冷却（点名/回复/别名不受限）
 
     @property
     def should_respond(self) -> bool:
@@ -93,14 +96,20 @@ class TriggerDecision:
 
 
 class TriggerDetector:
-    """强触发不受冷却限制；弱触发（内容/追问/同话题/情绪/久静）需要过闸门，被压住即 wait。"""
+    """强触发不受冷却限制；未点名的候选默认接话（内容原因码仅用于标注），被冷却压住即 wait。"""
 
-    def __init__(self, settings: Settings, limiter: ProactiveLimiter) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        limiter: ProactiveLimiter | None = None,
+        repeats: RepeatGuard | None = None,
+    ) -> None:
         self._aliases = tuple(alias.casefold() for alias in settings.aliases)
         self._followup_max = max(1, settings.followup_max_messages)
         self._topic_max = max(1, settings.proactive_topic_max_messages)
         self._quiet_messages = max(1, settings.proactive_quiet_messages)
         self._limiter = limiter
+        self._repeats = repeats
 
     def decide(
         self,
@@ -111,7 +120,7 @@ class TriggerDetector:
     ) -> TriggerDecision:
         """since_bot_reply＝Bot 上一条发言之后（含本条）的消息条数；从未发言为 None。
 
-        bot_last_text＝Bot 上一条发言的文本，仅用于「同话题」弱触发。
+        bot_last_text＝Bot 上一条发言的文本，仅用于「同话题」原因码标注。
         其他 Bot 的消息在 `app/gate/filters.py` 已被丢弃（不入库、不进冷却），
         这里再挡一次：Bot 作者永远 ignore，避免 Bot↔Bot 循环（人类中心）。
         群友回复「另一个 Bot」的消息同理只当背景：除非明确点名/叫别名（强触发），
@@ -126,14 +135,20 @@ class TriggerDetector:
             return TriggerDecision("respond", strong)
         strong = self._strong(message)
         if strong is not None:
+            # 被点名/被回复/叫别名：一定回，不受冷却与重复过滤影响
             return TriggerDecision("respond", strong)
-        weak = self._weak(message, since_bot_reply=since_bot_reply, bot_last_text=bot_last_text)
-        if weak is None:
-            return TriggerDecision("ignore", REASON_NOT_ADDRESSED)
-        limit = self._limiter.check(message.chat_id)
-        if limit.reason != LIMIT_OK:
-            return TriggerDecision("wait", limit.reason)  # 被冷却/窗口压住：0 token
-        return TriggerDecision("respond", weak, proactive=True)
+        if self._repeats is not None and self._repeats.is_repeat(
+            message.chat_id, message.user_id, message.text
+        ):
+            return TriggerDecision("ignore", REASON_REPEAT)  # 0 token，只入库
+        if self._limiter is not None:
+            limit = self._limiter.check(message.chat_id)
+            if limit.reason != LIMIT_OK:
+                return TriggerDecision("wait", limit.reason)  # 被冷却压住：0 token
+        reason = self._weak(
+            message, since_bot_reply=since_bot_reply, bot_last_text=bot_last_text
+        ) or REASON_GENERAL
+        return TriggerDecision("respond", reason, proactive=True)
 
     def _strong(self, message: IncomingMessage) -> str | None:
         if message.mentions_bot:
@@ -151,6 +166,7 @@ class TriggerDetector:
         since_bot_reply: int | None,
         bot_last_text: str | None,
     ) -> str | None:
+        """标注「为什么接这一句」：命中就返回对应原因码，都没命中返回 None（调用方用 general 兜底）。"""
         text = message.text.casefold()
         if _contains(text, QUESTION_MARKS) or _contains(text, QUESTION_WORDS):
             return REASON_QUESTION

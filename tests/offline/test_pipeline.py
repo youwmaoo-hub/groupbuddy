@@ -586,6 +586,27 @@ class PipelineTests(DbTestCase):
         self.assertTrue(stored[0].noise)  # F3.2：入库即打噪声标，但默认不进上下文
         self.assertEqual(await messages.recent(self.connection, chat_id=1, limit=10), [])
 
+    async def test_skipped_message_is_background_not_a_reply_target(self) -> None:
+        """被跳过的旧消息只当背景：回复对象是本轮最新消息（docs/requirements.md §2.1 第 9–13 条）。
+
+        旧消息留在历史里供理解语义，但不能成为回复对象，也不能被"补答"。
+        """
+        self._build("在的")
+        # 4 字、非噪声、也命中不了弱触发（<6 字不进 quiet_open）→ ignore，但仍入库成为历史
+        await self.runner.handle(
+            make_incoming(update_id=400, chat_id=1, message_id=40, text="今天很热", mentions_bot=False)
+        )
+        self.assertEqual(self.llm.calls, [])
+        await self._send(["@bot 在干嘛"], start_update=401, start_message=41)
+        batches = await self._flush()
+
+        self.assertEqual([item.message_id for item in batches[0].items], [41])  # 旧消息不进本轮
+        payload = self.llm.calls[0]
+        self.assertIn("当前触发你的那条消息", payload[0]["content"])  # 输出规则段带该约束
+        self.assertIn("今天很热", [item["content"] for item in payload])  # 旧消息只作背景
+        self.assertEqual(len(self.sender.sent), 1)
+        self.assertEqual(self.sender.sent[0]["reply_to_message_id"], 41)
+
     async def test_private_chat_is_silent_and_free(self) -> None:
         # docs/requirements.md §2.2：私聊默认完全不处理
         self._build("不该被调用")

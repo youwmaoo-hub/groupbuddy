@@ -106,6 +106,24 @@ class ReplyLengthTests(unittest.TestCase):
         self.assertEqual(cut, "嗯。" + "字" * 277 + "…")
 
 
+class ReplyTargetTests(unittest.TestCase):
+    """回复目标唯一：历史只用于理解，被跳过的消息不补答（docs/requirements.md §2.1 第 9–13 条）。"""
+
+    def test_single_reply_target_rule_is_included(self) -> None:
+        prompt = build_system_prompt()
+        self.assertIn("当前触发你的那条消息", prompt)
+        self.assertIn("视为已经跳过", prompt)
+
+    def test_rule_precedes_no_reply_instruction(self) -> None:
+        prompt = build_system_prompt(reply_limit=280)
+        self.assertLess(prompt.index("当前触发你的那条消息"), prompt.index("不需要回应时只输出"))
+
+    def test_persona_override_does_not_remove_the_rule(self) -> None:
+        # 人设覆盖只换「全局人格」段，回复目标规则在「输出规则」段，不受影响（docs/persona.md §2）
+        prompt = build_system_prompt(persona="临时人设")
+        self.assertIn("当前触发你的那条消息", prompt)
+
+
 class PersonaDocTests(unittest.TestCase):
     def test_runtime_persona_matches_document(self) -> None:
         # 文档是唯一事实来源：改人设先改 docs/persona.md §4

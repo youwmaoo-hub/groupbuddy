@@ -1,0 +1,49 @@
+name: 功能建议
+description: 提出一个功能或改进建议（请先读 docs/README.md 的路由表与 TODO.md）
+title: "[feature] "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        本项目定位是「单进程、单 Bot Token、多群隔离」的群宠，不做通用 Bot 框架与多租户 SaaS。
+        提建议前建议先看 `docs/requirements.md`（已有条目与已否定方案）与 `TODO.md`（路线图）。
+  - type: textarea
+    id: motivation
+    attributes:
+      label: 动机
+      description: 现在遇到什么问题？为什么现有行为不够用？
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: 期望的行为
+      description: 描述你想要的最终效果，而不是实现方式
+    validations:
+      required: true
+  - type: dropdown
+    id: contract
+    attributes:
+      label: 是否涉及契约变更
+      description: 工具 schema / 数据库表结构 / 权限等级映射 / 出站限速阈值 / 领域对象与租户键都属契约
+      options:
+        - 不涉及（普通功能或优化）
+        - 涉及契约（需要先出方案）
+        - 涉及架构变化（引入新依赖、Redis/Docker 入站 Webhook/向量库/MQ、模块拆分）
+        - 不确定
+    validations:
+      required: true
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: 验收标准
+      description: 用什么可观察的结果判定「做完了」？能否用离线用例表达？
+    validations:
+      required: false
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 替代方案 / 已考虑的做法
+    validations:
+      required: false

@@ -1,0 +1,12 @@
+# 依赖尽量少（见 AGENTS.md §3.1）
+# 机器人本体
+aiogram>=3.7,<4
+openai>=1.40
+aiosqlite>=0.20
+pydantic>=2.7
+pydantic-settings>=2.2
+tzdata>=2024.1
+# 控制面板（阶段 10，可选模块）：只在 app/control/ 里 import，
+# 不需要面板的部署可以不装这两项（见 docs/deployment.md 面板章节）
+fastapi>=0.115,<1
+uvicorn>=0.30,<1

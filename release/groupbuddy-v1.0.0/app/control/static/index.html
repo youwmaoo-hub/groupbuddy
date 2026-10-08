@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GroupBuddy 控制面板</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>GroupBuddy 控制面板</h1>
+  <p class="sub">运维视图：只展示计数、设置与脱敏日志，不提供聊天记录浏览。</p>
+</header>
+
+<section id="login" class="card">
+  <h2>连接</h2>
+  <p class="hint">口令在服务器 <code>.env</code> 的 <code>PANEL_TOKEN</code>（可写）或
+    <code>PANEL_READONLY_TOKEN</code>（只读）里。口令只保存在本浏览器标签页的
+    sessionStorage 中，关闭标签即清除。</p>
+  <div class="row">
+    <input id="token" type="password" placeholder="面板口令" autocomplete="off">
+    <button id="connect" type="button">连接</button>
+  </div>
+  <p id="login-status" class="status"></p>
+</section>
+
+<main id="panel" hidden>
+  <section class="card">
+    <h2>概览 <button id="refresh-overview" class="mini" type="button">刷新</button></h2>
+    <dl id="overview" class="grid"></dl>
+  </section>
+
+  <section class="card">
+    <h2>群设置 <button id="refresh-groups" class="mini" type="button">刷新</button></h2>
+    <p class="hint">与 Telegram 的 <code>/settings</code> 走同一套校验和同一条写路径。</p>
+    <div class="table-wrap">
+      <table id="groups">
+        <thead>
+          <tr>
+            <th>群 ID</th><th>模式</th><th>已开启工具</th><th>贴纸冷却</th>
+            <th>群内人设</th><th>消息数</th><th>最后消息</th><th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <div id="group-editor" class="editor" hidden>
+      <h3>编辑群 <span id="edit-chat-id"></span></h3>
+      <div id="edit-fields" class="fields"></div>
+      <p id="edit-status" class="status"></p>
+      <button id="close-editor" class="mini" type="button">关闭</button>
+    </div>
+  </section>
+
+  <section class="card" id="credentials-card">
+    <h2>凭据 <button id="refresh-credentials" class="mini" type="button">刷新</button></h2>
+    <p class="hint">只能写入或删除，永远读不回来（不显示明文，也不显示掩码片段）。
+      写入后需要重启机器人进程才会生效。写入文件：<span id="env-file">.env</span></p>
+    <div class="table-wrap">
+      <table id="credentials">
+        <thead><tr><th>名称</th><th>状态</th><th>来源</th><th>新值</th><th></th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p id="credentials-status" class="status"></p>
+  </section>
+
+  <section class="card">
+    <h2>日志尾部 <button id="refresh-logs" class="mini" type="button">刷新</button></h2>
+    <div class="row">
+      <label for="log-lines">行数</label>
+      <input id="log-lines" type="number" min="1" value="200">
+    </div>
+    <pre id="logs"></pre>
+  </section>
+</main>
+
+<p class="footer">GroupBuddy 控制面板 · 口令只走 Authorization 头 · 数据不出本机</p>
+<script src="/static/app.js"></script>
+</body>
+</html>

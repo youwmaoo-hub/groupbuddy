@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+.venv/
+__pycache__/
+*.py[cod]
+/storage/
+*.bak
+*.db
+*.db-wal
+*.db-shm
+.idea/
+.vscode/
+
+# 贴纸素材不入库（来源/许可与导入流程见 deploy/stickers/README.md）
+/deploy/stickers/assets/

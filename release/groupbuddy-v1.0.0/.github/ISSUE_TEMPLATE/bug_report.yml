@@ -1,0 +1,74 @@
+name: Bug 报告
+description: 报告一个可复现的缺陷（安全问题请走 SECURITY.md 的私密渠道）
+title: "[bug] "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢反馈。**不要粘贴真实 Token、API Key、群聊数据或运行数据库内容**，
+        需要贴日志时请先脱敏。安全漏洞请不要开公开 issue，见 `SECURITY.md`。
+  - type: textarea
+    id: symptom
+    attributes:
+      label: 现象
+      description: 实际发生了什么？期望发生什么？
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+      description: 尽量最小化；能离线复现最好（`tests/offline/` 里的一条用例就是最好的复现）。
+      placeholder: |
+        1. 配置 ...
+        2. 在群里发送 ...
+        3. 观察到 ...
+    validations:
+      required: true
+  - type: input
+    id: commit
+    attributes:
+      label: 提交 / 版本
+      description: 出问题的提交短哈希（`git rev-parse --short HEAD`）
+    validations:
+      required: true
+  - type: dropdown
+    id: evidence
+    attributes:
+      label: 证据来源
+      description: 本机结果不能代表真机结论（见 AGENTS.md §10）
+      options:
+        - 本机（Windows / 离线 / FakeBackend）
+        - 真机（Linux / rootless Podman / 真实 workspace）
+        - 两者都有
+        - 不确定
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: 环境
+      description: 操作系统、Python 版本、沙箱后端（`SANDBOX_BACKEND`）、是否启用配额/搜索后端等
+      placeholder: |
+        OS: Debian 12
+        Python: 3.13.x
+        SANDBOX_BACKEND: auto (rootless Podman 4.3.1)
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志或报错（已脱敏）
+      description: 只要相关片段；请确认不含凭据、Token、群 id 与个人信息
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: 提交前确认
+      options:
+        - label: 我已搜索过已有 issue，没有重复
+          required: true
+        - label: 我粘贴的内容已脱敏（无 Token / API Key / 群聊数据 / 数据库内容）
+          required: true

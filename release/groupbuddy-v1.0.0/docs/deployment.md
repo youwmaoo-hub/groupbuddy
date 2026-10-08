@@ -1,0 +1,378 @@
+# 部署与运行环境
+
+负责：运行环境契约、目录布局与持久化、配置注入、时间与 UTC、超时与优雅关闭、进程管理、健康检查、更新回滚、可迁移、Bot 与沙箱的隔离。
+上游：`docs/architecture.md`（形态与分层）、`docs/security.md`（边界与权限）。
+改动影响：部署方式或持久化目录变化需同步 `docs/database.md`（备份）、`TODO.md`（阶段）。
+
+## 1. 环境契约（同一份代码，两种环境）
+
+- 开发：本机 Windows（可选 Docker），用于编写与离线测试；沙箱在 Windows 上只用 FakeBackend 离线测试，不跑真实容器。
+- 生产：Linux VPS（rootless Podman），按 24/7 服务运行；VPS 上线清单见 §12。
+- 允许存在的差异只有 `.env`、容器运行时与进程托管方式；业务代码不写平台分支、不依赖 Windows 特性。
+- 禁止把本机路径、用户名、主机名、IP、域名写进代码或文档。
+- 路径一律用 `pathlib` + 配置项拼接，不用字符串硬编码盘符或斜杠。
+- 支持部署方式：Docker/Podman 容器，或 systemd 直接跑 Python；控制面板是**可选**的第二个进程（`python -m app.control`，见 §13）。
+- 贴纸登记属一次性本地运维操作，三种方式都只读写 SQLite、不读 `.env`，schema 版本需要 ≥2（先启动一次 Bot 应用迁移）：
+  - 单张：`python scripts/register_sticker.py --chat-id … --file-id … --file-unique-id … --valence … --arousal … [--tags a,b] [--db storage/bot.db]`；输出不回显 `file_id`。
+  - 本地目录批量（推荐）：把素材放进 `deploy/stickers/assets/`（已 `.gitignore`），`python scripts/register_sticker.py --chat-id … --manifest deploy/stickers/catalog.json [--asset-dir deploy/stickers/assets] [--dry-run]`；`--asset-dir` 会拒绝路径穿越、校验素材存在与可选 `sha256`。
+  - 从 Telegram 贴纸包导入：`BOT_TOKEN=… python scripts/import_sticker_set.py --set-name <短名> --chat-id … [--catalog deploy/stickers/catalog.json] [--dry-run]`；按 emoji 匹配 `catalog.json` 的槽位，失败只报类型或 Telegram `description`，**不回显 Token**。
+  - 三种方式共用同一个幂等 UPSERT（唯一键 `(chat_id, file_unique_id)`），可重复执行；规格、来源与许可政策、核对 SQL 见 `deploy/stickers/README.md`。Telegram 自己的贴纸包与本项目 `stickers` 表是两回事：只有登记进表，`send_sticker` 才能按情绪取到。
+- 笔记登记同样属一次性本地运维操作：`python scripts/register_note.py --chat-id … --name … --text "…" [--db storage/bot.db]`；只读写 SQLite、不需要凭据，schema 版本需要 ≥3。日常增删改用群内 `/note`（仅群主，`/note del <名称>` 删除），脚本只用于迁移与应急。
+- 单机单进程优先；不引入 Kubernetes、微服务、Redis（明确不做清单见 §11）。
+
+## 2. 目录布局与持久化
+
+- `app/`（代码）：无状态，可随时重建；容器镜像只包含代码。
+- `storage/`（持久数据）：`bot.db`、`workspaces/<chat_id>/`、`logs/`、`backups/`。
+- 容器部署必须把 `storage/` 挂成 volume 或绑定挂载，容器重建/升级不得丢数据。
+- 目录真值以 `.env.example` 为准：`DATA_DIR`、`DB_PATH`、`WORKSPACE_ROOT`、`LOG_DIR`、`SANDBOX_TEMP_DIR`；默认值是相对路径，按**进程工作目录**解析，VPS 上建议写绝对路径（见 §12.4）。
+- 首次启动由程序创建缺失目录；目录不可写时拒绝启动（fail-closed）。`backups/` 由备份脚本按需创建（见 `docs/database.md` §5）。
+
+## 3. 配置注入
+
+- 只有 `app/config.py` 读取环境变量；其余模块只接收 `Settings`（见 `docs/architecture.md` §2）。
+- 必填只有 `BOT_TOKEN` 与 `LLM_API_KEY`（无默认值，缺失拒绝启动）；其余键都有代码默认值（`LLM_BASE_URL`、`LLM_MODEL`、`LLM_MODEL_STRONG`、`DATA_DIR`、`DB_PATH`、`WORKSPACE_ROOT`、`LOG_DIR`、`SANDBOX_TEMP_DIR`、`TIMEZONE` 等）。生产环境建议把路径类键显式写出来（见 §12.4）。
+- 模型档位（可选）：`LLM_MODEL_STRONG` 留空 = 不升级，所有轮次都用 `LLM_MODEL`（默认行为，与升级前完全一致）；填了才会对规则判定为复杂的轮次用该模型（见 `docs/token.md` §5.1）。改完按 §12.5 核对启动日志里的 `配置加载完成` 一行（未配置时显示 `LLM_MODEL_STRONG=(未配置)`）。
+- 工具轮次（可选）：`TOOL_MAX_ROUNDS` 是**全局上限**（默认 2，可选 0–4），按意图分档只在这个上限之下调低（闲聊 1 轮，复杂任务与无法判断用全局上限）；想把链 3 的「代码调试 4 轮」放开就把它设为 4（见 `docs/token.md` §5.2）。
+- 实例身份：`BOT_INSTANCE_ID`（默认 `default`）。多实例部署时每实例注入不同的 `DATA_DIR`/`DB_PATH`/`WORKSPACE_ROOT`，互不共享目录（见 `docs/domain.md` §2）。
+- 主动接话（阶段 8「群宠体验升级」，全部是纯规则、0 token，见 `docs/requirements.md` §2.1）：
+  - `BOT_ALIASES`：Bot 的昵称列表（逗号分隔，默认空）。**建议显式配置成你自己 Bot 的名字**（如 `BOT_ALIASES=MyBot,小助手`）：别名既用于"被叫到"的强触发，也参与 `@名字` 识别；不要写 `bot` 这类通用词，否则 `@其他bot` 会被误判成叫本 Bot。
+  - `PROACTIVE_TOPIC_MAX_MESSAGES`（默认 8）：与 Bot 上一条发言共享关键词的"话题延续"窗口，按条数计。
+  - `PROACTIVE_QUIET_MESSAGES`（默认 20）：安静多久之后算"新话题开场"，按条数计；这两个键（连同 `FOLLOWUP_MAX_MESSAGES` 追问窗口）**只影响日志里的原因码**，不再决定回不回。
+  - `PROACTIVE_COOLDOWN_SECONDS`（默认 20 秒）：未点名回复的冷却；`DUPLICATE_WINDOW_SECONDS`（默认 300 秒）：同一人同一句话在该窗口内只接第一次，0 = 关闭。**已删除** `PROACTIVE_WINDOW_SECONDS` / `PROACTIVE_MAX_PER_WINDOW`（不再有每窗口上限，`.env` 里留着也会被静默忽略）。被点名（@ / 回复 / 别名）不受冷却与重复过滤限制。
+  - `DEBOUNCE_SECONDS` / `DEBOUNCE_MAX_MESSAGES` 默认 **0 / 1**：连发消息不合并，每条各自成批，让每条消息都有接话机会；调大后恢复"静默窗口内合并"。合并与冷却无关，被合并的多条仍只产生一次回复。
+  - 群消息接收前提见 §12.10（Telegram 侧 Privacy Mode / 管理员）——不满足时普通群消息根本到不了进程，主动接话不会生效。
+- 配额（阶段 8 F5.3）：`QUOTA_DAILY_TOKENS` / `QUOTA_MONTHLY_TOKENS`，**0 或未配置 = 不限额**；按 `chat_id` 按 `TIMEZONE` 的自然日/自然月统计该群已用 token，超额时本轮不调用模型（语义见 `docs/token.md` §4.1）。配额不随群设置变化，只能由部署方改 `.env`。
+- `.env.example` 列出常用键与默认值；`.env` 只写需要覆盖的键。键名拼错会被**静默忽略**（走默认值），改完按 §12.5 核对启动日志里的 `配置加载完成` 一行。
+- 控制面板（可选，默认关闭）：`PANEL_ENABLED`（默认 `false`）、`PANEL_HOST`（默认 `127.0.0.1`）、`PANEL_PORT`（默认 `8787`）、`PANEL_TOKEN`（管理员口令）、`PANEL_READONLY_TOKEN`（只读口令）。两个口令非空时都至少 12 字符，否则配置校验直接拒绝；生成方式与部署步骤见 §13。
+
+## 4. 时间与 UTC
+
+- 数据库内部一律 UTC（Unix 秒）；展示层与记账日再按 `TIMEZONE` 转换（默认 `Asia/Shanghai`）。
+- 按天聚合的 `usage.day` 按 `TIMEZONE` 归属（见 `docs/database.md` §1）。
+- 日志时间戳带时区；跨时区排查时以 UTC 为准。
+
+## 5. 超时与优雅关闭
+
+- 全部外部调用有上限：LLM 请求、工具执行、沙箱执行、Telegram 出站、数据库忙等；禁止无限等待。
+- SIGTERM/SIGINT：停止接收新更新 → 限时排空当前任务与出站队列 → 落库并关闭数据库与 HTTP 连接。
+- 排空超时后强制退出；出站队列中未发送的消息**不重试**（避免重复发送）。
+- 所有后台任务（清理、摘要、健康心跳）必须可停止、可恢复，不依赖手动 Ctrl+C。
+- 备份不走后台任务（阶段 9）：`scripts/backup_db.py` 只读源库、可随时执行，见 `docs/database.md` §5。
+
+## 6. 进程管理与自愈
+
+- 单机单进程；同一 Bot Token 只允许一个 polling 进程。
+- 托管方式（阶段 9 已落地）：systemd **用户级**单元 `Restart=always`（模板与命令见 §12.9）或容器 `restart: unless-stopped`；
+  托管只负责拉起与重启，进程内不做热加载。
+- VPS 重启后自动拉起；SQLite 与 workspace 保留，直接恢复运行。
+- 实例生命周期由部署控制：创建/停用实例 = 写配置 + 启/停进程；阶段 1–9 不做进程内热加载（见 `docs/architecture.md` §10）。
+
+## 7. 健康检查
+
+- 只读轻量：进程存活、最后一次成功处理更新的时间戳、数据库可读、出站队列深度。
+- 形态：`storage/health.json` 心跳 + 日志；**机器人进程本身不新开 HTTP 端口**。控制面板是独立进程、可选开启（见 §13），开与不开都不影响心跳这条健康路径。
+- 健康检查不得调用 LLM、不得产生 token 成本；失败只告警、不自动重启（避免重启风暴）。
+- 心跳周期 60 秒（`app/ops/health.py`，进程内常量，不需要新的环境变量）；快照键为
+  `instance` / `ok` / `started_at` / `checked_at` / `uptime_s` / `last_update_at` / `db_ok` / `outbound_pending`，
+  同目录临时文件 + `os.replace` 原子替换；快照只含计数与时间戳，不含路径、异常堆栈、环境变量或凭据。
+- `/health` 命令（阶段 8 F5.4）与心跳**共用同一个内部状态**（`HealthState`），只是把快照渲染成简短文本回显；
+  命令属群管理员限定、0 token、不进模型，失败时只回固定短句（`docs/security.md` §2.1）。
+
+## 8. 更新与回滚
+
+- 更新 = 拉取新代码 / 重建镜像 → 停旧起新 → 迁移在启动时前进；数据目录不动。
+- 回滚 = 起上一个镜像或提交；回滚前先备份数据库（见 `docs/database.md` §5）。
+- `user_version` 高于代码支持的版本（降级运行）时拒绝启动，不静默改库。
+
+### 8.1 本地 git bundle 更新流程（阶段 9 已实测；2026-10-08 起真机 `origin` 已是 GitHub，bundle 只作装代码通道）
+
+1. 本机产出 bundle 并核对：`git bundle create <本地临时目录>/dsh_deploy_<短sha>.bundle main`。
+2. 传到目标机并比对校验和：`scp -i <部署用私钥> <bundle> root@<vps>:/tmp/`，两端 `sha256sum` 必须一致。
+3. 远端以 Bot 用户操作（`root` 直接在该仓库跑 git 会报 `dubious ownership`）：
+   `sudo -u bot bash -lc 'cd <APP_DIR> && git bundle verify /tmp/<bundle> && git fetch /tmp/<bundle> main:refs/remotes/origin/main && git checkout <完整sha>'`
+   （`bash -lc` 的内容必须用单引号，双引号会让外层 shell 先展开 `$()`/`$?`，实测会导致 `cd` 不生效。**不要再把 `origin` 指到 bundle**：2026-10-08 起真机 `origin` = GitHub 公开仓库，`bot` 用户有只读部署密钥，直接 `git fetch origin` 即可，见 `docs/status.md` §4.12；按路径 `git fetch /tmp/<bundle>` 与本步等价，不受 `origin` 影响。）
+4. 重启并核对启动成功：`sudo -u bot env XDG_RUNTIME_DIR=/run/user/$(id -u bot) systemctl --user restart groupbuddy`；
+   `is-active` 与 `ActiveState` 应为 `active`，`storage/logs/bot.log` 尾部应出现 `Bot 就绪` 与 `启动完成`。
+5. 数据不动：更新前后对比 `storage/bot.db`（`user_version`、关键表行数）与 `storage/workspaces/`，必须一致。
+
+- 回滚 = 把第 3 步的 `<完整sha>` 换成上一个已知可用提交，再走第 4、5 步；**回滚前先备份**（`docs/database.md` §5）。
+- 新版本启动失败时按同样四步回到上一提交；失败证据看
+  `systemctl --user show groupbuddy -p NRestarts -p ExecMainStatus -p ActiveState`（真机没有 journal 文件，`journalctl --user` 不可用）
+  与 `storage/logs/bot.log`。
+- 阶段 9 演练结论：更新成功、故意坏版本启动失败可检出、回滚后 systemd 恢复 `active`、`bot.db` 与 workspace 全程未丢
+  （证据见 `docs/status.md` §4.4）。
+- bundle 放在 `/tmp` 只适合当次传输，重启或清理后即消失：部署完成后把 bundle 复制到 Bot 用户的持久目录
+  （如 `<bot-home>/bundles/`）作为存档；**真机 `origin` 自 2026-10-08 起已是 GitHub 公开仓库**（`bot` 用户只读部署密钥，
+  `docs/status.md` §4.12），所以后续更新也可直接 `git fetch origin && git checkout <sha>`，不必再改 `origin`。回滚本身只依赖本地已有的提交历史，
+  与 bundle 是否还在无关。
+
+## 9. 可迁移
+
+- 只依赖三样：容器运行时、持久目录、`.env`。
+- 不得依赖特定 VPS 厂商、IP、域名、用户名、磁盘绝对路径。
+- 换机步骤固定为：重新部署代码 + 恢复持久数据 + 配置 `.env`；任何一步需要改代码都算缺陷。
+
+## 10. 系统隔离（Bot 与沙箱）
+
+- Bot 进程以非 root 专用用户运行，不属于 `docker` 组。
+- Bot 进程自身**不挂载 docker/podman socket**，拿不到创建容器或宿主 root 的能力。
+- `run_code` 经独立沙箱执行（见 `docs/security.md` §4）；沙箱只看到本群 workspace 与一个干净临时目录。
+- 若确需调用容器运行时，只能由权限受限的独立组件用固定模板调用（白名单参数）。
+- 模型永远拿不到宿主 shell、容器 socket、宿主目录、宿主环境变量。
+- 沙箱镜像 `python:3.12-slim` 由**部署阶段预拉取**（`podman pull` / `docker pull`），运行期不 pull、容器无网络；
+  `run_code` 运行期只做本地执行，不做任何下载。
+- 沙箱后端用 rootless Podman：专用非 root 用户运行，`SANDBOX_TIER_B=auto` 时用 `--userns=keep-id` 映射宿主 uid，
+  容器内仍是非 root 用户并只能读写本群 workspace；Docker 只支持 Tier A（无 workspace 写入）。
+- 上线或换机后跑一次真实验收 `scripts/verify_sandbox.py`（无网络、非 root、只读根、越界写失败、超时销毁、
+  其他群 workspace 与宿主目录不可见）；Tier B 任一项不 PASS 就把 `SANDBOX_TIER_B=off` 只保留 Tier A。
+
+## 11. 明确不做
+
+Kubernetes、微服务、Redis、外部数据库、Nginx、Webhook 入口、多机 HA、CI/CD 平台、自动扩容。
+
+控制面板（§13）不改变这份清单：它是**同机本地的第二个 Python 进程**，不是 Webhook 入口、不需要 Nginx、不引入队列或外部数据库，也不提供公网暴露方案。
+
+## 12. Linux VPS 上线准备（阶段 7 沙箱）
+
+正式生产目标是 **Linux + rootless Podman**；Windows 只做开发与离线测试（沙箱走 FakeBackend，不跑真实容器）。
+本节是 VPS 到位后的上线清单。**真机验收已在阶段 7 完成**（Debian 12 + rootless Podman 4.3.1 + cgroup v2 + Python 3.11.2，13 项全 PASS：Tier A 7/7、Tier B 4/4）；
+当前事实、commit 与证据路径见 `docs/status.md`，条件与判读契约仍以本节 §12.1–§12.9 为准。
+
+### 12.1 目标机条件
+
+- Linux（x86_64 / arm64）+ systemd + cgroup v2；Podman ≥ 4 且以 rootless 运行（`podman info` 显示 `cgroupVersion: v2`）。
+- 专用非 root 用户运行 Bot（下称 `<bot 用户>`）：不属于 `docker` 组、不挂载 podman socket。
+- 已装 Python ≥3.11 虚拟环境与 Podman CLI；项目目录含 `app/`、`.env`、`storage/`。
+  （真机基线是 Debian 12 官方 `python3.11` + `python3-venv`，**不要求 3.12**；本机开发环境为 3.13。应用代码不使用任何 3.12 专有特性，`python:3.12-slim` 只是**沙箱镜像**，与宿主解释器无关。）
+- 资源建议：内存 ≥ 1 GB（Bot 常驻 + `SANDBOX_MEMORY_MB` 256 × `SANDBOX_MAX_CONCURRENT` 2），磁盘 ≥ 5 GB（镜像 + 数据 + 日志）。
+- 容器运行时是**可选依赖**：没有 Podman/Docker 时 Bot 照常运行，只是 `run_code` 一律 `sandbox_unavailable`（fail-closed，不退回宿主机）。
+
+### 12.2 安装并启用 rootless Podman（一次性）
+
+```bash
+sudo apt-get update && sudo apt-get install -y podman        # Debian/Ubuntu；RHEL 系用 dnf install podman
+sudo usermod --add-subuids 100000-165535 --add-subgids 100000-165535 <bot 用户>
+sudo loginctl enable-linger <bot 用户>
+```
+
+用**运行 Bot 的同一个用户**（不加 `sudo`）核对：
+
+```bash
+sudo -iu <bot 用户>
+podman info --format '{{.Host.Security.Rootless}}'   # 必须输出 true
+grep <bot 用户> /etc/subuid /etc/subgid               # 各一行，范围不重叠
+```
+
+- 报 subuid/subgid 相关错误时执行 `podman system migrate` 后重试。
+- 拉镜像受网络影响：部署阶段先配好镜像源或代理；运行期不再下载（见 §12.3）。
+
+### 12.3 预拉沙箱镜像（运行期禁止 pull）
+
+```bash
+podman pull python:3.12-slim
+podman image exists python:3.12-slim && echo IMAGE_OK
+```
+
+### 12.4 目录、属主与 `.env`
+
+- VPS 上用绝对路径写 `DATA_DIR`、`DB_PATH`、`WORKSPACE_ROOT`、`LOG_DIR`、`SANDBOX_TEMP_DIR`（默认值是相对**进程工作目录**的相对路径）。
+- `storage/`（`bot.db`、`workspaces/`、`logs/`、`sandbox/`）属主必须是 `<bot 用户>`；程序首次启动创建缺失目录，不可写则拒绝启动。
+- `.env` 权限 `600`、属主同一用户；不要放进 `storage/`，不要提交进 Git。
+- 沙箱键保持默认即可：`SANDBOX_BACKEND=auto`、`SANDBOX_IMAGE=python:3.12-slim`、`SANDBOX_TIER_B=auto`、`SANDBOX_MAX_CONCURRENT=2`；**不要**改成运行期自动拉取镜像。
+
+### 12.5 启动 Bot
+
+```bash
+cd <项目根>            # 含 app/、.env、storage/
+.venv/bin/python -m app.main
+```
+
+启动日志逐项核对（任一不对先不要开放 `run_code`）：
+
+- `配置加载完成 … SANDBOX_BACKEND=auto …`：确认 `.env` 真被读到（键名拼错会被静默忽略，见 §3）。
+- `沙箱状态 {'backend': 'podman', 'available': True, 'workspace_write': True|False, …}`：`available=False` 说明后端不可用，此时 `run_code` 一律 `sandbox_unavailable`（fail-closed）。
+- `Bot 就绪 username=… bot_id=… model=…`：轮询已建立。
+- 停止用 `SIGTERM`（`Ctrl+C` 或 `kill <pid>`）：停收更新 → 限时排空 10 秒 → 落库并关闭；**不要** `kill -9`。
+- 阶段 1–9 不做进程内热加载：改 `.env` 或代码后重启进程。
+- 生产托管时用 systemd 用户级单元执行同一条命令（见 §12.9），停止/重启走 `systemctl --user stop/restart`，
+  等价于发 `SIGTERM`；仍然**不要** `kill -9`。
+
+### 12.6 真机验收 `scripts/verify_sandbox.py`
+
+```bash
+cd <项目根>
+.venv/bin/python scripts/verify_sandbox.py           # 镜像已预拉取（推荐）
+.venv/bin/python scripts/verify_sandbox.py --pull    # 允许脚本先拉取镜像（仅部署阶段）
+```
+
+- 必须与 Bot 用**同一个用户、同一份配置**执行；脚本只写 `storage/workspaces/999001/`（结束时删除）与沙箱临时目录探针。
+- 输出逐项 `PASS/FAIL`，每项带 tier 归属 `[A]`/`[B]`/`[AB]`（`AB` = 两种 tier 都要满足的全局清理检查），末尾给出 `Tier A` / `Tier B` 结论与 `合计 N 项，失败 M 项`；退出码 0 = 全部通过。当前共 **15 项**（T6 起比阶段 7 的 13 项多「能力集清空」「禁止提权」两项，真机需在下一次部署时复跑对齐）。
+- **判定口径（技术债 T7 已修，2026-10-07）**：`无网络` 与 `只读根` 是「期望非零退出」的负向断言，但不再只看退出码 ——
+  探针先打印标记（`PROBE net` / `PROBE rofs`）再触发被禁止的操作，标记必须出现（证明容器里的解释器确实运行了），
+  且 stderr 必须带预期错误签名（无网络：`TimeoutError`/`ConnectionError`/`OSError`/`gaierror`/`unreachable`；
+  只读根：`Read-only file system`/`PermissionError`/`EROFS`/`Errno 13`/`Errno 30`）。
+  这样「容器根本没启动 / 解释器缺失」与「被正确拒绝」可以区分（阶段 7 首次验收曾因只看退出码漏报 7 项 workdir 启动失败）。
+- `Tier A` / `Tier B` 结论按**显式 tier 归属**聚合（不再按名字前缀）：`Tier A` 覆盖 9 项沙箱检查（含 T6 新增的能力集、提权位）+ 2 项全局清理检查，`Tier B` 覆盖 4 项 workspace 检查 + 同样的 2 项全局检查；
+  任一项 FAIL 都会翻转对应结论，也会计入 `合计 N 项，失败 M 项` 与退出码。
+  判定逻辑本身由 `tests/offline/test_verify_sandbox.py` 用假后端离线覆盖（脚本无法在 Windows/无 Podman 环境真跑）。
+
+| 结论 | 判定方式 | 后续动作 |
+|---|---|---|
+| Tier A 通过 | Tier A 各项全 PASS：纯计算、非 root、能力集清空（`--cap-drop=ALL`）、提权位已禁（`no-new-privileges`）、无网络、只读根、fsize 上限、cgroup 资源上限、超时销毁、无残留容器、临时目录已清理 | 可开放纯计算 `run_code` |
+| Tier B 通过 | `workspace_write=True` 且 Tier B 各项全 PASS：本群 workspace 读写且容器内非 root、其他群不可见、宿主目录不可见 | 可开放 `workspace=true` |
+| Tier B 失败 | `workspace_write=False`，或 Tier B 任一项 FAIL | 在 `.env` 写 `SANDBOX_TIER_B=off` 并重启，只保留 Tier A；**不要**用 privileged / root / 宿主目录挂载放宽 |
+
+### 12.7 开放 `run_code`（群开关）
+
+- `run_code` 是 L3 工具，群开关 `chat_settings.allow_code` 默认 0；`workspace=true` 还需要 `allow_write`（见 `docs/security.md` §2）。
+- 阶段 8 之前没有群主命令，只能按 `docs/database.md` §2 直接改 `chat_settings`（先停进程再改，避免并发写）；改完重启进程。
+- 验收未通过或不确定时保持关闭：默认关闭时该工具不会出现在提示词里。
+
+### 12.8 24/7 运行注意（当前实现已具备）
+
+- 数据全在 `storage/`：SQLite（WAL + `busy_timeout=5000`）、每群 `workspaces/`、`logs/`、`sandbox/`；备份与恢复见 §8 与 `docs/database.md` §5（阶段 9 已实现 `scripts/backup_db.py`，只读源库、可在运行中备份；WAL 模式下不要直接 `cp` 数据库文件）。
+- 日志：`LOG_DIR` 下 5 MB × 3 轮转，统一经 SecretFilter 脱敏；日常 `LOG_LEVEL=INFO` 足够，排查时临时改 DEBUG。
+- 沙箱临时文件用后即删；启动时清理带 `groupbuddy=1` 标签的残留容器；被 `SIGKILL` 后可能留下空临时目录，直接清空 `SANDBOX_TEMP_DIR` 即可。
+- 健康检查（`storage/health.json`）与 `/health` 已在阶段 8 F5.4 落地（见 §7）；人工检查仍是「进程存活 + 日志 + `scripts/verify_sandbox.py` 是否通过」。
+- 工具失败留痕写入 `storage/bot.db` 的 `tool_failures`（保留 7 天，启动时与每小时清理）；`/stats` 可看本群当日用量与错误率。
+- 单机单进程：同一个 Bot Token 只允许一个 polling 进程；进程托管（systemd 或容器 `restart`）已在阶段 9 落地，见 §12.9。
+
+### 12.9 systemd 用户级单元（阶段 9 最小生产闭环）
+
+选择理由：VPS 已有 `bot` 专用用户与 rootless Podman，用户级单元不需要 root 权限、不引入新组件、不开新端口，
+配合 §12.2 的 `loginctl enable-linger <bot 用户>` 即可机器重启后自动拉起；隔离约束（§10）不变。
+
+单元文件：`<bot 用户家目录>/.config/systemd/user/groupbuddy.service`（权限 `644`、属主 `<bot 用户>`），
+`WorkingDirectory` 必须写成项目根 —— `.env` 是按**进程工作目录**解析的（§3），少了它 `BOT_TOKEN` 会读不到。
+
+```ini
+[Unit]
+Description=<实例名> Telegram bot（最小生产闭环，阶段 9）
+Documentation=file://<项目根>/docs/deployment.md
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=<项目根>
+ExecStart=<项目根>/.venv/bin/python -m app.main
+Environment=PYTHONUNBUFFERED=1
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target
+```
+
+- `Restart=always` + `RestartSec=5`：异常退出（含 `SIGKILL`）自动拉起；`KillSignal=SIGTERM`/`TimeoutStopSec=30`
+  给应用留出 §5 的 10 秒排空；`NoNewPrivileges=yes` 与 §10 一致，单元不接触 podman/docker socket。
+- 只用应用已支持的键；`.env` 不开新键，`.env.example` 不变。
+
+常用命令（root 以 `<bot 用户>` 身份操作**必须**显式给 `XDG_RUNTIME_DIR`，否则报 `Failed to connect to bus: No medium found`）：
+
+```bash
+U=<bot 用户>
+sudo -u "$U" env XDG_RUNTIME_DIR=/run/user/$(id -u "$U") systemctl --user daemon-reload
+sudo -u "$U" env XDG_RUNTIME_DIR=/run/user/$(id -u "$U") systemctl --user enable --now groupbuddy.service
+sudo -u "$U" env XDG_RUNTIME_DIR=/run/user/$(id -u "$U") systemctl --user status groupbuddy.service
+sudo -u "$U" env XDG_RUNTIME_DIR=/run/user/$(id -u "$U") systemctl --user stop|restart groupbuddy.service
+sudo -u "$U" env XDG_RUNTIME_DIR=/run/user/$(id -u "$U") systemctl --user show -p MainPID -p NRestarts groupbuddy.service
+```
+
+核对口径：
+
+- `systemctl --user is-enabled` = `enabled`，且 `<家目录>/.config/systemd/user/default.target.wants/groupbuddy.service` 符号链接存在；`loginctl show-user "$U"` 的 `Linger=yes`（否则无人登录时不会随机器启动）。
+- 启动日志按 §12.5 逐项核对；`NRestarts` 在 `kill -9 <MainPID>` 之后 +1 且进程换新 PID，说明自动重启生效。
+- 用户级 `journalctl --user` 在目标机上不保证有 journal 文件（实测 `No journal files were found`），
+  排查以 `storage/logs/bot.log` 为准；`storage/health.json` 的 `checked_at` 每 60 秒推进、重启后 `uptime_s` 归零。
+- 容器托管（`compose.yaml` / `Dockerfile`）属阶段 9 的后续可选路径，本阶段未采用，也不在本阶段验收。
+
+### 12.10 群消息接收前提（Privacy Mode / 群管理员）
+
+- Telegram 默认给 Bot 开启 **Privacy Mode**：群里只有 @ 到它、回复它或命令才会把 update 推给它，**普通聊天消息根本不会到达进程**。这时 `docs/requirements.md` §2.1 里的弱触发（主动接话）在真机上完全不生效——这是 Telegram 侧配置，不是代码缺陷；进程侧不需要也不应该绕过。
+- 二选一的最小运维处理（都不改代码、不改 `.env`）：
+  1. BotFather 关掉隐私模式：`/mybots` → 选 Bot → `Bot Settings` → `Group Privacy` → `Turn off`（等价于 `/setprivacy` → 选 Bot → `Disable`）；此后它在所有群里都能收到普通消息。
+  2. 或把该 Bot 设为这个群的管理员（管理员身份会绕过 Privacy Mode）。注意：这属于 Telegram 侧管理员，与本项目用 `getChatAdministrators` 做的群主命令判定（`docs/security.md` §2.1）互不影响。
+- 验证（不改代码）：把 Bot 拉进群后发一条普通消息（不 @、不回复），看 `storage/logs/bot.log` 有无该 `update_id` 的处理记录、`messages` 表是否新增该条；若完全没有，就是 Privacy Mode 未关。
+- 进程侧不额外配置：`app/main.py` 用 `start_polling(...)` 默认接收全部 update，不设 `drop_pending_updates`、不按 `allowed_updates` 过滤；`app/telegram/handlers.py` 只处理消息类 update。
+- 其他 Bot 的消息即使到达也会在触发判定前被丢弃（`docs/security.md` §12），既不触发回复也不占用冷却与额度。
+
+## 13. 控制面板（可选，阶段 10，ADR 0011）
+
+面板是**可选的第二个 Python 进程**，与本 Bot 共用同一个 SQLite 库；不装、不开、停掉都不影响机器人。
+
+### 13.1 能做什么 / 不做什么
+
+- 能做：看运行概览（实例、心跳与运行时长、消息数、当日 token 用量与工具失败、出站队列深度、数据库可读）；列出与查看群；改群设置（`mode`、各工具开关、`sticker_cooldown`、群人设）；写入/替换/删除 `BOT_TOKEN` 与 `LLM_API_KEY`；看日志尾部（最多 256 KB、脱敏、1–1000 行，默认 200）。
+- 不做：启停或重启机器人（只提示需要重启）；写 `.env` 以外的任何文件；多用户账号与角色；跨实例聚合；公网暴露方案（不给 Nginx/HTTPS 配置）。
+
+### 13.2 前置条件
+
+- 机器人已能正常运行（`.env` 里有 `BOT_TOKEN` 与 `LLM_API_KEY`）。
+- `pip install -r requirements.txt`：`fastapi` / `uvicorn` 在依赖清单末尾且**是可选项**；不装它们时机器人照常运行，`python -m app.control` 会直接 `ModuleNotFoundError`。
+- 生成口令（管理员与只读各一个，建议 ≥24 字符）：`python -c "import secrets;print(secrets.token_urlsafe(24))"`。
+- `.env` 追加（示意，**别把真实口令提交进 Git**）：
+
+```
+PANEL_ENABLED=true
+PANEL_HOST=127.0.0.1
+PANEL_PORT=8787
+PANEL_TOKEN=<管理员口令，≥12 字符>
+PANEL_READONLY_TOKEN=<只读口令，≥12 字符；不想给只读就留空>
+```
+
+- 口令非空时短于 12 字符会被配置校验直接拒绝（启动即报错，不会静默降级）；`.env` 权限保持 600（§12.4），面板写入也保持 0600。
+
+### 13.3 启动与访问
+
+- 前台试跑：`python -m app.control`。未设 `PANEL_ENABLED=true`、或两个口令都为空时，进程以退出码 2 拒绝启动并打印中文原因。
+- 本机访问 `http://127.0.0.1:8787/`；远程不要直接开端口，用 SSH 隧道：
+  `ssh -L 8787:127.0.0.1:8787 <bot 用户>@<vps>`，然后在浏览器打开 `http://127.0.0.1:8787/`。
+- 接口鉴权走 `Authorization: Bearer <token>`：管理员口令可读可写，只读口令只能读（写操作返回 403）。口令不进 URL、不用 Cookie。
+
+### 13.4 systemd 用户级单元（可选）
+
+与 §12.9 同一套约定，`WorkingDirectory` 必须是项目根，`<APP_DIR>` 换成实际路径：
+
+```ini
+[Unit]
+Description=groupbuddy control panel
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=<APP_DIR>
+ExecStart=<APP_DIR>/.venv/bin/python -m app.control
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target
+```
+
+```bash
+U=<bot 用户>; R=/run/user/$(id -u "$U")
+sudo -u "$U" env XDG_RUNTIME_DIR=$R systemctl --user daemon-reload
+sudo -u "$U" env XDG_RUNTIME_DIR=$R systemctl --user enable --now groupbuddy-panel
+sudo -u "$U" env XDG_RUNTIME_DIR=$R systemctl --user status groupbuddy-panel --no-pager
+```
+
+### 13.5 改动什么时候生效
+
+- 群设置：**下一轮消息即生效**（每轮重新读 `chat_settings`），不需要重启任何进程。
+- 凭据：写入 `.env` 后必须 `systemctl --user restart groupbuddy` 才生效；面板只回 `restart_required: true`，不会替你重启。
+- 日志：面板读 `<LOG_DIR>/<LOG_FILE>` 的尾部并在返回前脱敏；日志轮转后读到的就是新文件。
+
+### 13.6 运维注意
+
+- 两个进程共用 SQLite（WAL + `busy_timeout=5000`）：面板请求挂住不会锁死机器人；反过来也不要一边跑面板一边用 `sqlite3` 开长事务。
+- 安全底线：默认只监听回环；口令泄露就在 `.env` 里换新口令并重启面板；面板不记录访问日志（含口令的 Header 不会落盘）。
+- 关闭面板：把 `PANEL_ENABLED` 改回 `false` 并 `systemctl --user disable --now groupbuddy-panel`，机器人零影响。
+- 面板的完整安全边界见 `docs/security.md` §2.3 与 §6；为什么这样选见 ADR 0011。

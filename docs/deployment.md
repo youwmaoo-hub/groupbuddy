@@ -84,13 +84,13 @@
 - 回滚 = 起上一个镜像或提交；回滚前先备份数据库（见 `docs/database.md` §5）。
 - `user_version` 高于代码支持的版本（降级运行）时拒绝启动，不静默改库。
 
-### 8.1 本地 git bundle 更新流程（阶段 9 已实测，不需要正式远端）
+### 8.1 本地 git bundle 更新流程（阶段 9 已实测；2026-10-08 起真机 `origin` 已是 GitHub，bundle 只作装代码通道）
 
 1. 本机产出 bundle 并核对：`git bundle create <本地临时目录>/dsh_deploy_<短sha>.bundle main`。
 2. 传到目标机并比对校验和：`scp -i <部署用私钥> <bundle> root@<vps>:/tmp/`，两端 `sha256sum` 必须一致。
 3. 远端以 Bot 用户操作（`root` 直接在该仓库跑 git 会报 `dubious ownership`）：
-   `sudo -u bot bash -lc 'cd <APP_DIR> && git bundle verify /tmp/<bundle> && git fetch /tmp/<bundle> main:refs/remotes/origin/main && git remote set-url origin /tmp/<bundle> && git checkout <完整sha>'`
-   （`bash -lc` 的内容必须用单引号，双引号会让外层 shell 先展开 `$()`/`$?`，实测会导致 `cd` 不生效。）
+   `sudo -u bot bash -lc 'cd <APP_DIR> && git bundle verify /tmp/<bundle> && git fetch /tmp/<bundle> main:refs/remotes/origin/main && git checkout <完整sha>'`
+   （`bash -lc` 的内容必须用单引号，双引号会让外层 shell 先展开 `$()`/`$?`，实测会导致 `cd` 不生效。**不要再把 `origin` 指到 bundle**：2026-10-08 起真机 `origin` = GitHub 公开仓库，`bot` 用户有只读部署密钥，直接 `git fetch origin` 即可，见 `docs/status.md` §4.12；按路径 `git fetch /tmp/<bundle>` 与本步等价，不受 `origin` 影响。）
 4. 重启并核对启动成功：`sudo -u bot env XDG_RUNTIME_DIR=/run/user/$(id -u bot) systemctl --user restart groupbuddy`；
    `is-active` 与 `ActiveState` 应为 `active`，`storage/logs/bot.log` 尾部应出现 `Bot 就绪` 与 `启动完成`。
 5. 数据不动：更新前后对比 `storage/bot.db`（`user_version`、关键表行数）与 `storage/workspaces/`，必须一致。
@@ -102,7 +102,8 @@
 - 阶段 9 演练结论：更新成功、故意坏版本启动失败可检出、回滚后 systemd 恢复 `active`、`bot.db` 与 workspace 全程未丢
   （证据见 `docs/status.md` §4.4）。
 - bundle 放在 `/tmp` 只适合当次传输，重启或清理后即消失：部署完成后把 bundle 复制到 Bot 用户的持久目录
-  （如 `<bot-home>/bundles/`）并把 `origin` 指过去，后续 `git fetch` 就不再依赖 `/tmp`；回滚本身只依赖本地已有的提交历史，
+  （如 `<bot-home>/bundles/`）作为存档；**真机 `origin` 自 2026-10-08 起已是 GitHub 公开仓库**（`bot` 用户只读部署密钥，
+  `docs/status.md` §4.12），所以后续更新也可直接 `git fetch origin && git checkout <sha>`，不必再改 `origin`。回滚本身只依赖本地已有的提交历史，
   与 bundle 是否还在无关。
 
 ## 9. 可迁移

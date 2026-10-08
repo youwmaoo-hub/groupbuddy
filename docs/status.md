@@ -8,12 +8,12 @@
 
 | 项 | 值 |
 |---|---|
-| 代码 commit | `30cc3fe69a0a5693138a550e5836566878ec7767`（短 `30cc3fe`，分支 `main`；阶段 9 之后的真实使用修复 `bafe096` + 其基线记录、阶段 8 留后项 `/clear` `8b14aab`、群级人设 Persona `c29ecac`、长期笔记 `/note` `495389b`、工具清单逐轮重取 `e1dcb6a`、关键路径补测 T25 `6b93fd6`、验收脚本判定口径 T7 `4ea2326`、repo 写入事务边界 T9 `1826d89`、`PRAGMA optimize` 例行化 `29f6687`、容器运行时保留退出码 T4 `d59a703`、验收脚本能力/提权检查与贴纸时间口径 T6/T10 `b41bff4`、模型档位路由 `e26ea3c`、链式工具轮次分档 `a5bf651`、群宠体验升级 `ba7afe1`、贴纸 catalog 对齐公开包 `deepseek_whale_girl`（104 槽）`30cc3fe`、真实使用反馈修正 `172ab6b6e814eca3fc9fcf582bc6743c48f7dd42`、回复目标唯一修复 `50b4159de81dc87b40ea5711a068d98ee4035878`、开源配套与标识占位符化 `92755c3646981c0181b0d7bec2f630ef51ee115c`、开源化推送确认 `5b14ab064166cd62dd808b2657474f5f59cbdc73`、默认接话改造 `39687b4` + 其基线记录 `aa557db` + CI 结果记录（本文件所在提交），见 §4.5–§4.11、§5、§6） |
+| 代码 commit | `30cc3fe69a0a5693138a550e5836566878ec7767`（短 `30cc3fe`，分支 `main`；阶段 9 之后的真实使用修复 `bafe096` + 其基线记录、阶段 8 留后项 `/clear` `8b14aab`、群级人设 Persona `c29ecac`、长期笔记 `/note` `495389b`、工具清单逐轮重取 `e1dcb6a`、关键路径补测 T25 `6b93fd6`、验收脚本判定口径 T7 `4ea2326`、repo 写入事务边界 T9 `1826d89`、`PRAGMA optimize` 例行化 `29f6687`、容器运行时保留退出码 T4 `d59a703`、验收脚本能力/提权检查与贴纸时间口径 T6/T10 `b41bff4`、模型档位路由 `e26ea3c`、链式工具轮次分档 `a5bf651`、群宠体验升级 `ba7afe1`、贴纸 catalog 对齐公开包 `deepseek_whale_girl`（104 槽）`30cc3fe`、真实使用反馈修正 `172ab6b6e814eca3fc9fcf582bc6743c48f7dd42`、回复目标唯一修复 `50b4159de81dc87b40ea5711a068d98ee4035878`、开源配套与标识占位符化 `92755c3646981c0181b0d7bec2f630ef51ee115c`、开源化推送确认 `5b14ab064166cd62dd808b2657474f5f59cbdc73`、默认接话改造 `39687b4` + 其基线记录 `aa557db` + CI 结果记录 `ede3ef2` + 真机上线与 GitHub 远端切换记录（本文件所在提交），见 §4.5–§4.12、§5、§6） |
 | 跟踪文件数 | 166（`git ls-files`；开源配套新增 10 个：`README.md`、`LICENSE`、`CONTRIBUTING.md`、`SECURITY.md`、`CHANGELOG.md`、`.github/workflows/tests.yml`、`.github/ISSUE_TEMPLATE/`（3 个）、`.github/PULL_REQUEST_TEMPLATE.md`；Persona 新增 `app/ops/persona.py`、`tests/offline/test_persona.py`、`tests/offline/test_admins.py`；长期笔记新增 `app/ops/notes.py`、`app/ops/text.py`、`tests/offline/test_notes.py`；T25 新增 `tests/offline/test_logging.py`、`test_telegram_sender.py`、`test_handlers.py`、`test_client.py`、`test_main.py`；T7 新增 `tests/offline/test_verify_sandbox.py`；T9 新增 `app/storage/tx.py`、`tests/offline/test_transactions.py`；模型档位路由新增 `app/llm/routing.py`、`tests/offline/test_routing.py`；群宠体验升级新增 `app/ops/sticker_catalog.py`、`scripts/import_sticker_set.py`、`tests/offline/test_sticker_catalog.py`、`deploy/stickers/catalog.json`、`deploy/stickers/README.md`） |
-| 提交数 | 74（阶段提交 + 文档治理 `b529741` + A1–A3 修复 `f7f34b5` + 文档同步 `3347301` + 部署记录 + 阶段 8 F5.2 `7382639` + F5.1 `c49fdc5` + F5.3 `1d649b8` + F5.4 `101c26c` + 基线 `ad560f4` + F4.7 `de73b57` + 四模式 `78ae9cf` + 四模式基线 `88531d2` + 真机验收记录 `d5e48f0` + 阶段 9 托管文档 `5a5b6d5` + 阶段 9 基线 `cb30c10` + 备份与校验 `bc31c41` + 阶段 9 演练记录 `bed250b` + 真实使用修复 `bafe096` + 其基线记录 + 真机同步与复验记录 `a4e1afc` + `/clear` `8b14aab` + 其基线记录 + 群级人设 Persona `c29ecac` + 其基线记录 + 长期笔记 `/note` `495389b` + 其基线记录 + 工具清单逐轮重取 `e1dcb6a` + 其基线记录 + 模型档位路由与轮次分档评估 + 关键路径补测 T25 `6b93fd6` + 其基线记录 + 验收脚本判定口径 T7 `4ea2326` + 其基线记录 + repo 写入事务边界 T9 `1826d89` + 其基线记录 + `PRAGMA optimize` 例行化 `29f6687` + 其基线记录 + 容器运行时保留退出码 T4 `d59a703` + 其基线记录 + 验收脚本能力/提权检查与贴纸 Unix 秒 T6/T10 `b41bff4` + 其基线记录 + 模型档位路由 `e26ea3c` + 其基线记录 + 链式工具轮次分档 `a5bf651` + 其基线记录 + 真机仓库行注修正 + 群宠体验升级 `ba7afe1` + 其基线记录 + 贴纸 catalog 对齐 104 槽 `30cc3fe` + 其基线记录 + 群宠体验升级真机上线与验收记录 + 其基线记录 + 真实使用反馈修正 `172ab6b` + 其基线记录 + 回复目标唯一修复 `50b4159` + 其基线记录 + 开源配套（README / LICENSE / CONTRIBUTING / SECURITY / CHANGELOG / GitHub Actions / Issue 与 PR 模板）与标识占位符化 `92755c3` + 开源化推送确认 `5b14ab0` + 默认接话改造 `39687b4` + 其基线记录 `aa557db` + CI 结果记录（本文件所在提交）） |
-| 本机工作树 | 干净（`git status --porcelain` 无输出）；真机 @ `50b4159`（群宠体验升级那一批的代码提交），本机 `main` 在其上多 5 条提交（回复目标唯一修复的基线记录 `387467d`、开源配套 `92755c3`、开源化推送确认 `5b14ab0`、默认接话改造 `39687b4`、本文件基线提交），差异里没有未提交改动；`origin` = GitHub 公开仓库 `youwmaoo-hub/groupbuddy`（`main` 已推送，见 §4.10） |
-| 真机仓库 | `<bot-home>/app` = detached HEAD @ 本批部署提交（回复目标唯一修复 `50b4159`：每轮只回应当前触发消息、被跳过的消息不再补答；部署记录见 §4.8），工作树干净，属主 `bot:bot`，跟踪文件 156；**Bot 已在真机运行**：systemd 用户级单元 `groupbuddy.service`（`ActiveState=active`、`Restart=always`，见 §4.3、§4.6、§4.7、§4.8） |
-| 真机远端 | `origin` = VPS `<bot-home>/bundles/dsh_deploy_<部署提交短哈希>.bundle`（每次部署按该次提交短哈希命名；本批依次为 `dsh_deploy_1a723fa.bundle` → `dsh_deploy_30cc3fe.bundle` → 最后一次文档基线，见 §4.6；真实使用反馈修正批为 `dsh_deploy_172ab6b.bundle`，见 §4.7；回复目标唯一修复批为 `dsh_deploy_50b4159.bundle`，见 §4.8）。Bot 用户持久目录，`/tmp` 会被清理；bundle 含 `refs/heads/main`，可 `git fetch`。**项目正式远端已改为 GitHub 公开仓库 `youwmaoo-hub/groupbuddy`**（本机 `origin`，长期使用；真机侧 `<bot-home>/.ssh` 不存在、无 GitHub 凭据，故真机 `origin` 仍是持久 bundle，待配置部署密钥后再切到 GitHub） |
+| 提交数 | 75（阶段提交 + 文档治理 `b529741` + A1–A3 修复 `f7f34b5` + 文档同步 `3347301` + 部署记录 + 阶段 8 F5.2 `7382639` + F5.1 `c49fdc5` + F5.3 `1d649b8` + F5.4 `101c26c` + 基线 `ad560f4` + F4.7 `de73b57` + 四模式 `78ae9cf` + 四模式基线 `88531d2` + 真机验收记录 `d5e48f0` + 阶段 9 托管文档 `5a5b6d5` + 阶段 9 基线 `cb30c10` + 备份与校验 `bc31c41` + 阶段 9 演练记录 `bed250b` + 真实使用修复 `bafe096` + 其基线记录 + 真机同步与复验记录 `a4e1afc` + `/clear` `8b14aab` + 其基线记录 + 群级人设 Persona `c29ecac` + 其基线记录 + 长期笔记 `/note` `495389b` + 其基线记录 + 工具清单逐轮重取 `e1dcb6a` + 其基线记录 + 模型档位路由与轮次分档评估 + 关键路径补测 T25 `6b93fd6` + 其基线记录 + 验收脚本判定口径 T7 `4ea2326` + 其基线记录 + repo 写入事务边界 T9 `1826d89` + 其基线记录 + `PRAGMA optimize` 例行化 `29f6687` + 其基线记录 + 容器运行时保留退出码 T4 `d59a703` + 其基线记录 + 验收脚本能力/提权检查与贴纸 Unix 秒 T6/T10 `b41bff4` + 其基线记录 + 模型档位路由 `e26ea3c` + 其基线记录 + 链式工具轮次分档 `a5bf651` + 其基线记录 + 真机仓库行注修正 + 群宠体验升级 `ba7afe1` + 其基线记录 + 贴纸 catalog 对齐 104 槽 `30cc3fe` + 其基线记录 + 群宠体验升级真机上线与验收记录 + 其基线记录 + 真实使用反馈修正 `172ab6b` + 其基线记录 + 回复目标唯一修复 `50b4159` + 其基线记录 + 开源配套（README / LICENSE / CONTRIBUTING / SECURITY / CHANGELOG / GitHub Actions / Issue 与 PR 模板）与标识占位符化 `92755c3` + 开源化推送确认 `5b14ab0` + 默认接话改造 `39687b4` + 其基线记录 `aa557db` + CI 结果记录 `ede3ef2` + 真机上线与 GitHub 远端切换记录（本文件所在提交）） |
+| 本机工作树 | 干净（`git status --porcelain` 无输出）；真机 @ `ede3ef2`（默认接话改造当批的代码提交，本机 `main` 与真机同一棵树，差异只有本文件这次基线记录），本机 `main`、GitHub `origin/main`、真机 `HEAD` 三者同哈希 `ede3ef2`（见 §4.10、§4.12）；`origin` = GitHub 公开仓库 `youwmaoo-hub/groupbuddy` |
+| 真机仓库 | `<bot-home>/app` = detached HEAD @ `ede3ef2`（默认接话改造当批：发言判定默认接话、重复过滤、连发不合并、`NO_REPLY` 首轮追问，部署记录见 §4.12），工作树干净，属主 `bot:bot`，跟踪文件 166；**Bot 已在真机运行**：systemd 用户级单元 `groupbuddy.service`（`ActiveState=active`、`Restart=always`，见 §4.3、§4.6、§4.7、§4.8、§4.12） |
+| 真机远端 | `origin` = `git@github.com:youwmaoo-hub/groupbuddy.git`（2026-10-08 起，用 `bot` 用户的**只读**部署密钥 `vps-bot-readonly` 直接 `git fetch`，详见 §4.12）；真机 `HEAD` = `origin/main` = `ede3ef2`。**只读密钥不能 push**：发布仍由本机推送 GitHub，真机装代码仍走 bundle 流程（`<bot-home>/bundles/dsh_deploy_<部署提交短哈希>.bundle`，历史见 §4.6–§4.8） |
 | 项目远端 | GitHub 公开仓库 `youwmaoo-hub/groupbuddy`（本机 `origin`，`main` 已推送且与本机基线一致；仓库已公开，topics、简介与 CI 首跑结果见 §4.9、§4.10） |
 | 许可证 | MIT（`LICENSE`，© 2026 youwmaoo-hub；2026-10-08 起仓库公开，见 §4.9） |
 | 运行时目录 | 真机 `storage/`：`bot.db`（118784 字节，`user_version`=4，另有 WAL 的 `-wal`/`-shm`）、存储日志 `logs/bot.log`、`health.json`（60 秒心跳）、`sandbox/`、`workspaces/`、`backups/`（两份已验证快照，见 §4.4），属主 `bot:bot`；真实 `.env` 在 `<bot-home>/app/.env`（`600`、`bot:bot`，**内容与凭据值一律不记录**） |
@@ -196,7 +196,7 @@ Tier B 4/4：本群 workspace 读写（非 root）、宿主侧可见、其他群
 - **真机状态（未动，只读复查）**：`groupbuddy.service` `ActiveState=active`、`SubState=running`、`MainPID=64443`、`NRestarts=0`、`ExecMainStatus=0`；`storage/health.json` → `ok=true`、`db_ok=true`、`outbound_pending=0`、`uptime_s≈3000`；`<bot-home>/app` 侧 `HEAD=50b4159`、`dirty=0`、`origin=<bot-home>/bundles/dsh_deploy_50b4159.bundle`。本批只改文档与模板，未重新部署，故真机仍停在 `50b4159`。
 - **边界**：不改 `app/` 运行期行为；真机与本机在文档/模板层面相差两个提交（`92755c3` 与本次确认提交），功能代码完全一致。真机要切到 GitHub 远端仍需先配只读部署密钥（见 §4.8、§5）。
 
-### 4.11 默认接话改造（2026-10-08，本机；真机未部署）
+### 4.11 默认接话改造（2026-10-08，本机 `39687b4`；真机上线见 §4.12）
 
 - **范围**：用户要求"群里大部分能接话的消息都回"，同时保留限制。改动只动发言判定、合并与输出规则，不新增依赖、不改数据库、不改权限与出站契约。
 - **代码**：
@@ -209,20 +209,35 @@ Tier B 4/4：本群 workspace 读写（非 root）、宿主侧可见、其他群
 - **文档**：`docs/requirements.md` §2.1（规则 2/3/8/10/13 + 判定顺序表 13 行 + 三条闸门说明）、F2.2–F2.11 验收口径；`docs/architecture.md` §2 表格与运行期行为；`docs/token.md` §3 链 1；`docs/deployment.md` §3 主动接话；`docs/persona.md` §3/§4/§5；`docs/security.md` §12；`README.md`、`docs/README.md` 路由表、`TODO.md` 阶段 2、`CHANGELOG.md`（Unreleased）、`.env.example`。
 - **CI**：GitHub Actions（ubuntu-latest + Python 3.13，`compileall` → `unittest discover`）在含本改动的 `aa557db` 上全绿：run `37766258091` `completed/success`（同一提交的前一次 push run `37766234629` 亦为 `success`；`gh run list` 可查）。
 - **兼容性**：`.env` 里保留已删除的 `PROACTIVE_WINDOW_SECONDS`/`PROACTIVE_MAX_PER_WINDOW` 会被静默忽略（未知键走默认值），真机 `.env` 不需要改也能启动；反之不设 `DUPLICATE_WINDOW_SECONDS` 走默认 300 秒。
-- **边界（必须如实区分）**：**只在真机之外验证**——本机 Windows、离线 fake 模型与 fake 发送器；**未部署真机**，真机仍停在 `50b4159`，所以"是否过于话痨""真实群里的观感"这类结论暂无真机证据；改的是运行期行为（发言判定与 prompt），下一次真机部署必须连同一次真实收发冒烟，并按 `docs/deployment.md` §8.1 备好回滚。
-- **结论**：默认接话已在本机实现并全绿；是否上线、要不要顺手把真机切到 GitHub 远端，留给用户决定（见 §5）。
+- **边界（必须如实区分）**：本节的验证**只在真机之外**——本机 Windows、离线 fake 模型与 fake 发送器；真机部署、重启与 GitHub 远端切换见 §4.12，"是否过于话痨""真实群里的观感"这类结论仍需用户在真实群里自然对话确认。改的是运行期行为（发言判定与 prompt），回滚可按 `docs/deployment.md` §8.1 退回上一个 bundle（`dsh_deploy_50b4159.bundle`）。
+- **结论**：默认接话已在本机实现并全绿，随后按用户决定部署真机（见 §4.12）。
+
+### 4.12 默认接话改造真机上线与真机 `origin` 切换 GitHub（2026-10-08，真机 `ede3ef2`）
+
+**范围**：把 §4.11 的默认接话改造按 `docs/deployment.md` §8.1 部署到真机（含重启与运行复核），并把真机 `origin` 从持久 bundle 切到 GitHub 公开仓库（只读部署密钥）。**不改代码、不改数据库**。
+
+- **bundle**：本机 `%TEMP%\dsh_deploy_ede3ef2.bundle`，sha256 `031ea0f6b09d62f029ab66317466ce9eff20361aa8b70971b1e99952e09d4d4f`（两端 `sha256sum` 一致）；`scp` 到 `/tmp/` 后 `cp` 到持久目录 `<bot-home>/bundles/dsh_deploy_ede3ef2.bundle`（`bot:bot`、`644`）。
+- **更新**：`git bundle verify` → 「The bundle records a complete history.」→ `git fetch <bundle> main:refs/remotes/origin/main`（`50b4159..ede3ef2`）→ `git checkout ede3ef2`；真机 `HEAD=ede3ef2`、`git status --porcelain` 为空、跟踪文件 166（上一批 156，新增 10 个开源文件）。
+- **重启**：本批含产品代码（发言判定与 prompt），按要求重启：`2026-10-08 18:56:56` `收到信号 signum=15` → `已关闭` → `18:57:01` `配置加载完成` → `18:57:02` `启动完成`（停机约 5 秒）；启动序列含 `Bot 就绪 username=<bot-username> bot_id=<bot-id> model=deepseek-flash` → `沙箱后端就绪 backend=podman version=4.3.1 workspace=True keep_id=True`。重启后 `ActiveState=active`、`SubState=running`、`MainPID=65962`、`NRestarts=0`、`ExecMainStatus=0`；`storage/health.json` → `ok=true`、`db_ok=true`、`outbound_pending=0`。
+- **新默认值确实生效（启动日志为证）**：`配置加载完成` 行显示 `DEBOUNCE_SECONDS=0.0 DEBOUNCE_MAX_MESSAGES=1 DUPLICATE_WINDOW_SECONDS=300.0`，且不再出现 `PROACTIVE_WINDOW_SECONDS`/`PROACTIVE_MAX_PER_WINDOW`——说明新默认值生效，真机 `.env` 里遗留的旧键被静默忽略（**无需改真机 `.env`**）。
+- **真机 `origin` 切换 GitHub**：以 `bot` 身份 `ssh-keygen -t ed25519` 生成部署密钥 `<bot-home>/.ssh/id_ed25519_github`（注释 `groupbuddy-deploy@vps`），用 `gh repo deploy-key add` 注册到 `youwmaoo-hub/groupbuddy`（id `165780113`、标题 `vps-bot-readonly`、**read-only**）；`<bot-home>/.ssh/config` 写 `Host github.com` + `HostName github.com` + `User git` + `IdentityFile` + `IdentitiesOnly yes`，`known_hosts` 由 `ssh-keyscan -t ed25519 github.com` 写入；`git remote set-url origin git@github.com:youwmaoo-hub/groupbuddy.git` 后 `git fetch origin` 成功，`git ls-remote` 返回 `ede3ef2…`；真机 `HEAD=origin/main=ede3ef2`、`dirty=0`、跟踪文件 166。**只读密钥不能 push**，发布仍由本机推送 GitHub；装代码仍可继续走 bundle 流程。
+- **坑（如实记录）**：第一次用 `printf '%s\n' …` 经 SSH 写 `<bot-home>/.ssh/config` 时格式串被吃掉，文件变成一行含字面 `n`（`Host github.comn  HostName github.comn …`），导致 `git@github.com: Permission denied (publickey)`。改为在本机写好文件 → `scp` 到 `/tmp` → 远端 `tr -d '\r' > <bot-home>/.ssh/config` + `chmod 600` 后正常。
+- **数据不动**：部署前后以 `file:…?mode=ro` 只读复核完全一致——`user_version=4`、`messages=168`、`updates=239`、`stickers=104`、`usage=85`、`summaries=9`（本次部署没有产生任何合成数据）。
+- **验证方法的边界（如实记录）**：真机无法向已运行进程注入真实 Telegram 更新，所以「普通闲聊是否都有回」「20 秒冷却与 300 秒重复过滤是否合适」「首轮 `NO_REPLY` 追问是否触发」这三条需要在真实群里由用户自然对话确认（届时看 `bot.log` 的 `触发判定 … 原因=` 与 `本轮不说话`/追问记录）；代码路径已由离线端到端用例覆盖（§4.11、§3）。
+- **回滚**：如需退回，按 `docs/deployment.md` §8.1 用上一批 bundle `dsh_deploy_50b4159.bundle`（`git fetch` + `git checkout 50b4159` + 重启）；本批未改数据库，回滚不回滚数据都一样。
+- **结论**：默认接话改造已上线真机并验证启动/运行/数据正常，真机 `origin` 已切到 GitHub（只读）；本机、GitHub `main`、真机三处同一提交 `ede3ef2`。
 
 ## 5. 尚未做 / 尚未上线（重要）
 
-- **默认接话改造已完成、未上真机（2026-10-08，`39687b4` + 本文件所在提交）**：发言策略、重复过滤、合并默认关闭、输出规则与人设措辞都已改完并本机全绿（见 §4.11）；真机仍 @ `50b4159`，部署后需在真实群里看清观感再决定是否调 `PROACTIVE_COOLDOWN_SECONDS`/`DUPLICATE_WINDOW_SECONDS`。
-- **开源化已完成（2026-10-08，`5b14ab0`）**：仓库公开（`youwmaoo-hub/groupbuddy`，MIT）、开源文件与 CI/Issue/PR 模板就位、文档标识已占位符化、两个旧公共仓库已删除（见 §4.9）；遗留：GitHub Actions 首次运行已通过（`92755c3`，run `37760925291`，见 §4.10）；真机仍在 `50b4159`（差异仅文档与模板，不影响运行）。
+- **默认接话改造已上线真机（2026-10-08，`39687b4` + `aa557db` + `ede3ef2`）**：发言策略、重复过滤、合并默认关闭、输出规则与人设措辞都已改完、本机全绿并部署到真机（见 §4.11、§4.12）；真机 @ `ede3ef2` 运行中。**遗留观察项**：真实群里的观感（是否话痨、冷却与重复过滤是否合适、首轮 `NO_REPLY` 追问是否触发）需要自然对话确认，再决定是否调 `PROACTIVE_COOLDOWN_SECONDS`/`DUPLICATE_WINDOW_SECONDS`。
+- **开源化已完成（2026-10-08，`5b14ab0`）**：仓库公开（`youwmaoo-hub/groupbuddy`，MIT）、开源文件与 CI/Issue/PR 模板就位、文档标识已占位符化、两个旧公共仓库已删除（见 §4.9）；遗留：GitHub Actions 首次运行已通过（`92755c3`，run `37760925291`，见 §4.10）；真机当时仍在 `50b4159`（差异仅文档与模板，不影响运行）；真机已于 2026-10-08 随 §4.12 升到 `ede3ef2`。
 - **回复目标唯一修复已上线真机（2026-10-08，`50b4159`）**：每轮只响应当前触发消息、被跳过的消息不再补答已部署并验证（见 §4.8）；本机 `main` 与真机同一棵树（本机多一条本文件基线提交）。
 - **真实使用反馈修正已上线真机（2026-10-08，`172ab6b`）**：回复长度上限、别人的 Bot 对话不插嘴、`/help` 与指令菜单、人设自我认识均已部署并验证（见 §4.7）；本机 `main` 与真机为同一棵树。
 - **群宠体验升级已上线真机（2026-10-08，`30cc3fe`）**：主动接话 / Persona / 多 Bot 防误触 / 104 槽贴纸 catalog 与完整导入均已部署并真机验收（证据见 §4.6），本机 `main` 与真机现为同一棵树；本批未改产品代码。
 
 - **Bot 已在真机 24/7 运行**：systemd 用户级单元 `groupbuddy.service`（`Restart=always`、`RestartSec=5`，配合 `Linger=yes` 开机自启），真机证据见 §4.3，部署契约见 `docs/deployment.md` §12.9。
 - **真实 `.env` 已就位**：`<bot-home>/app/.env`（`600`、`bot:bot`，只写覆盖项，绝对路径）；仓库内仍只有 `.env.example`，本文件与所有文档都不记录任何凭据值。
-- **正式远端已配置（2026-10-08）**：项目 `origin` = GitHub 公开仓库 `youwmaoo-hub/groupbuddy`，`main` 已推送且与本机基线一致（见 §4.8）；真机侧仍通过 git bundle + SSH 同步（bundle 在 Bot 用户持久目录，真机 `origin` = `<bot-home>/bundles/dsh_deploy_50b4159.bundle`），真机暂无 GitHub 凭据（`<bot-home>/.ssh` 不存在），待配置部署密钥后再把真机 `origin` 切到 GitHub。
+- **正式远端已配置，真机也已切到 GitHub（2026-10-08）**：项目 `origin` = GitHub 公开仓库 `youwmaoo-hub/groupbuddy`，`main` 已推送且与本机基线一致（见 §4.8、§4.10）；真机 `origin` 也已改为 `git@github.com:youwmaoo-hub/groupbuddy.git`，用 `bot` 用户的**只读**部署密钥 `vps-bot-readonly`（id `165780113`）`git fetch`（见 §4.12）。装代码仍走 git bundle + SSH（bundle 在 Bot 用户持久目录），因为只读密钥不能 push；真机要改成可推送需另加一把可写密钥（属部署决策，当前不需要）。
 - 备份/恢复与更新/回滚演练已完成（见 §4.4）；**仍未实现**：程序内自动备份任务与 `BACKUP_INTERVAL_SECONDS`/`BACKUP_KEEP` 环境键（当前只能手工跑 `scripts/backup_db.py`）、体积膨胀时的 `VACUUM`（离线手工）、容器托管（`Dockerfile`/`compose.yaml`，可选路径）。`PRAGMA optimize` 已例行化（`29f6687`：每 7 天一次，契约见 `docs/database.md` §5、`docs/architecture.md` §5）。
 - 阶段 8 内明确留到后续的项：**均已实施**——链 3 的工具轮次按意图分档（已于 `a5bf651` 实施：闲聊 1 轮、其余沿用全局 `TOOL_MAX_ROUNDS`，见 §3 与 `docs/token.md` §5.2）、模型档位路由（已于 `e26ea3c` 实施，见 §3 与 `docs/token.md` §5.1）。原留后项 `/clear` 已补做（`8b14aab`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）），群级人设 Persona 已实现（`c29ecac`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）），长期笔记 `/note` 已实现（`495389b`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）；记忆体验优化的第一项，见 `docs/memory.md` §6），工具体验优化修复 T31（`e1dcb6a`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）：工具清单逐轮重取，本轮被禁用的工具不再下发给模型），关键路径补测 T25（`6b93fd6`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）：只新增测试与文档，不改运行期行为，因此不影响真机运行），验收脚本判定口径 T7（`4ea2326`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）：只改 `scripts/verify_sandbox.py` 的判定与 4 条离线测试 + 文档，不影响 Bot 运行期行为；真机复跑安排在下一次部署/里程碑），repo 写入事务边界 T9（`1826d89`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）：**这条改变了运行期写入路径**（repo 不再自己 `commit()`，改由 `app/storage/tx.py` 的 SAVEPOINT 事务提交），因此下一次真机部署必须连同一次真实收发冒烟一起复验，并按 `docs/deployment.md` §8.1 备好回滚），阶段 9 小优化 `PRAGMA optimize`（`29f6687`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）：housekeeping 每 7 天多执行一条 `PRAGMA optimize`，失败只记日志不影响循环；随下一次批量部署一起上），容器运行时保留退出码 T4（`d59a703`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）：**这条改变了运行期行为**——容器以 125/126/127 退出时不再把 argv 结果当工具结果返回，而是回 `execution_failed` 并销毁容器，部署后建议真机补一次 `run_code` 冒烟；随下一次批量部署一起上），验收脚本能力/提权覆盖 T6 与贴纸时间口径 T10（`b41bff4`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）：T6 只改 `scripts/verify_sandbox.py` 与离线测试、不影响运行期行为，按 §4.2 下次部署复跑 15 项；**T10 改运行期写入值**——`stickers.last_used_at` 由进程相对秒改为 Unix 秒（冷却仍用 `time.monotonic`），部署后首次 `send_sticker` 即写入 Unix 秒；两项随下一次批量部署一起上），模型档位路由（`e26ea3c`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）：新增配置键 `LLM_MODEL_STRONG` 与 `app/llm/routing.py`，**该键留空时行为与成本与升级前完全一致**——真机 `.env` 现在没有这个键，所以不同步也不会改变真机运行期行为；要启用需在真机 `.env` 增键，属部署决策，随下一次批量部署一起上），群宠体验升级（`ba7afe1`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）：**这条改变了运行期行为与提示词**——主动接话新增三条弱触发（同话题 / 情绪反应 / 久静后开场，冷却 20 秒与每 300 秒 3 次的上限不变，全部纯规则 0 token）、内置 Persona 换成「DeepSeek 大肥鱼」群宠定位、其他 Bot 的消息在判定入口直接 `ignore` 且不占冷却与额度；贴纸 catalog 与两个导入脚本属运维侧、不改运行期执行路径，但真机要按情绪取到贴纸仍需先按 `deploy/stickers/README.md` 导入素材（空库时 `send_sticker` 仍不下发，`bafe096` 语义不变）。部署时另注意两点：①真机 `.env` 的 `BOT_ALIASES` 建议显式配置（如 `DeepSeek,大肥鱼,深蓝大肥鱼,鲸鱼娘`），不要写 `bot` 这类通用词，否则 `@其他bot` 会被当成叫本 Bot；②Telegram 侧需关掉 Privacy Mode 或把 Bot 设为群管理员，否则普通群消息根本到不了进程、主动接话不生效（`docs/deployment.md` §12.10）。随下一次批量部署一起上）。
 - **模型档位路由：已实施（`e26ea3c`，2026-10-07）**：唯一入口 `app/llm/routing.py::ModelRouter.choose(*, intent, purpose)`——默认档 = `LLM_MODEL`（现为 `deepseek-flash`），升级档 = `LLM_MODEL_STRONG`（留空或与默认同名即视为未配置，不改路由），只有 `purpose=chat` 且 `intent=complex` 且有升级档时才换模型；summary / 后台任务继续走默认档且 purpose 不变；复杂判定仍沿用既有的纯规则（代码块 / 单条 ≥400 字 / 链接 / 指代检索需求），不新增独立分类器、不增加额外一次 LLM 判断、不引入依赖；选择过程抛错即 fail-safe 回默认档；路由发生在配额判定之后，不绕过 quota / tool policy / sandbox / 权限；`usage` 记最终实际使用的 model（`purpose=chat`）。成本影响：`LLM_MODEL_STRONG` 留空时与升级前完全一致；填了之后只有复杂轮换模型，且缓存按模型隔离，升级轮可能按未命中价计费。评估背景（2026-10-07）：真实使用成本 < $0.01（§4.5：29 次 chat 调用 ≈ 44k 输入 / 4.5k 输出、观察到的轮次 `tool_calls=0`），没有复杂轮次质量不足的证据，所以默认不配置升级档；唯一可用方向是把复杂轮次升级到 `deepseek-v4-pro`（提高花费换质量），其价格与可得性未核实，属部署决策。**链 3 轮次分档：已实施（`a5bf651`，2026-10-07）**——同一入口 `app/llm/routing.py::tool_round_limit(intent, settings)`：只把全局 `TOOL_MAX_ROUNDS`（默认 2，可选 0–4）调低，闲聊 1 轮（原表写 0 轮，但 0 轮会连贴纸工具一起关掉，故取 1 轮）、复杂任务与无法判断仍用全局上限（部署方设 4 即对应表里的「代码调试 4 轮」）；未登记意图与异常输入一律回全局上限，分档不会突破部署方设置。契约与评估结论见 `docs/requirements.md` 未决问题 #2、`docs/token.md` §5/§5.1/§5.2、`docs/architecture.md` §3/§7。
@@ -278,19 +293,36 @@ cat <bot-home>/app/storage/health.json          # checked_at 每 60 秒推进
 tail -n 20 <bot-home>/app/storage/logs/bot.log # 用户级 journalctl 在目标机无 journal 文件
 ```
 
-代码同步（无正式远端时的临时通道，替换 `<sha>`）：
+代码同步（bundle 是装代码通道；真机 `origin` 自 2026-10-08 起已是 GitHub 公开仓库，可改用 `git fetch origin`，替换 `<sha>`）：
 
 ```bash
 # 本机（部署用私钥与本地临时目录不入文档）
 git bundle create <本地临时目录>/dsh_deploy_<sha>.bundle main
 scp -i <部署用私钥> <本地临时目录>/dsh_deploy_<sha>.bundle root@<vps>:/tmp/
 
-# 真机：确认 sha256 一致后
+# 真机：确认 sha256 一致后（不要改 origin，它现在指向 GitHub）
 sha256sum /tmp/dsh_deploy_<sha>.bundle
 sudo -u bot bash -lc 'cd <bot-home>/app && git bundle verify /tmp/dsh_deploy_<sha>.bundle \
   && git fetch /tmp/dsh_deploy_<sha>.bundle main:refs/remotes/origin/main \
-  && git remote set-url origin /tmp/dsh_deploy_<sha>.bundle && git checkout <sha>'
+  && git checkout <sha>'
 ```
+
+真机侧的 GitHub 只读部署密钥（一次性配置，2026-10-08 完成，见 §4.12）：
+
+```bash
+# 真机：以 bot 身份生成密钥（只读用途，不给仓库写权限）
+sudo -u bot bash -lc 'ssh-keygen -q -t ed25519 -N "" -C groupbuddy-deploy@vps -f <bot-home>/.ssh/id_ed25519_github && cat <bot-home>/.ssh/id_ed25519_github.pub'
+
+# 本机：把公钥注册为只读部署密钥（gh 已登录仓库所有者；不加 --allow-write 即只读）
+gh repo deploy-key add <pubkey文件> --repo youwmaoo-hub/groupbuddy --title vps-bot-readonly
+gh repo deploy-key list --repo youwmaoo-hub/groupbuddy
+
+# 真机：<bot-home>/.ssh/config 里指定 Host github.com + IdentityFile + IdentitiesOnly yes，
+#       known_hosts 用 ssh-keyscan -t ed25519 github.com 写入，然后
+sudo -u bot bash -lc 'cd <bot-home>/app && git remote set-url origin git@github.com:youwmaoo-hub/groupbuddy.git && git fetch origin && git ls-remote origin main'
+```
+
+写入 `<bot-home>/.ssh/config` 时**不要**用 `printf '%s\n' …` 经 SSH 一行带过去：实测格式串被吃掉，文件变成一行含字面 `n`（`Host github.comn  HostName github.comn …`），表现为 `git@github.com: Permission denied (publickey)`；改为本机写好文件 → `scp` 到 `/tmp` → 远端 `tr -d '\r' > <bot-home>/.ssh/config` + `chmod 600` 即可。
 
 备份与恢复（阶段 9；`<快照>` 取 `storage/backups/` 下最新一份）：
 
@@ -310,8 +342,8 @@ sudo -u bot bash -lc 'cd <bot-home>/app && .venv/bin/python scripts/backup_db.py
 应用层可读性用临时探针验证：`load_settings()` → `open_db()` → `apply_migrations()`（阶段 9 实测 `migrations_version=4`、`messages=2`），
 探针脚本属一次性产物，不入库。
 
-更新与回滚按 `docs/deployment.md` §8.1 五步执行；bundle 传到 `/tmp` 后建议复制到 Bot 用户持久目录并把 `origin` 指过去
-（真机当前为 `<bot-home>/bundles/dsh_deploy_bc31c41.bundle`），这样后续 `git fetch` 不依赖 `/tmp`。
+更新与回滚按 `docs/deployment.md` §8.1 五步执行；bundle 传到 `/tmp` 后建议复制到 Bot 用户持久目录存档
+（真机最近几批为 `<bot-home>/bundles/dsh_deploy_ede3ef2.bundle`、`dsh_deploy_50b4159.bundle`），后续 `git fetch` 不依赖 `/tmp`。
 
 约束：`<bot-home>/app` 属主是 `bot`，root 直接执行 git 会报 `dubious ownership`，所有 git 操作必须经 `sudo -u bot bash -lc '…'`；
 `podman images` / `podman ps` 必须在 `bot` 用户可读的目录（如 `<bot-home>/app`）里执行，否则会因 `cannot chdir to /root` 而失败；

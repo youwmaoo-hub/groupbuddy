@@ -1,229 +1,377 @@
-# 开发路线图
+# 当前状态（唯一事实来源）
 
-负责：阶段划分、每阶段交付与验收、当前进度、技术债登记（本轮只登记、不修复）。
-上游：`docs/requirements.md`（条目编号与优先级）。
-改动影响：只改本文件的阶段状态；阶段内容细节改动应回到 `docs/requirements.md`。
+负责：**当前基线**——commit、已完成阶段与能力、本机与真机测试结果、真机验收证据、技术债摘要、下一步。
+上游：`docs/README.md` §2 路由表。
+改动影响：本文件不是契约，只记录事实。契约在 `docs/requirements.md`、`docs/architecture.md`、`docs/security.md`、`docs/tools.md`、`docs/database.md`、`docs/deployment.md`。**每次提交、每次验收、每次阶段结束都要更新本文件**；其他文档不再各自维护「当前状态/进度/测试数字」，只指向这里（`AGENTS.md` §7、`TODO.md` §当前状态）。
 
-## 当前状态
+## 1. 当前基线
 
-**当前事实只有一个来源：`docs/status.md`**（commit、已完成能力、本机与真机测试、真机验收证据、技术债摘要、下一步）。本节只保留阶段进度。
+| 项 | 值 |
+|---|---|
+| 代码 commit | `61d3965a8e28cd99d7b2e1685768f0bb77b2a20a`（短 `61d3965`，分支 `main`；**阶段 10 控制面板与服务层**：`app/services/` + `app/control/` 与可选 `fastapi`/`uvicorn` 依赖，见 §4.13；本文件所在的后续提交只追加 `release/groupbuddy-v1.0.0/` 开源发布包与本节基线记录，不改产品代码。此前基线 `30cc3fe69a0a5693138a550e5836566878ec7767`（短 `30cc3fe`）：阶段 9 之后的真实使用修复 `bafe096` + 其基线记录、阶段 8 留后项 `/clear` `8b14aab`、群级人设 Persona `c29ecac`、长期笔记 `/note` `495389b`、工具清单逐轮重取 `e1dcb6a`、关键路径补测 T25 `6b93fd6`、验收脚本判定口径 T7 `4ea2326`、repo 写入事务边界 T9 `1826d89`、`PRAGMA optimize` 例行化 `29f6687`、容器运行时保留退出码 T4 `d59a703`、验收脚本能力/提权检查与贴纸时间口径 T6/T10 `b41bff4`、模型档位路由 `e26ea3c`、链式工具轮次分档 `a5bf651`、群宠体验升级 `ba7afe1`、贴纸 catalog 对齐公开包 `deepseek_whale_girl`（104 槽）`30cc3fe`、真实使用反馈修正 `172ab6b6e814eca3fc9fcf582bc6743c48f7dd42`、回复目标唯一修复 `50b4159de81dc87b40ea5711a068d98ee4035878`、开源配套与标识占位符化 `92755c3646981c0181b0d7bec2f630ef51ee115c`、开源化推送确认 `5b14ab064166cd62dd808b2657474f5f59cbdc73`、默认接话改造 `39687b4` + 其基线记录 `aa557db` + CI 结果记录 `ede3ef2` + 真机上线与 GitHub 远端切换记录（本文件所在提交），见 §4.5–§4.12、§5、§6） |
+| 跟踪文件数 | 362（`git ls-files`；**v1.0.0 开源发布包新增 181 个**：`release/groupbuddy-v1.0.0/` 180 个（= `61d3965` 跟踪的 181 个减去两份原始需求文件，加发布说明）+ `release/groupbuddy-v1.0.0.zip`；**阶段 10 新增 15 个**：`app/control/`（`__init__.py`、`__main__.py`、`app.py`、`auth.py`、`static/index.html`、`static/app.js`、`static/style.css`）、`app/services/`（`__init__.py`、`context.py`、`credentials.py`、`overview.py`、`settings.py`）、`tests/offline/test_control_api.py`、`tests/offline/test_control_auth.py`、`docs/decisions/0011-control-panel-fastapi.md`；此前 166：开源配套新增 10 个：`README.md`、`LICENSE`、`CONTRIBUTING.md`、`SECURITY.md`、`CHANGELOG.md`、`.github/workflows/tests.yml`、`.github/ISSUE_TEMPLATE/`（3 个）、`.github/PULL_REQUEST_TEMPLATE.md`；Persona 新增 `app/ops/persona.py`、`tests/offline/test_persona.py`、`tests/offline/test_admins.py`；长期笔记新增 `app/ops/notes.py`、`app/ops/text.py`、`tests/offline/test_notes.py`；T25 新增 `tests/offline/test_logging.py`、`test_telegram_sender.py`、`test_handlers.py`、`test_client.py`、`test_main.py`；T7 新增 `tests/offline/test_verify_sandbox.py`；T9 新增 `app/storage/tx.py`、`tests/offline/test_transactions.py`；模型档位路由新增 `app/llm/routing.py`、`tests/offline/test_routing.py`；群宠体验升级新增 `app/ops/sticker_catalog.py`、`scripts/import_sticker_set.py`、`tests/offline/test_sticker_catalog.py`、`deploy/stickers/catalog.json`、`deploy/stickers/README.md`） |
+| 提交数 | 78（**阶段 10 控制面板与服务层** `61d3965` + **v1.0.0 开源发布包** `fef063c` + 发布记录（本文件所在提交）；此前 75 = 阶段提交 + 文档治理 `b529741` + A1–A3 修复 `f7f34b5` + 文档同步 `3347301` + 部署记录 + 阶段 8 F5.2 `7382639` + F5.1 `c49fdc5` + F5.3 `1d649b8` + F5.4 `101c26c` + 基线 `ad560f4` + F4.7 `de73b57` + 四模式 `78ae9cf` + 四模式基线 `88531d2` + 真机验收记录 `d5e48f0` + 阶段 9 托管文档 `5a5b6d5` + 阶段 9 基线 `cb30c10` + 备份与校验 `bc31c41` + 阶段 9 演练记录 `bed250b` + 真实使用修复 `bafe096` + 其基线记录 + 真机同步与复验记录 `a4e1afc` + `/clear` `8b14aab` + 其基线记录 + 群级人设 Persona `c29ecac` + 其基线记录 + 长期笔记 `/note` `495389b` + 其基线记录 + 工具清单逐轮重取 `e1dcb6a` + 其基线记录 + 模型档位路由与轮次分档评估 + 关键路径补测 T25 `6b93fd6` + 其基线记录 + 验收脚本判定口径 T7 `4ea2326` + 其基线记录 + repo 写入事务边界 T9 `1826d89` + 其基线记录 + `PRAGMA optimize` 例行化 `29f6687` + 其基线记录 + 容器运行时保留退出码 T4 `d59a703` + 其基线记录 + 验收脚本能力/提权检查与贴纸 Unix 秒 T6/T10 `b41bff4` + 其基线记录 + 模型档位路由 `e26ea3c` + 其基线记录 + 链式工具轮次分档 `a5bf651` + 其基线记录 + 真机仓库行注修正 + 群宠体验升级 `ba7afe1` + 其基线记录 + 贴纸 catalog 对齐 104 槽 `30cc3fe` + 其基线记录 + 群宠体验升级真机上线与验收记录 + 其基线记录 + 真实使用反馈修正 `172ab6b` + 其基线记录 + 回复目标唯一修复 `50b4159` + 其基线记录 + 开源配套（README / LICENSE / CONTRIBUTING / SECURITY / CHANGELOG / GitHub Actions / Issue 与 PR 模板）与标识占位符化 `92755c3` + 开源化推送确认 `5b14ab0` + 默认接话改造 `39687b4` + 其基线记录 `aa557db` + CI 结果记录 `ede3ef2` + 真机上线与 GitHub 远端切换记录（本文件所在提交）） |
+| 本机工作树 | 干净（`git status --porcelain` 无输出）；本机 `main` 已含阶段 10 代码 `61d3965` 与 v1.0.0 发布包 `fef063c`，**已于 2026-10-08 推送 GitHub**（`0bce001..fef063c`，`origin/main` = 本机 `HEAD`；推送触发的 CI run `37780520212` 结论 `success`，见 §4.10 的同类检查）。真机运行的是 `ede3ef2`，**未启用控制面板、未拉取发布包**（真机启用清单见 §5）；`origin` = GitHub 公开仓库 `youwmaoo-hub/groupbuddy` |
+| 真机仓库 | `<bot-home>/app` = detached HEAD @ `ede3ef2`（默认接话改造当批：发言判定默认接话、重复过滤、连发不合并、`NO_REPLY` 首轮追问，部署记录见 §4.12），工作树干净，属主 `bot:bot`，跟踪文件 166；**Bot 已在真机运行**：systemd 用户级单元 `groupbuddy.service`（`ActiveState=active`、`Restart=always`，见 §4.3、§4.6、§4.7、§4.8、§4.12） |
+| 真机远端 | `origin` = `git@github.com:youwmaoo-hub/groupbuddy.git`（2026-10-08 起，用 `bot` 用户的**只读**部署密钥 `vps-bot-readonly` 直接 `git fetch`，详见 §4.12）；真机 `HEAD` = `origin/main` = `ede3ef2`。**只读密钥不能 push**：发布仍由本机推送 GitHub，真机装代码仍走 bundle 流程（`<bot-home>/bundles/dsh_deploy_<部署提交短哈希>.bundle`，历史见 §4.6–§4.8） |
+| 项目远端 | GitHub 公开仓库 `youwmaoo-hub/groupbuddy`（本机 `origin`，`main` 已推送且与本机基线一致；仓库已公开，topics、简介与 CI 首跑结果见 §4.9、§4.10） |
+| 许可证 | MIT（`LICENSE`，© 2026 youwmaoo-hub；2026-10-08 起仓库公开，见 §4.9） |
+| 运行时目录 | 真机 `storage/`：`bot.db`（118784 字节，`user_version`=4，另有 WAL 的 `-wal`/`-shm`）、存储日志 `logs/bot.log`、`health.json`（60 秒心跳）、`sandbox/`、`workspaces/`、`backups/`（两份已验证快照，见 §4.4），属主 `bot:bot`；真实 `.env` 在 `<bot-home>/app/.env`（`600`、`bot:bot`，**内容与凭据值一律不记录**） |
 
-- 阶段 0–7：**已完成**。阶段 0 含部署约束增补（Windows 开发 / Linux VPS 24/7 生产，同一份代码，见 `docs/deployment.md`）；阶段 1 曾通过真实 Telegram + DeepSeek 端到端验收；阶段 7 的 Linux/Podman 真机验收**已完成**（13/13 PASS，commit 与日志路径见 `docs/status.md`）。
-- 阶段 8（权限、配额与运维）：**已完成并通过真机验收**（真机 checkout `88531d2` = 本机 `main` HEAD：416 条全量 OK、沙箱 13 项全 PASS、migration 4 与 `host_info` Linux 行为符合契约，见 `docs/status.md` §4.2）—— 群主命令最小闭环（管理员判定 + `/settings` 回显与写入 + 非管理员被拒，见 `docs/security.md` §2.1）、日/月 token 配额（见 `docs/token.md` §4.1）、运行指标 `/stats` + `/health`（与 `storage/health.json` 同一状态，见 `docs/deployment.md` §7）、`host_info`（F4.7）、四模式完整生效（`docs/token.md` §5）以及 T12/T15；群宠体验升级已实施（`ba7afe1`：主动接话三条弱触发与人类中心、DeepSeek 大肥鱼 Persona、贴纸 catalog 与批量导入，见 `docs/requirements.md` §2.1 与 F2.8–F2.11、`docs/persona.md`、`deploy/stickers/README.md`）；阶段 8 内明确留到后续的**两项均已实施**：链 3 轮次分档（`a5bf651`，闲聊 1 轮、其余沿用全局上限）与模型档位路由（已于 `e26ea3c` 实施，见 `docs/token.md` §5.1/§5.2；`/clear` 作为阶段 8 留后项已于 `8b14aab` 补做、群级人设 Persona 已由 `c29ecac` 补做、长期笔记 `/note` 已由 `495389b` 补做（记忆体验优化第一项），工具体验优化 T31 已由 `e1dcb6a` 修复（工具清单逐轮重取），见 §阶段 8）。阶段 9（部署与 24/7 运行）：**进行中 —— 最小生产闭环已完成并通过真机实测**（systemd 用户级单元 `groupbuddy.service`、真实 `.env` 600、启动时 migration、`storage/health.json` 心跳、Telegram 真机收发、stop/start/restart 与 `SIGKILL` 自动重启；证据见 `docs/status.md` §4.3、契约见 `docs/deployment.md` §12.9），**备份/恢复与更新/回滚演练也已完成并真机验证**（`scripts/backup_db.py` + §8.1 bundle 流程，真机当前已同步到本机 `main`（群宠体验升级 + 104 槽贴纸 catalog 已上线并真机验收，2026-10-08，证据见 `docs/status.md` §4.6），证据见 `docs/status.md` §4.4），未完成部分见 §阶段 9 的「待做」。B 组技术债：T25 关键路径补测已完成（`6b93fd6`，只加测试），T7 验收脚本判定口径已修复（`4ea2326`，含 4 条离线测试），T9 repo 写入事务边界已修复（`1826d89`，含 10 条离线测试，契约见 `docs/database.md` §6），T4 容器运行时保留退出码已映射 `execution_failed`（含 2 条离线测试，契约见 `docs/tools.md` §2 `run_code`），验收脚本能力/提权覆盖 T6 与贴纸 Unix 秒 T10 已修复（`b41bff4`，含 1 + 1 条离线测试，契约见 `docs/deployment.md` §12.6、`docs/security.md` §4、`docs/database.md` §1）—— B 组技术债至此没有未修复项。阶段 10（Web 控制面板与多实例）：**未开始**。阶段 10 仅完成架构预留（`docs/domain.md`、`docs/architecture.md` §10），未开发面板、未建控制面表。
-- 一次只推进一个阶段；不得跳阶段。
+## 2. 已完成阶段与能力
 
-## 阶段表
+| 阶段 | 状态 | 能力 |
+|---|---|---|
+| 0 | 已完成 | 文档骨架 + 部署约束 |
+| 1 | 已完成 | 最小闭环：long polling、入站过滤、落库、幂等、debounce、per-chat 串行、出站队列与限速、4096 分段、私聊默认静默、本轮消息边界 |
+| 2 | 已完成 | 发言闸门：强触发 / **默认接话**（弱规则只标原因码，兜底 `general`）/ 冷却 20 秒 + 重复过滤 / `NO_REPLY` + 首轮追问一次（2026-10-08 调整，见 §4.11） |
+| 3 | 已完成 | 工具主干：注册表、权限判定（唯一入口）、执行器、熔断 + `calc` + `search_web` 接口 |
+| 4 | 已完成 | 工作区与文件：`read_file` / `write_file`、路径安全、原子写 + 单层 `.bak` |
+| 5 | 已完成 | 贴纸：`stickers` 表、情绪匹配、冷却、出站媒体通道 |
+| 6 | 已完成 | 记忆：分档窗口 + 字符预算、噪声标记、模板化摘要、FTS5 检索 |
+| 7 | 已完成 | 沙箱 `run_code`：固定 argv、rootless Podman / Docker、Tier A/B、fail-closed；真机部署与验收已完成 |
+| 8 | 已完成 | 权限/配额/运维：**群主命令最小闭环、群设定写入、日/月配额与运行指标**（`app/ops/admin.py` 管理员判定 + `/settings` 回显/写入 + `app/ops/quota.py` 配额判定 + `app/ops/metrics.py` `/stats` + `app/ops/health.py` `/health` 与 `storage/health.json` 同一状态，见 `docs/security.md` §2.1、`docs/token.md` §4.1、`docs/deployment.md` §7；F5.1/F5.2/F5.3/F5.4 + T12 + T15）；**F4.7 `host_info` 已实现**（`app/tools/builtin/host_info.py`，L4 + `allow_host_info` 默认关，见 `docs/tools.md` §host_info）；**token 四模式完整生效**（`app/modes.py` 唯一权威表：economy 10 条窗口 / 只 L0 / 256 输出 / 贴纸关；normal 意图分档 + 群开关；smart 50 条 + 额外 L0 只读；unrestricted 50 条 + 全部工具 + 输出不限；模式只由管理员 `/settings mode` 修改，见 `docs/token.md` §5、`docs/security.md` §2.2）；**`/clear` 已补做**（`8b14aab`：管理员限定、只删本群 `messages` 原文、摘要与用量保留，见 `docs/security.md` §2.1、`docs/database.md` §4）；**群级人设 Persona 已实现**（`c29ecac`：`/settings persona_override <文本>` 仅群主 `creator` 可写、普通管理员与成员拒绝、`app/ops/persona.py` 是唯一读取/清洗入口、优先级 本群 > 部署侧 `PERSONA` > 内置人格，见 `docs/persona.md` §2、`docs/security.md` §2.1）；**长期笔记 `/note` 已实现**（`495389b`：仅群主能列出/查看/记住/删除本群笔记，正文单行化 ≤500 字、名称 ≤50 字符、同名覆盖 `version` +1、删除同步清 `notes_fts`，见 `docs/memory.md` §6、`docs/security.md` §2.1） |
+| 9 | 进行中（**最小生产闭环 + 备份/恢复 + 更新/回滚均已真机验证**） | 部署与 24/7：systemd **用户级单元** `groupbuddy.service`（`Restart=always`，开机自启，见 `docs/deployment.md` §12.9）、真实 `.env`（`600`）、启动时 migration（`user_version`=4）、`storage/health.json` 心跳、Telegram 真机收发、stop/start/restart 与 `SIGKILL` 自动重启均已实测通过（见 §4.3）；SQLite 冷备份 + 校验 + 保留（`scripts/backup_db.py`，`docs/database.md` §5）、恢复副本与线上一致性、更新成功与坏版本失败可检出、回滚恢复 `active` 且数据未丢（见 §4.4）；**剩**容器托管（可选路径）、程序内自动备份任务与 `BACKUP_*` 环境键、体积膨胀时的 `VACUUM`（离线手工；`PRAGMA optimize` 已随 `29f6687` 例行化） |
+| 10 | 面板与凭据已实施（**多实例、多用户身份仍预留**） | 控制面板：可选第二个进程 `python -m app.control`，只监听 `127.0.0.1`、默认关闭、无口令拒绝启动，只调服务层；Bearer 两级口令（管理员/只读）；可看概览与脱敏日志尾部、列群看群、改群设置（模式/工具开关/贴纸冷却/群人设）、只写不读地写换删 `BOT_TOKEN` 与 `LLM_API_KEY`；服务层 `app/services/` 是面板与命令通道共用的唯一业务入口；`fastapi`/`uvicorn` 为可选依赖，只在 `app/control/` 里 import。契约见 `docs/deployment.md` §13、`docs/security.md` §2.3、ADR 0011；**未实施**：控制库 `bot_instances`/`users`/`credentials`/`audit_log` 与凭据加密（10.2）、多实例聚合、`Principal`/`WebUser` 身份（见 §4.13） |
 
-### 阶段 1 · 最小可运行闭环
+## 3. 本机验证（Windows，开发环境）
 
-- 交付：`app/config.py`、`app/storage/db.py`+schema、`app/telegram/parse.py`、
-  `app/gate/{dedupe,filters,trigger,debounce,queue}.py`、`app/llm/{client,loop,prompts}.py`、
-  `app/session/{context,runner}.py`、`app/outbound/{queue,ratelimit}.py`、
-  `app/telegram/{handlers,sender}.py`、`app/main.py`、`tests/offline/`
-- 覆盖需求：F1.1–F1.11、F2.1、F2.6、F2.7
-- 验收：
-  1. 群里 @Bot 能稳定得到一次回复；
-  2. 连发 4 条消息只产生 1 次模型请求（debounce 生效）；
-  3. 重放同一个 `update_id` 不产生第二次回复；
-  4. Bot 自己的消息不触发回复；
-  5. 超过 4096 字符的回复按 `docs/security.md` §10 规则分段且内容完整；
-  6. `usage` 表有本次调用的 token 记录；
-  7. `tests/offline/` 全部通过（无网络、无真实凭据）；
-  8. 私聊消息 0 次模型调用、0 token、不写入 `messages`（只留必要元数据）；
-  9. 模型调用期间到达的消息不出现在本轮请求里，且本轮结束后只产生 1 次新一轮调用。
-- 明确不做：任何工具、贴纸、摘要/FTS、workspace 文件操作、沙箱、群设置命令、模式、配额强制、webhook。
+- 解释器：Python 3.13.15（仓库内 `.venv`）；`openai 3.24.0`；**沙箱走 FakeBackend，不跑真实容器**。
+- 命令：`python -m unittest discover -s tests -t .`
+- 结果：`Ran 688 tests` / `OK (skipped=2)` / 退出码 0（阶段 10 面板与服务层 +32：`tests/offline/test_control_auth.py` 11 条 + `tests/offline/test_control_api.py` 18 条 + `tests/offline/test_layering.py` 3 条，明细见下一条；此前 688 − 32 = 656，= 上面分项 624 + 真实使用反馈修正新增 19 + 回复目标唯一修复新增 4 + 默认接话改造新增 9（新增 15 条、改写 6 条：`test_limits.py` 冷却 4 + 重复过滤 4、`test_gate.py` 重复过滤与兜底 `general` 与"每条各自成批"、`test_prompts.py` 接话口径 3、`test_pipeline.py` 首轮 `NO_REPLY` 追问 1），见下一条；293 原有 + 22 条 F5.2 + 11 条 F5.1 + 20 条 F5.3 + 32 条 F5.4 + 19 条 F4.7 + 19 条四模式 + 6 条阶段 9 备份 + 3 条真实使用修复 `bafe096` + 5 条 `/clear` `8b14aab` + 33 条 Persona `c29ecac`：`test_persona.py` 10 条（清洗/长度/清除值/三层优先级）+ `test_admins.py` 5 条（`getChatAdministrators` 里只有 `status == "creator"` 算群主、假对象与真实 aiogram 类型都覆盖、异常不吞）+ `test_commands.py` 17 条（群主可写且不回显正文、普通管理员与成员被拒且不泄露字段名、无 creator 时无人可写、多词/控制字符/`off` 清除/超长/缺文本/写库失败、`persona_override` 不是通用字段）+ `test_pipeline.py` 1 条端到端（群主写入后下一轮 system prompt 含该文本且不含内置人格；普通管理员改不动）+ 36 条长期笔记 `/note` `495389b`：`test_notes.py` 21 条（单行化、解析与保留字/上限、列表与查看文案、仓库同名覆盖 `version`=2 且旧 token 查不到新的、删除同步清 `notes_fts`、按群隔离与 `updated_at` 倒序）+ `test_commands.py` 14 条（群主列出/查看/记住/覆盖/删除全链路、普通管理员与成员被拒且不含笔记名、无 creator 群被拒、参数与超限不写库、写库失败只回固定短句）+ `test_pipeline.py` 1 条端到端（群主写 `/note` 后 0 token，之后一句回溯把 `[笔记:部署] …` 注入记忆块）；`allow_sticker` 关/开且库空/开且有贴纸三种下发组合（含 `check()` 契约不变）、空库时普通消息仍只调一轮模型且工具清单不含 `send_sticker`、库里有贴纸时重新下发；`/clear` 明细：管理员只清本群且摘要保留、空群回 0 条、非管理员被拒且不删、带参数只回用法、`clear_chat` 抛错只回固定短句且不泄露 SQLite 细节；F4.7 明细：`host_info` 冻结字段集与 schema、L4 默认关与群开关、不可得字段与 `/proc` 缺失回退、不泄露环境变量/主机名/路径；四模式明细：档位表逐列、economy/smart/unrestricted 的工具档位、模式窗口与 normal 意图分档、输出上限透传，含 3 条端到端（`/settings mode` 改完立即影响下一条消息的输出上限与工具清单、smart 解锁只读工具、economy 与 smart 的历史窗口差异体现在发给模型的上下文里）；阶段 9 备份明细：在线库生成已验证快照且源库不受影响、保留份数与 `removed`、`keep=0` 不清理、同分钟第二次快照加后缀、缺库时 CLI 退出码 2、CLI 输出含 `integrity=ok` 且不含凭据）；工具清单修复明细（`e1dcb6a`）：第 2 轮重新取清单、本轮被禁用的工具不再下发也不再被第二次执行（未修复时该用例 `spec_calls` 1≠2 失败）、`cooldown` 文案随 `BreakerConfig.round_failures` 变化而不是写死 2）；45 条 T25 关键路径补测（`6b93fd6`，只加测试、不改产品代码）：`test_logging.py` 10 条（`SecretFilter` 的 msg/tuple args/dict args 三条脱敏路径、空密钥不动、过滤器接在 handler 上时输出已脱敏；根 logger 两个 handler 都带过滤器、轮转文件写入且不含凭据、`LOG_LEVEL=DEBUG` 时噪声库仍为 WARNING、`get_logger`）+ `test_telegram_sender.py` 7 条（消息与贴纸的 `message_id`、不设 `parse_mode`、`TelegramRetryAfter` → `RateLimited`（含 `__cause__`）、`TelegramAPIError` → `SendFailed`）+ `test_handlers.py` 4 条（update → runner 字段映射、别名提及、无关 update 忽略、runner 异常被吞并记日志）+ `test_client.py` 13 条（默认/覆盖 payload、显式 `None` 不发送 `max_tokens`、`tools` + `tool_choice=auto`、usage 两种缓存字段与缺失回退、tool_calls 缺省值、空 choices 与底层异常翻译、`aclose`、未注入 client 时构造真实客户端）+ `test_main.py` 8 条（`SELECT 1` 探测可重复、工具失败留痕写入、`run_forever` 等待 `request_stop`、未 `start()` 的 `stop()` 取消任务、每小时清理过期行后退出、信号处理函数注册后直接调用会回调）+ `test_sandbox.py` 的 `CliBackendRunTests` 3 条（真实子进程退出码 0/3、超时杀进程并报 `timed_out=True`）；4 条 T7 验收脚本判定口径（`4ea2326`：`tests/offline/test_verify_sandbox.py` 用假后端跑 `scripts/verify_sandbox.py` 的 `main()` —— 全部符合时 `Tier A：PASS`/`Tier B：PASS`/`合计 13 项，失败 0 项` 且退出码 0；容器没起来时「无网络」「只读根」因缺探针标记与错误签名而 FAIL；单项「非 root」失败会翻转 `Tier A：FAIL`（修复前只聚合 1 项、会漏报）；`workspace_write=False` 时 fail-closed 项 PASS 且打印「Tier B：未启用（fail-closed 生效）」）；10 条 T9 事务边界（`1826d89`）：`tests/offline/test_transactions.py` 用 `SAVEPOINT` 语义验证 —— 最外层 `transaction()` 的写入对第二条连接可见（即 `RELEASE` 已提交，repo 无需自己 `commit()`）；块内抛错整体回滚，且随后另一个任务的正常写入不会把半成品顺带提交；嵌套时内层失败只回滚内层、外层继续提交；repo 回归用假 SQL 注入失败 —— `notes.upsert`（主表 + FTS）失败后正文与 `version` 仍是 v1、旧 token 仍可检索，`notes.delete`、`summaries.insert`、`summaries.prune`（3 条保留 1 条、首行即失败）失败后行与 FTS 条目全部保留；并断言 14 个写入入口在被 patch 成抛错的 `Connection.commit` 下仍能正常工作（repo 不再自己 commit）；4 条阶段 9 维护（`29f6687`）：`optimize()` 只发出 `PRAGMA optimize` 一条语句、在真实迁移库上可重复执行，housekeeping 跑过 ≥4 轮清理仍只优化一次（7 天门槛），`optimize` 抛错时记 `后台清理失败` 且下一轮会重试；2 条 T4 容器运行时保留退出码（`d59a703`）：`tests/offline/test_sandbox.py` 的 `RunnerTests` 对 125/126/127 逐个断言映射为 `SandboxError("execution_failed")`（消息含该码、容器被销毁、临时文件清空），其他非零码（1/2/124/128/255）仍原样把 `exit_code` 与 stdout 返回给模型。
+- 回复目标唯一修复明细（`50b4159`，643 → 647）：`tests/offline/test_prompts.py` 新增 `ReplyTargetTests` 3 条（输出规则段同时含「本轮只回应当前触发你的那条消息」与「视为已经跳过」；该句在 `NO_REPLY` 指令之前出现（`reply_limit=280` 下按字符串下标比较）；`build_system_prompt(persona=…)` 覆盖群级人设时该句仍存在）+ `tests/offline/test_pipeline.py` 端到端 1 条（先发 4 字、非噪声但触发不了弱触发的旧消息 → `ignore` 且 `llm.calls == []`，随后 `@bot` 触发 → 本轮批次只含新消息、旧消息只作为背景出现在 payload、只出站 1 条且 `reply_to_message_id` = 本轮最新消息）。
+- 2 条 skip 为平台条件跳过（Windows 上软/硬链接相关用例，见 `TODO.md` T28）。
+- T6/T10 明细（`b41bff4`，566 → 568）：`tests/offline/test_stickers.py` 新增 1 条（冷却时钟仍是 1000.0 时，落库值必须是 Unix 秒且不等于进程相对秒）并更新 1 条断言（`mark_used` 收到 `1_700_000_000`）；`tests/offline/test_verify_sandbox.py` 新增 1 条负路径（容器仍带能力位 / 仍允许提权 → 两项 FAIL 且 `Tier A：FAIL`）并扩充全绿用例（`合计 15 项` + 两项 `PASS [A]` 断言）。
+- 模型档位路由明细（`e26ea3c`，568 → 585）：`tests/offline/test_routing.py` 12 条（默认档与闲聊档 → `LLM_MODEL`、复杂任务且有强模型 → 强模型、无强模型回退、未知意图回退、`purpose=summary` 保持默认档、强模型与默认同名视为未配置、模型名去空格、两档跟随配置、`_decide` 抛错时 fail-safe 回默认档；以及 `ContextBuilder.intent` 的代码块/长文本/链接/指代 → 复杂、短闲聊 → 闲聊、普通句与提问 → 默认、空批 → 默认）+ `tests/offline/test_pipeline.py` 5 条端到端（复杂任务升级且 `usage` 记最终 model + `purpose=chat`、普通任务仍是默认档、无强模型回退默认档、配额先于路由（超额时 0 次模型调用）、economy 模式下升级不改模式语义（输出上限与工具清单仍按 economy））。
+- 工具轮次分档明细（`a5bf651`，585 → 594）：`tests/offline/test_routing.py` 新增 `ToolRoundTests` 5 条（闲聊 → 1 轮、default/complex → 全局上限 2、`TOOL_MAX_ROUNDS=4` 时 complex → 4 而闲聊仍 1、未知意图回全局上限、`TOOL_MAX_ROUNDS=0/1` 时 `min` 不突破上限）+ `tests/offline/test_pipeline.py` 4 条端到端（闲聊第 2 次调用不再下发工具且只记 1 次 `tool_calls`、闲聊仍下发 `send_sticker` 且贴纸真的发出、普通任务仍允许 2 轮工具且记 2 次、`TOOL_MAX_ROUNDS=3` 时复杂任务连做 3 轮工具）。
+- 群宠体验升级明细（`ba7afe1`，594 → 624）：`tests/offline/test_gate.py` 新增 7 条（Bot 作者即使被点名也永不回复、话题延续命中与超窗/只共享停用词、情绪反应词、久静后开场与「≥6 字」信息量门槛、新弱触发仍被冷却压住；原 `test_followup_outside_window_is_ignored` 更名 `test_followup_outside_window_is_not_a_followup` 并只断言 gap 0/6，因为「从未发言」现在走 `quiet_open`）+ `tests/offline/test_pipeline.py` 4 条端到端（未被点名的信息量消息真的触发主动回复并计入额度、纯噪声 0 次模型调用、主动回复后 20 秒冷却压住下一条、其他 Bot 的消息不进批次也不调用模型）+ `tests/offline/test_sticker_catalog.py` 19 条（manifest 文件/目录与非法 JSON/缺字段/未知字段/tags 空/valence 越界/key 重复一律拒绝、素材名与 `resolve_asset` 的路径穿越拒绝、按 emoji 匹配 Telegram 贴纸包并报未匹配与未使用、幂等 UPSERT（`created_at` 不被覆盖）与 `--dry-run` 不写库、`chat_id=0` 与未绑定条目报错）+ `tests/offline/test_prompts.py` 的 `test_runtime_persona_matches_document` 校验新 `GLOBAL_PERSONA` 与 `docs/persona.md` §4 逐字一致。
+- 贴纸 catalog 对齐明细（`30cc3fe`，104 槽，2026-10-08）：`deploy/stickers/catalog.json` 改为按 Telegram 公开包 `deepseek_whale_girl` 的包内顺序生成 104 条（`getStickerSet` 顺序 = GitHub 仓库 `DejavuMoe/deepseek_wale_girl` 文件顺序前移一位，用逐张 `file_size` 相等证明），每条 `key` 取对齐后的仓库文件名；`tests/offline/test_sticker_catalog.py` 19 条仍全绿（测试全部使用临时 manifest，不依赖仓库 catalog 的槽位数），`load_manifest('deploy/stickers/catalog.json')` → 104 条 / 104 个唯一 key，`match_sticker_set(包内 emoji 列表, entries)` → 匹配 104 / 未使用 0；真机导入与实发见 §4.6。
+- 真实使用反馈修正明细（`172ab6b`，624 → 643）：`tests/offline/test_prompts.py` 新增 `ReplyLengthTests` 7 条（280 字约束出现在输出规则段且位于 `NO_REPLY` 句之前、`limit=0` 不限、短文本不动、超长按句末裁剪保留完整句、无句末时硬截加 `…` 且总长 ≤ limit、过早句末不采用而回退硬截）；`tests/offline/test_gate.py` 5 条（解析：回复本 Bot → `reply_to_bot=True`/`reply_to_other_bot=False`、回复别的 Bot → 反向、回复人类 → 两皆 False；触发：回复别的 Bot 且无点名 → `ignore/other_bot_reply`、点名/叫别名 → 仍 `respond`）；`tests/offline/test_commands.py` 5 条（`/help` 公开且列全 6 个指令与字段名与权限字样、不泄露本群设置值（`mode=economy` 时 `"模式："`/`"economy"`/`"write_file：开"`/`"贴纸冷却："` 均不出现）、`/settings` 无参末行以「指令：/help 查看全部指令」结尾、无 Telegram 管理员数据时 `/help` 仍可用、成员发 `/help` 有回复且 `llm.calls == []` 不写 `messages`）；`tests/offline/test_config.py` 1 条（`REPLY_MAX_CHARS` 默认 280、`0` 与 `120` 覆盖）；`tests/offline/test_pipeline.py` 2 条端到端（模型长回复 → 出站文本与 `messages.recent` 末条同为裁剪结果；`reply_to_other_bot=True` 的人类消息 → 无批次、0 次模型调用、无出站，但照常入库 1 条）。
+- 控制面板与服务层明细（阶段 10，656 → 688）：`tests/offline/test_control_auth.py` 11 条（`Level` 排序、空口令/未配置 → `NONE`、管理员与只读口令互不误判、`hmac.compare_digest` 路径、口令两侧空白被忽略、`ADMIN+"x"` 不算管理员、`Bearer` 前缀大小写与缺 `Bearer` 一律 fail-closed、`Level` 与状态码对应）；`tests/offline/test_control_api.py` 18 条（未带/错误口令 → 401、只读口令只能读且写操作 403、`/api/session` 回报级别与字段、管理员改单个群设置字段、非法字段与非法值回中文 400、坏 JSON body → 400、群人设写入与 `off` 清除、群列表同时含已配置群与只有消息活动的群、概览在心跳缺失时降级且心跳出现后可读、凭据写入不回显值、凭据删除与未知名字、凭据值含换行被拒、日志脱敏且有界、静态壳无内联脚本、安全响应头齐备、未预期异常只回固定短句不泄露内部细节、`create_app` 在无口令时拒绝启动）；`tests/offline/test_layering.py` 3 条（服务层不得 import Web 框架/aiogram、Web 框架只允许出现在 `app/control/`、`app/control/` 只能经服务层读写）。面板 HTTP 用例自带最小 ASGI 客户端（`AsgiClient`，不依赖 `httpx`）；服务层叠加测试用临时 `.env`（`ServiceContext.build(..., env_path=…)`），不触碰仓库根 `.env`。
+- 覆盖缺口：原先零覆盖的 `app/main.py`、`app/logging_setup.py`、`app/telegram/handlers.py`、`app/telegram/sender.py`、`CliBackend.run` 与 `DeepSeekClient` 已由 T25 补齐（`6b93fd6`，只加测试）；真机验收脚本 `scripts/verify_sandbox.py` 的判定逻辑由 `tests/offline/test_verify_sandbox.py` 离线覆盖（T7，`4ea2326`，脚本本身仍需真机执行）；仍未覆盖的是需要真实 Telegram/容器/真机的路径，由真机证据证明（见 §4）。
 
-### 阶段 2 · 发言闸门
+## 4. 真机验证（Linux VPS）
 
-- 交付：F2.2–F2.5（可解释内容、上下文追问、冷却、`NO_REPLY`），
-  以及不要求 @ 的主动回复判定（`docs/requirements.md` §2.1 第 1 条）。
-  实现位置：`app/gate/trigger.py`（判定顺序与原因码）、`app/gate/limits.py`（冷却与重复过滤）、
-  `app/session/runner.py`（追问距离查询与冷却记账）。
-- 现状（2026-10-08 调整）：词表不再决定"回不回"，只标注原因码，通过筛选的消息默认接话（兜底 `general`）；
-  「每 300 秒最多 3 次」的窗口上限已删除，剩下冷却（20 秒）+ 重复过滤（`DUPLICATE_WINDOW_SECONDS`）；
-  debounce 默认关闭（每条消息各自成批）。见 `docs/status.md` §4.11。
-- 验收：未点名的追问会接话；纯捧场消息 0 成本；高频群里 Bot 不会连续插话（仍受 20 秒冷却约束）。
-  离线覆盖：`tests/offline/{test_gate,test_limits,test_pipeline}.py`。
+### 4.1 环境
 
-### 阶段 3 · 工具主干
+| 项 | 值 |
+|---|---|
+| 主机 | Debian 12（VPS，主机名 `<vps-host>`） |
+| 运行用户 | `bot`（uid 1002），非 root，不在 `docker` 组 |
+| 解释器 | Python 3.11.2（`<bot-home>/app/.venv`）；`aiogram 3.31.0`、`openai 3.26.0`、`aiosqlite 0.22.1`、`sqlite 3.40.1` |
+| 容器运行时 | rootless Podman 4.3.1，cgroup v2，driver `overlay`，runtime `crun` |
+| 镜像 | 只有 `docker.io/library/python:3.12-slim`（digest `sha256:05cda9777409a9c3ffddd94a4c476b79f0769a0b4857f0c7ed9226b6800b0d6f`，124 MB，部署阶段预拉；验收期间未重新 pull） |
 
-- 交付：`tools/registry.py`、`tools/policy.py`、`tools/executor.py`、`calc`、`search_web`（F4.1–F4.3、F4.8）
-  实现位置：`app/tools/{registry,policy,executor}.py`、`app/tools/builtin/{calc,search_web}.py`、
-  `app/llm/loop.py`（工具循环）、`app/llm/client.py`（tool_calls）、`app/session/runner.py`（装配）、`app/config.py`。
-- 验收：模型能算数、能查资料；越权调用被拒且只回一句话；非法参数返回 `invalid_arguments`。
-  离线覆盖：`tests/offline/{test_calc,test_search,test_policy,test_executor,test_loop,test_pipeline}.py`。
-  注：`search_web` 真实后端未定（`docs/requirements.md` §4 #1），默认 `SEARCH_BACKEND=none` 时不下发该工具。
+### 4.2 测试与验收
 
-### 阶段 4 · 工作区与文件
+| 检查 | 命令 | 结果 |
+|---|---|---|
+| 全量离线测试 | `sudo -u bot bash -lc 'cd <bot-home>/app && .venv/bin/python -m unittest discover -s tests -t .'` | **`Ran 416 tests` / `OK` / 退出码 0**（真机 checkout `88531d2`；Linux 上无 skip；`FAILED`/`ERROR:` 行 0 条，逐项无失败） |
+| 全量离线测试（阶段 9 新版本） | 同上命令，真机 checkout `bc31c41` | **`Ran 422 tests` / `OK` / 退出码 0**（32.2s；`FAILED`/`ERROR:` 行 0 条、skip 0 条） |
+| 沙箱真机验收 | `sudo -u bot bash -lc 'cd <bot-home>/app && .venv/bin/python scripts/verify_sandbox.py'` | **13 项全 PASS，失败 0 项**，退出码 0；`Tier A：PASS`、`Tier B：PASS`；阶段 8 验收（`88531d2`）与阶段 9 演练后在 `bc31c41` 上复跑结果一致，与阶段 7 `3347301` 相比无回归（该输出是 T6 之前的 13 项；in-tree 脚本自 `b41bff4` 起为 15 项，下次部署复跑对齐） |
+| migration 4 真机检查 | 临时库上 `apply_migrations` + `PRAGMA user_version` + `sqlite_master` | 加载/应用/`user_version` = 4；`tool_failures`、`idx_tool_failures_tool_time`、`idx_tool_failures_chat_time` 均存在；真机 `storage/bot.db` 尚未创建（Bot 未启动，属预期） |
+| `host_info` Linux 实测 | bot 用户直调 `HostInfoTool`（默认全字段 + `fields` 选择） | cpu=2、memory=4105363456（= `/proc/meminfo` MemTotal）、disk_free=35596984320、python=`3.11.2`、uptime_s=68691（= `/proc/uptime`，非进程时长回退）；`fields` 选择生效；返回键恰为冻结五字段 |
+| 证据日志 | 本机临时目录 `<本地临时目录>` 下的 `dsh_tests_vps_88531d2.log`（stdout）与 `dsh_verify_vps_88531d2.log`（13 项逐项输出）；VPS 上未落盘日志文件 | 验收执行后容器数 0、`storage/sandbox` 为空、`storage/workspaces` 仅 `999001`/`999002` |
+| 环境复核 | `.venv/bin/python -V`；bot 用户 `podman images` | Python 3.11.2；镜像仍只有 `python:3.12-slim`（未重新 pull）；无 `bot` 用户 python 进程 |
+| 历史记录（阶段 7） | 同上两条命令，真机 checkout `3347301` | `Ran 293 tests` / `OK`；沙箱 13 项全 PASS（保留在 git 历史中，判读口径相同） |
+| 验收时间 | 2026-10-07（VPS 时间） | — |
 
-- 交付：F4.4（`read_file`、`write_file`、路径安全、原子写 + `.bak`）
-  实现位置：`app/tools/workspace.py`（共享路径与文件安全）、`app/tools/builtin/{read_file,write_file}.py`、
-  `app/tools/builtin/__init__.py`（注册，走 `allow_read`/`allow_write` 群开关）。
-- 验收：`docs/security.md` §11 的路径逃逸用例全部被拒；覆盖写有备份。
-  离线覆盖：`tests/offline/test_files.py`（路径逃逸/符号与硬链接/跨群隔离/行区间/UTF-8/1 MB/单层 `.bak`/原子写）与 `test_pipeline.py` 的两个端到端用例。
-- 明确不做：阶段 5 及之后（`send_sticker`、记忆与 FTS、`run_code` 沙箱、`host_info`/权限/配额/群主命令）；
-  不判断 Telegram 用户身份（`allow_write` 默认关闭，谁能开属阶段 8）；不做目录列举/通配符/删除/重命名；不做版本链与自动清理。
+Tier A 7/7：纯计算、非 root（UID 1002）、无网络、只读根、单文件大小上限（fsize 8388608）、资源上限（memory 268435456 / pids 64 / cpu 50000-100000）、超时被 kill 且容器已销毁。
+Tier B 4/4：本群 workspace 读写（非 root）、宿主侧可见、其他群不可见、宿主目录不可见。收尾 2 项：执行后无残留容器、临时输出目录已清理。
 
-### 阶段 5 · 贴纸
+**判读注意（技术债 T7 已于 `4ea2326` 修复；上表是该修复前的真机输出）**：修复前「无网络」「只读根」只看退出码非零，区分不出「容器没起来 / 解释器缺失」，且 `Tier A：PASS` 只聚合 1 项。修复后脚本要求探针标记（`PROBE net`/`PROBE rofs`）与预期错误签名同时出现，`Tier A`/`Tier B` 按显式 tier 归属聚合全部相关检查项（含 2 项全局清理检查），任一项 FAIL 都会翻转结论；逐项输出带 `[A]`/`[B]`/`[AB]` 标记。判定逻辑由 `tests/offline/test_verify_sandbox.py` 离线覆盖（见 `docs/deployment.md` §12.6）；**真机复跑安排在下一次部署/里程碑时**（届时脚本为 T6 之后的 15 项：新增能力集 `CapBnd`=0 与提权位 `NoNewPrivs`=1 两项检查）。
 
-- 交付：F4.5（`stickers` 表、情绪匹配、冷却）
-  实现位置：`app/storage/schema.sql`（migration 2）、`app/storage/repo/stickers.py`、`app/tools/builtin/send_sticker.py`、
-  `app/session/mood.py`、`app/outbound/{queue,ratelimit}.py`（贴纸通道）、`scripts/register_sticker.py`（运维登记，一次性）。
-- 验收：情绪匹配合理、受冷却与限速约束、模型上下文不出现 `file_id`。
-  离线覆盖：`tests/offline/{test_stickers,test_mood,test_outbound,test_pipeline}.py`。
-- 明确不做：群主 `/sticker` 命令与面板（阶段 8/10）；自动抓取/学习/贴纸包管理；语音与通用 `send_media()`（阶段 11+）；
-  mood 持久化与情绪历史；贴纸统计与审计；不判断 Telegram 用户身份（`allow_sticker` 默认开，谁能改属阶段 8）。
+### 4.3 阶段 9 最小生产闭环（2026-10-07，真机实测）
 
-### 阶段 6 · 记忆
+运行方式：systemd **用户级**单元（不引入新组件、不开新端口、不动 root 级配置），单元路径、模板与命令见 `docs/deployment.md` §12.9；`is-enabled`=`enabled`、`loginctl show-user bot` 的 `Linger=yes`、`default.target.wants/groupbuddy.service` 符号链接存在 → VPS 重启后自动拉起。阶段 9 未改任何代码。
 
-- 交付：F3.1–F3.4（动态窗口、噪声标记、模板化摘要、FTS5 检索）
-  实现位置：`app/session/{noise,retrieval,summary}.py`、`app/session/context.py`（唯一组装点）、
-  `app/storage/repo/{summaries,notes}.py`（FTS 显式同步）、migration 3（summaries/notes/FTS + `usage.purpose`）、
-  `scripts/register_note.py`（一次性运维写入口）。
-- 验收：长会话后仍能回答"之前那个怎么搞的"；摘要遵循模板；检索只补背景。
-  离线覆盖：`tests/offline/{test_noise,test_retrieval,test_summary}.py` 与 `test_storage.py`/`test_pipeline.py` 扩展。
-- 明确不做：向量检索/embedding、Redis、跨群/全局记忆、用户画像、群主 memory 命令、面板、Forum Topic 实际逻辑、
-  mode 路由、search_web 后端与知识缺口行为、阶段 7 sandbox；不引入新依赖（含分词库）；不把消息原文索引进 FTS。
+| 检查 | 命令/手段 | 结果 |
+|---|---|---|
+| 真实 `.env` | 部署阶段按白名单合并 `BOT_TOKEN`/`LLM_API_KEY`/`LLM_BASE_URL`/`LLM_MODEL`，临时凭据文件用后 `shred -u` | `-rw------- bot bot`（997 字节）、占位符 0 个；**本文档与所有文档不记录任何凭据值** |
+| 启动核对 | 读取 `.env` → `get_me` → 沙箱探测 → 后台任务 | `配置加载完成`（`BOT_TOKEN=[redacted]`，SecretFilter 生效）→ `Bot 就绪 username=… bot_id=… model=deepseek-flash` → `沙箱后端就绪 backend=podman version=podman version 4.3.1 workspace=True` → `沙箱状态 {'backend': 'podman', 'available': 'True', 'workspace_write': 'True', 'image': 'python:3.12-slim', 'max_concurrent': '2'}` → `启动完成 data_dir=… db=…` |
+| 启动时 migration | 启动后直接查 `storage/bot.db` | `user_version`=4；表 `chat_settings`/`messages`/`notes`(+fts)/`stickers`/`summaries`(+fts)/`tool_failures`/`updates`/`usage` 齐全 |
+| health 心跳 | `storage/health.json` | `ok=true`、`db_ok=true`、`outbound_pending=0`、`instance=default`；`checked_at` 每 60 秒推进（实测 1791376036→1791376199、`uptime_s` 120.06）；重启后 `started_at` 重置、`uptime_s` 归零 |
+| Telegram 真机收发 | 用户在测试群 @ Bot 发一条消息 | `updates`=2、`messages`=2（用户消息 + Bot 回复）、`usage`=2 行（`purpose=chat`：`model=deepseek-flash`、input 952 / output 44；静默 ≥120 秒后摘要任务按设计追加 `purpose=summary`：input 174 / output 109，东八区日键 `2026-10-07`）、`summaries`=1（`msg_from`=1 → `msg_to`=2，119 字）；`health.json` 的 `last_update_at` 由 `null` 变为非空；日志 `WARNING`/`ERROR`/`Traceback` 计数 0；`chat_settings`=0（`/settings` 回显不写库，符合设计）、`tool_failures`=0 |
+| 管理员命令通路 | 真机 `get_chat_administrators` 探针 | 触发者确认为该群管理员（`is_admin=True`）→ `/settings` 走回显分支（成功回显不打日志、不写 `messages`/`chat_settings`）；非管理员拒绝分支与「不泄露内部信息」由离线测试覆盖（`tests/offline/test_commands.py`、`test_metrics.py`） |
+| 优雅停止 | `systemctl --user stop groupbuddy.service` | 日志 `收到信号 signum=15` → `已关闭`，进程消失、`is-active`=`inactive`（走 SIGTERM，未 `kill -9`） |
+| 重启恢复 | 随后 `start` / `restart` | 恢复 `active`，`Bot 就绪`/`启动完成` 重新打印；`bot.db` 保留（118784 字节、`user_version`=4），health 心跳恢复 |
+| 异常自动重启 | `kill -9 <MainPID>` | `MainPID` 换新 PID、**`NRestarts` 0→1**、`ActiveState=active`，重新输出 `配置加载完成`/`Bot 就绪`/`启动完成`；日志仍无 `WARNING`/`ERROR`/`Traceback` |
 
-### 阶段 7 · 沙箱 run_code
+排查注意：目标机用户级 `journalctl --user` 无 journal 文件（`No journal files were found`），运行日志以 `storage/logs/bot.log` 为准。`/settings` 的回显文案由用户目视确认（非阻塞项）。
 
-- 交付：F4.6（`app/sandbox/` + 固定容器参数）；`spec.py` 是 argv 白名单唯一拼装点，`backends.py` 启动时探测一次后端
-  （rootless Podman 优先、Docker 备选）并只用 CLI 调用，`runner.py` 是唯一执行入口（并发 2、超时 kill 并销毁容器、
-  输出各 8 KB 截断、临时输出目录用后即删、启动清理 `groupbuddy=1` 残留容器），`preflight.py` 只记日志提示；
-  工具与装配见 `app/tools/builtin/run_code.py`；Tier B 仅在 rootless Podman + `SANDBOX_TIER_B=auto` 时可用。
-- 前置：本机有可用的 Podman/Docker；否则 `run_code` 一律返回 `sandbox_unavailable`（fail-closed，不退化到宿主机）。
-  Bot 进程不接触 docker/podman socket（见 `docs/security.md` §4、`docs/deployment.md` §10）。
-- 验收：容器内无网络、越界写失败、超时被 kill 且容器销毁；离线覆盖 `tests/offline/test_sandbox.py`（26 条）；
-  真实验收由目标机（Linux + rootless Podman）执行 `scripts/verify_sandbox.py`（上线清单与判读口径见 `docs/deployment.md` §12.6）。
-  **真机结果**：已完成，13 项全 PASS（Tier A 7/7、Tier B 4/4），证据见 `docs/status.md`；Tier B 未全 PASS 时应设为 `SANDBOX_TIER_B=off`。
-  该脚本的判定口径曾偏弱，已于 `4ea2326` 修复（探针标记 + 错误签名 + 显式 tier 聚合 + 4 条离线测试，见下方技术债 T7）。
-- 明确不做：Tier C、`pip install`、容器联网、自定义镜像、microVM/gVisor/Kata、Redis/K8s、配额与管理员权限。
+本阶段明确未做：容器托管（`Dockerfile`/`compose.yaml`，可选路径）、正式远端（GitHub）、任何架构重构；T25 关键路径补测（`6b93fd6`）、T7 验收脚本判定口径（`4ea2326`）与 T9 repo 写入事务边界（`1826d89`）、T4 容器运行时退出码（`d59a703`）已在阶段 9 之后补做；备份/恢复与更新回滚演练已在同阶段补齐（见 §4.4）。
 
-### 阶段 8 · 权限、配额与运维
+### 4.4 阶段 9 备份/恢复与更新/回滚演练（2026-10-07，真机实测）
 
-- 交付：F5.1–F5.4、`host_info`（F4.7）、四种模式（`docs/token.md` §5）、`/health`（实现属本阶段；24/7 托管与自愈属阶段 9）
-- 验收：群主可开关工具等级；非管理员被拒；配额打满后优雅拒绝。
-- 已完成（`7382639` F5.2、`c49fdc5` F5.1）：群主命令通道 —— `app/ops/admin.py` 管理员判定（只认 `getChatAdministrators`、进程内缓存、失败 fail-closed）、`app/ops/commands.py` `/settings` 回显与 `/settings <字段> <值>` 写入（字段白名单：模式、6 个工具开关、贴纸冷却；非法输入不写库；改完当轮生效）、命令不进模型不写 messages 0 token、未知命令静默、非管理员固定文案；`chat_settings.upsert` 改为单条原子写入（T12）。
-- 已完成（`1d649b8` F5.3）：日/月 token 配额 —— `app/ops/quota.py` `QuotaGuard`（`QUOTA_DAILY_TOKENS` / `QUOTA_MONTHLY_TOKENS`，按 `chat_id` 分别统计，`0` 或未配置 = 不限额）、调用模型前判定（`>=` 上限即拒绝）、超额本轮不调模型不记账只回一句提示、命令不消耗配额；统计复用 `usage.tokens_used`（`input_tokens + output_tokens`，缓存命中不重复计入）。契约见 `docs/token.md` §4.1。
-- 已完成（`101c26c` F5.4）：运行指标 —— `app/ops/metrics.py` `/stats`（复用 `usage.summary_for_day` + `tool_failures.count`，按群当日 token 用量、工具调用/失败与错误率、配额余量；读取失败只回固定短句）、`app/ops/health.py` `/health` 与 `storage/health.json` 心跳**共用同一个 `HealthState`**（60 秒周期、原子写、快照无路径/堆栈/凭据）；`tool_failures` 表随 migration 4 建立（`app/storage/repo/tool_failures.py`，计入熔断的失败留痕、按群区间计数、7 天清理即 T15），命令仍走管理员判定、0 token、不进模型。契约见 `docs/security.md` §2.1、`docs/deployment.md` §7、`docs/database.md` §2/§4。
-- 已完成（`de73b57` F4.7）：`host_info` —— `app/tools/builtin/host_info.py`（L4、`allow_host_info` 默认关、`build_registry` 始终注册），只暴露 `cpu`/`memory`/`disk_free`/`python`/`uptime_s`，`fields` 可选（去重、未知字段 `invalid_arguments`）；不读环境变量、不列进程、不查网络接口，不含主机名/用户名/IP/路径；取不到的字段返回 `null`。契约见 `docs/tools.md` §host_info、`docs/requirements.md` F4.7。
-- 已完成（`78ae9cf` 四模式，阶段 8 收尾）：`app/modes.py` 作为 `docs/token.md` §5 的唯一权威表 —— economy（窗口 10、只 L0、输出 256、贴纸关）、normal（意图分档 10/20/50、群开关、配置输出）、smart（窗口 50 + 额外 L0 只读）、unrestricted（窗口 50 + 全部已注册工具 + 输出不限）；`app/session/context.py` 按模式定窗口、`app/session/runner.py` 按模式定输出上限、`app/tools/policy.py` 按模式定工具档位、`app/ops/commands.py` 的 `MODES` 指向同一来源；模式只能由管理员 `/settings mode <值>` 修改，未知值按 normal，默认（normal）行为与升级前一致。契约见 `docs/token.md` §5、`docs/security.md` §2.2。
-- 真机验收（`88531d2`，2026-10-07）：VPS 工作树干净、跟踪文件 132；bot 用户全量 `Ran 416 tests` / `OK` / 退出码 0（无 skip、无 FAIL/ERROR）；`scripts/verify_sandbox.py` 13 项全 PASS、失败 0（与阶段 7 无回归）；migration 4 建出 `tool_failures` + 两个索引（`user_version` = 4）；`host_info` Linux 实测 cpu=2、memory=4105363456（= `/proc/meminfo`）、disk_free=35596984320、python=`3.11.2`、uptime_s=68691（= `/proc/uptime`）。逐项结果见 `docs/status.md` §4.2。
-- 已完成（`8b14aab`，阶段 8 留后项补做）：`/clear` —— `app/ops/commands.py` 的 `_clear`（管理员限定、只删本群 `messages` 原文、摘要与用量保留、带参数只回用法、失败固定短句），复用既有 `messages.clear_chat`（T21 死代码条目随之关闭）；契约见 `docs/security.md` §2.1、`docs/database.md` §4。
-- 已完成（`c29ecac`，批处理里程碑 A）：群级人设 Persona —— `/settings persona_override <文本>` **仅群主（Telegram `creator`）可写**，普通管理员与成员一律按固定拒绝文案处理且文案不含字段名；`app/ops/persona.py` 是唯一读取/清洗入口（单行化、上限 500 字符、`off`/`关` 清除），优先级 本群覆盖 > 部署侧 `PERSONA` > 内置人格；`app/ops/admin.py` 新增 `ChatRoles` + `is_owner`（与管理员同一份 300 秒缓存，失败 fail-closed），`app/telegram/admins.py` 一次 `getChatAdministrators` 同时取两者；确认与回显只出现字数、不回显正文。契约见 `docs/persona.md` §2、`docs/security.md` §2.1。
-- 已完成（`495389b`，批处理里程碑 B 第一项）：长期笔记 `/note` —— 填上 `docs/memory.md` §6 一直标注「尚未实现」的写入路径。`app/ops/notes.py`（纯文本：解析/列出/查看/记住/删除、名称 ≤50 字符与正文 ≤500 字符上限、时间戳渲染）、`app/ops/text.py`（人设与笔记共用的单行化）、`app/ops/commands.py` 的 `_note`（**仅群主**，与 `persona_override` 同一 `is_owner` 判定与固定拒绝文案；0 token、不进模型；写入后回读拿权威 `version`）、`app/storage/repo/notes.py` 新增 `list_for_chat` / `delete`（删除同步清 `notes_fts` 外部内容表）；同名覆盖 `version` +1，确认与列表只回名称/版本/字数、不回显正文，写入或删除失败只回固定短句。契约见 `docs/memory.md` §6、`docs/security.md` §2.1、`docs/database.md` §3/§4。
-- 已完成（`e1dcb6a`，工具体验优化）：T31 工具清单逐轮重取 —— `app/llm/loop.py` 每一轮重新取工具清单，本轮被禁用/熔断的工具不再下发给模型（清单为空即不带工具、强制给答案），`app/tools/executor.py` 的 `cooldown` 文案改用 `BreakerConfig.round_failures` 而不是写死 2。修复前第 1 轮快照会让模型继续调用只可能返回 `cooldown` 的工具，白花一整轮模型调用与 token，与 `docs/tools.md` §1、`docs/security.md` §9、F4.8 验收「失败工具不再重复调用」不符。契约见 `docs/tools.md` §1、`docs/security.md` §9、`docs/token.md` §6。
-- 已完成（`e26ea3c`，主路线）：模型档位路由（最小规则型）—— 新增唯一入口 `app/llm/routing.py` 的 `ModelRouter.choose(*, intent, purpose)`：默认档 = `app/config.py` 的 `LLM_MODEL`（`deepseek-flash`），可选升级档 = 新增配置键 `LLM_MODEL_STRONG`（留空或与默认同名即视为未配置）；只有 `purpose=chat` 且 `intent=complex` 且存在升级档时才换模型，其余（简单聊天、普通任务、summary 与后台任务、无法判断）一律默认档，summary 的 `purpose="summary"` 与记账口径不变。复杂判定复用既有纯规则（`ContextBuilder.intent`：代码块 / 单条 ≥400 字 / 链接 / 指代检索需求；`window_size` 改为先取 intent 再映射窗口，旧语义不变），**不新增独立 AI 分类器、不增加额外一次 LLM 判断、不引入新依赖**；路由点在配额判定之后，不绕过 quota / tool policy / sandbox / 权限；选择过程抛错即 fail-safe 回默认档；`usage` 记最终实际使用的 model（`purpose=chat`）。`Responder.reply` 新增可选 `model` 参数并保留 `model or settings.llm_model` 兜底；`SessionRunner` 可注入 `router`。`LLM_MODEL_STRONG` 留空时行为与成本与升级前完全一致（真机 `.env` 无该键，未同步也不改变运行期行为），启用属部署决策（缓存按模型隔离，升级轮可能按未命中价计费）。契约见 `docs/token.md` §5/§5.1、`docs/architecture.md` §3/§7/§8、`docs/deployment.md` §3、`docs/requirements.md` 未决问题 #2；测试 12 + 5 条（见 `docs/status.md` §3）。
-- 已完成（`a5bf651`，主路线续项）：链式工具轮次优化（按意图分档）—— 同一入口 `app/llm/routing.py` 新增 `TOOL_ROUNDS_BY_INTENT` 与 `tool_round_limit(intent, settings)`，`SessionRunner` 每轮把它作为 `Responder.reply(max_rounds=...)` 传入：**只把全局上限 `TOOL_MAX_ROUNDS`（默认 2，可选 0–4）调低，不突破部署方设置**，未登记意图与异常输入一律回全局上限。闲聊取 **1 轮**（`docs/token.md` §3 链 3 原表写 0 轮，但 0 轮意味着该轮完全不下发工具，会连贴纸工具 `send_sticker` 一起关掉，与贴纸功能冲突，故取 1 轮：保住一次工具调用又比默认档少一整轮）；**default 不降到 1**（default 覆盖普通任务里常见的 read→write 两步链，无真实证据下调会切成半成品回复）；complex 与无法判断沿用全局上限，部署方把 `TOOL_MAX_ROUNDS` 设为 4 即对应表里的「代码调试 4 轮」。`usage.tool_calls` 与实际轮次一致。契约见 `docs/token.md` §3/§5/§5.2、`docs/architecture.md` §3/§7/§8、`docs/deployment.md` §3；测试 5 + 4 条（见 `docs/status.md` §3）。
-- 已完成并已真机上线（`ba7afe1` + 贴纸 catalog 104 槽 `30cc3fe`，群宠体验升级，2026-10-08；真机部署与验收证据见 `docs/status.md` §4.6）：三个方向一起落地 —— ①主动接话：`app/gate/trigger.py` 新增三条弱触发 `topic`（与 Bot 上一条发言共享非停用 2 字组，窗口 `PROACTIVE_TOPIC_MAX_MESSAGES` 默认 8）、`emotion`（情绪/反应词）、`quiet_open`（Bot 从未发言、或距上次发言 ≥ `PROACTIVE_QUIET_MESSAGES` 默认 20 条，且本条 ≥6 字），全部纯规则 0 token，**只提高候选量、不改冷却（20 秒）与窗口上限（每 300 秒 3 次）**；人类中心——`app/gate/filters.py` 与 `trigger.decide` 首行双重丢弃 Bot 作者消息（原因码 `bot_author`），其他 Bot 说话不计入冷却、额度与「话题已被回答」；`app/storage/repo/messages.py` 新增 `last_assistant_text`，`app/session/runner.py` 判定时带上它。②Persona：内置 `GLOBAL_PERSONA` 换成「DeepSeek 大肥鱼」AI 群宠定位（知道自己是 AI、知道「大肥鱼 / 鲸鱼娘」是二创形象、自称「本大肥鱼/大肥鱼/我」、技术场景少用梗、不影响权限/安全/事实），`docs/persona.md` §1/§4/§5 同步（§4 仍与代码逐字一致）。③贴纸：`deploy/stickers/catalog.json` 定义 104 个情绪槽位（不含素材本体，逐张对齐公开贴纸包 `deepseek_whale_girl`，MIT © 2026 Dejavu Moe / `DejavuMoe/deepseek_wale_girl`；生成与对齐口径见 `deploy/stickers/README.md`）、`deploy/stickers/README.md` 写规格与来源/许可政策及三种导入流程，新增 `app/ops/sticker_catalog.py`（manifest 校验、路径穿越防护、按 emoji 匹配贴纸包、幂等 UPSERT）+ `scripts/register_sticker.py --manifest`（本地目录批量，新增 `--asset-dir`/`--dry-run`，单张模式参数与输出不变）+ `scripts/import_sticker_set.py`（按 emoji 从 Telegram 贴纸包导入，只读 `BOT_TOKEN` 环境变量、不回显 Token）；素材不入 Git（`/deploy/stickers/assets/` 已 `.gitignore`），`send_sticker` 核心逻辑不变。契约见 `docs/requirements.md` §2.1/F2.8–F2.11、`docs/security.md` §12、`docs/deployment.md` §1/§3/§12.10、`deploy/stickers/README.md`；测试 7 + 4 + 19 条（见 `docs/status.md` §3）。**改变运行期行为与提示词，真机需随下一次部署复验，且需先按 §12.10 关掉 Privacy Mode 或把 Bot 设为群管理员。**
+演练在 Bot **在线**的情况下进行；备份与恢复都在副本上操作，现有 `storage/bot.db` 未被替换。演练用的坏版本是本地一次性分支 `stage9-broken-probe`（`7474c42`，只加 4 行「模拟新版本启动失败」，**永不合并进 `main`**），已随 bundle 传到真机以便复现。
 
-### 阶段 9 · 部署与 24/7 运行
+| 检查 | 命令/手段 | 结果 |
+|---|---|---|
+| 在线备份 | `sudo -u bot bash -lc 'cd <bot-home>/app && .venv/bin/python scripts/backup_db.py'`（Bot 未停机） | 快照 `storage/backups/bot.db.20261007-2051`（118784 字节）；输出 `user_version=4 integrity=ok chat_settings=0 messages=2 notes=0 stickers=0 summaries=1 tool_failures=0 updates=2 usage=2`；同目录另有 `bot.db.20261007-2046`；`sidecar_files=0`（快照是单文件，无 `-wal`/`-shm`） |
+| 快照可重复 | 两轮备份后比对 SHA256 | 同一份快照两轮 `49735a608bd3f739bd028ad129a150546f9efcfaf9134f7c832b63606c6faef0` 一致 |
+| 恢复出独立数据库 | 以 `bot` 复制快照到 `/tmp/dsh_restore_probe/bot.db`（118784，`bot:bot`；**必须以 bot 身份**，否则 WAL 切换报 `attempt to write a readonly database`） | 只读探针：`user_version`=4、8 表行数与线上逐项一致、`integrity`=ok、`first_user`/`last_assistant` 原文一致 → `IDENTICAL=yes`（与线上对照 diff 为空） |
+| 恢复库可被应用层打开 | `PYTHONPATH=. DB_PATH=<副本> .venv/bin/python /tmp/dsh_appcheck.py`（走 `load_settings()`+`open_db`+`apply_migrations`） | `app_open_ok db_path=/tmp/dsh_restore_probe/bot.db migrations_version=4 messages=2` |
+| 演练不影响运行中的 Bot | 演练前后 `systemctl --user show` 与 `health.json` | `MainPID=48310 NRestarts=0 active/running` 前后一致；`checked_at` 1791377465.213371 → 1791377525.241856（60 秒心跳继续推进，`uptime_s` 300.07→360.10）；日志 `warn_error_traceback=0` |
+| 更新到新版本 | 按 `docs/deployment.md` §8.1 用 bundle 把 `88531d2`（上一可工作版本）更新到 `bc31c41` | HEAD `bc31c41`、`dirty=0`、跟踪文件 132→135；日志 `配置加载完成`→`Bot 就绪`→`沙箱状态`→`启动完成`；`MainPID=48310 NRestarts=0 ExecMainStatus=0 active/running`；`bot.db` 行数与演练前完全一致、`integrity`=ok；`workspaces/` 未变 |
+| 坏版本启动失败可检出 | 部署 `7474c42`（见上行同流程） | `MainPID=0 Result=exit-code NRestarts=1 ExecMainStatus=1 ActiveState=activating SubState=auto-restart`；日志两条 `ERROR app.main 阶段 9 更新演练：模拟新版本启动失败`（发生在 `配置加载完成` 之后、`Bot 就绪` 之前）；无存活 `app.main` 进程；`Restart=always` 在自动重试 |
+| 回滚到上一版本 | `stop` + `reset-failed` → `git checkout 88531d2` → `start` | `MainPID=48739 Result=success NRestarts=0 ExecMainStatus=0 active/running`；日志 `Bot 就绪`/`启动完成`；`user_version`=4、8 表行数与演练前完全一致、`integrity`=ok、`workspaces/` 仍为 `999001 999002` |
+| 演练后回到好版本 | 再次按 §8.1 部署 `bc31c41` | HEAD `bc31c41`、`dirty=0`、跟踪文件 135；`MainPID=48814 NRestarts=0 ExecMainStatus=0 active/running`；`health.json` `ok=true`；`storage/backups/` 两份快照仍在；日志 `warn_error_traceback=2`（＝演练故意注入的 2 条 ERROR，属预期） |
+| Telegram 连通性（演练后） | bot 用户 `Bot.get_me()`（只打印 username/id） | `getMe ok username=<bot-username> id=<bot-id>` |
+| 无 Secret 泄漏 | 对 `storage/logs/bot.log` 做形状扫描（只报计数） | `telegram_token_like=0`、`api_key_like=0`、`[redacted]` 标记 15 处；`.env` = `600 bot:bot` 997 字节，`git ls-files .env` 未跟踪 |
+| bundle 持久化 | 把两个 bundle 复制到 Bot 用户持久目录并重指 `origin` | `<bot-home>/bundles/dsh_deploy_88531d2.bundle`（334645 字节）、`dsh_deploy_bc31c41.bundle`（351723 字节）；`origin` = 后者，`git fetch origin` 成功、`git branch -r` 见 `origin/main` 与 `origin/stage9-broken-probe`；`git bundle verify` = `complete history` |
 
-- 交付：`Dockerfile`/`compose.yaml`（或 `deploy/bot.service`）、持久化目录约定、优雅关闭、
-  健康检查、备份与恢复演练、更新回滚流程；全部按 `docs/deployment.md`。
-- 前置：阶段 7 沙箱可用（需要容器运行时）。
-- 验收：容器/VPS 重建后数据仍在（`bot.db` 与 workspace 未丢）；程序重启后自动恢复运行；
-  SIGTERM 能优雅退出；上一份备份能恢复出可用数据库；日志与错误消息中无 Secret。
-- 已完成（最小生产闭环，2026-10-07 真机实测，证据见 `docs/status.md` §4.3）：采用 **systemd 用户级单元** `groupbuddy.service`（`<bot-home>/.config/systemd/user/`，`Restart=always` + `RestartSec=5` + `KillSignal=SIGTERM` + `TimeoutStopSec=30` + `NoNewPrivileges=yes`，配合 `Linger=yes` 开机自启；模板与命令见 `docs/deployment.md` §12.9），**不引入容器编排、不开新端口、不改代码**；真实 `.env`（`600`、`bot:bot`、绝对路径）就位；启动时 migration 到 `user_version`=4；`storage/health.json` 60 秒心跳；Telegram 真机收发（`updates`/`messages`/`usage` 落库、`last_update_at` 更新、日志无 WARNING/ERROR）；`systemctl --user stop` 走 SIGTERM 优雅关闭（`收到信号 signum=15` → `已关闭`）、`start`/`restart` 恢复、`kill -9` 后 `NRestarts` 0→1 自动拉起。
-- 已完成（备份/恢复与更新/回滚演练，2026-10-07 真机实测，证据见 `docs/status.md` §4.4）：新增 `app/storage/backup.py` + `scripts/backup_db.py`（标准库 `sqlite3` 冷快照 → `storage/backups/bot.db.YYYYMMDD-HHMM`、单文件快照、`PRAGMA integrity_check` + 各表行数校验、按 `--keep` 保留最近 N 份；契约见 `docs/database.md` §5）与 6 条离线测试；在线备份不影响 Bot、快照 SHA256 可复现；以 bot 身份恢复出独立副本后与线上逐项一致（`IDENTICAL=yes`）、应用层可打开（`migrations_version`=4）；按 `docs/deployment.md` §8.1 本地 bundle 流程完成更新（`88531d2`→`bc31c41`）、坏版本启动失败可检出（`Result=exit-code`、`ExecMainStatus=1`、日志 `ERROR`、`Restart=always` 自动重试）、回滚到上一版本后 systemd 恢复 `active` 且 `bot.db`/workspace 未丢；bundle 已持久化到 `<bot-home>/bundles/` 并重指 `origin`；演练后真机复跑：422 条全量 OK、沙箱 13 项全 PASS、`getMe` 正常、日志无 Secret（`telegram_token_like=0`、`api_key_like=0`、`[redacted]` 15 处）、`.env` 600 且未被 git 跟踪。演练用坏版本是本地一次性分支 `stage9-broken-probe`（`7474c42`，永不合并进 `main`）。
-- 已完成（阶段 9 小优化 `PRAGMA optimize` 例行化，`29f6687`）：`app/storage/db.py` 新增 `optimize()`；housekeeping 循环加 `OPTIMIZE_INTERVAL_SECONDS`（7 天）门槛，启动后第一次清理执行一次、之后每 7 天一次，失败只记 `后台清理失败` 且下一轮重试；4 条离线测试（`tests/offline/test_storage.py`：只发一条 `PRAGMA optimize`、真实迁移库可重复执行；`tests/offline/test_main.py`：跑过 ≥4 轮清理仍只优化一次、失败重试）；契约见 `docs/database.md` §4 维护行、`docs/architecture.md` §5。
-- 待做（阶段 9 剩余）：程序内自动备份任务与 `BACKUP_INTERVAL_SECONDS`/`BACKUP_KEEP` 环境键（当前仅手工跑脚本）、容器托管（`Dockerfile`/`compose.yaml`，可选路径）、体积膨胀时的 `VACUUM`（离线手工，不在进程内自动跑）、正式远端（GitHub）。
+演练结论：备份可恢复、恢复库可读且与线上一致、更新成功、坏版本失败可检出并可回滚、回滚后 Bot 恢复 `active`、`bot.db` 与 workspace 全程未丢、日志与错误消息无 Secret。
 
-### 阶段 10 · Web 控制面板与多实例（**面板与凭据已实施** 2026-10-08；多实例仍预留）
+### 4.5 首次真实使用观察与修复（2026-10-07，真机 `bc31c41`）
 
-- 前置：阶段 8（设置与配额）、阶段 9（部署与持久化）。
-- 覆盖需求：F6.1–F6.5（语音 F6.6 属阶段 11+）。
-- 子步骤：10.1 抽服务层（`app/services/`，把现在散在 `session/` 与 `repo/` 的读写收成唯一入口）
-  → 10.2 控制库与凭据加密（`bot_instances`/`users`/`credentials`/`audit_log` + 主密钥托管，见 `docs/database.md` §7）
-  → 10.3 Control API（HTTP 适配器 `app/control/`；引入 Web 框架属新依赖，需单独批准）
-  → 10.4 前端（任意栈，只调 Control API）。
-- **已完成（2026-10-08，ADR 0011，契约见 `docs/deployment.md` §13、`docs/security.md` §2.3）**：
-  - 10.1 服务层 `app/services/`（`context.py` / `settings.py` / `overview.py` / `credentials.py`）：面板与命令通道共用同一套校验（`app/ops/commands.py` 的 `resolve_setting` / `resolve_persona_setting`）与同一条写路径；服务层不 import Web 框架与 aiogram、不读环境变量、不拼 SQL。
-  - 10.3 Control API `app/control/`（`app.py` 路由、`auth.py` 口令→级别、`__main__.py` `python -m app.control`）：只调服务层；`Authorization: Bearer` 两级口令（`PANEL_TOKEN`→ADMIN、`PANEL_READONLY_TOKEN`→VIEWER，`hmac.compare_digest`，越权 403/401）；关闭 docs/redoc/openapi，固定安全头与严格 CSP，`/api/*` no-store。
-  - 10.4 前端：零构建静态页（`app/control/static/index.html|app.js|style.css`），只调 Control API，不含内联脚本。
-  - 凭据写入：`app/services/credentials.py` 只写不读——`GET /api/credentials` 只回「配没配 + 来源」，`PUT`/`DELETE` 按 name 精确改 `.env`（同目录临时文件 + `chmod 0600` + `os.replace`），回 `restart_required: true`。
-  - 依赖：`fastapi` / `uvicorn` 是**可选依赖**（`requirements.txt` 末尾单独标注），只在 `app/control/` 里 import，分层测试（`tests/offline/test_layering.py`）锁死。
-- **仍未实施**：10.2（`bot_instances`/`users`/`credentials`/`audit_log` 表与主密钥托管；当前凭据仍是明文 `.env` 0600）、多实例聚合、多用户身份与角色（`Principal`/`WebUser`）、实例热加载。
-- 验收（已完成部分）：面板只能经服务层读写；越权请求由后端拒绝；凭据接口连掩码都不回、日志脱敏集合含面板口令；未配口令拒绝启动、默认只监听回环。多实例部分（两实例记忆/workspace/配额互不可见、Web 用户与 Telegram 用户身份不混用）待 10.2 实施后再验收。
-- 明确不做：实例热加载、多实例共享运行态（队列/限速器/去重）、为面板引入 Redis / 微服务 / K8s、控制面板公网暴露方案。
+用户在真实群（`chat_id` `<group-chat-id>`）使用后按只读方式核对（Bot 未改动）：`updates` 30、`messages` 56（user 29 / assistant 27）、`usage` 32（chat 29 次 `43976 in / 4547 out`；summary 3 次 `2372 / 821`）、`summaries` 3、`chat_settings` 0、`stickers` **0**、`tool_failures` **2**；日志 WARNING/ERROR 仅上次演练故意注入的 2 条；`health.json` `ok=true`。
 
-## 推进规则
+- **发现**：`tool_failures` 两条 `('send_sticker', <group-chat-id>, 'not_found')`。原因是 `allow_sticker` 默认开、而本群贴纸库为空 → `send_sticker` 每次匹配必然 `not_found`，模型想发表情就白花一轮工具调用，并污染 `/stats` 的错误率。
+- **修复 `bafe096`**（独立 commit，5 个代码/测试文件 + `docs/security.md` + `docs/tools.md`）：`ToolContext` 新增 `stickers_available`（默认 `true`）；runner 每轮在 `profile.stickers` 为真时查一次本群贴纸（economy 短路不多查）；`Policy._advertised` 只从**下发清单**剔除 `send_sticker`——`check()`/执行路径的 `permission_denied`/`not_found` 契约不变（库为空时模型仍硬调依旧是 `not_found`）。不引入缓存/后台任务。
+- **本机验证**：`Ran 425 tests` / `OK (skipped=2)` / 退出码 0；新增 3 条测试（三种下发组合 + 空库端到端只调一轮模型 + 有贴纸时重新下发）。
+- **真机同步与复验（2026-10-07 22:07）**：按 `docs/deployment.md` §8.1 用 bundle 把真机从 `bc31c41` 更新到 `26e946d`（代码内容 = `bafe096`），停机 ≈8 秒（`收到信号` 22:07:23 → `启动完成` 22:07:31），`dirty=0`、跟踪文件 135、`origin` 重指 `<bot-home>/bundles/dsh_deploy_bafe096.bundle`、`.env` 的 sha256 前后一致（未改真实凭据、未改 systemd/DB 结构/备份策略），`MainPID=50510 NRestarts=0 ExecMainStatus=0 active/running`。真机复验（真实代码路径 + 生产库）：生产库 + 真实群（`stickers` 0 行）时 `allowed_names`/`api_tools` 均无 `send_sticker`（`calc`/`read_file`）且 `check()` 仍为 `None`（执行契约未破）；线上库副本注册 1 张贴纸后 `send_sticker` 重新出现在两处清单；副本 `allow_sticker=0` 时不下发且 `check()`=`permission_denied`。真机直接相关测试 `Ran 65 tests` / OK（`test_policy`/`test_pipeline`/`test_modes`）。`tool_failures` 仍只有修复前 2 条 `send_sticker/not_found`（无新增）、`bot.log` 无新 WARNING/ERROR（`warn_error_traceback=2` 为阶段 9 演练故意注入）、`health.json` `ok=true`/`db_ok=true`/`outbound_pending=0`、无沙箱容器残留。**真实消息复验（2026-10-07 22:19）**：用户在真实群发一条消息（`messages.id=59`）→ Bot 22:19:34 回复（`messages.id=60`），`usage` 第 35 行 `purpose=chat`（input 1451 / output 214）**`tool_calls=0`**，即模型没有再白花一轮贴纸调用；`tool_failures` 仍是修复前那 2 条（无新增 `send_sticker/not_found`），`health.json.last_update_at` 由 `null` 推进为非空，`bot.log` 无新 WARNING/ERROR。
 
-1. 一次只做一个阶段；阶段内按交付清单顺序实现。
-2. 每阶段结束跑一次 `tests/offline/`，并手工验证验收清单。
-3. 发现需要改契约或改需求：先停下来说明，改动后再继续（见 `AGENTS.md` §5）。
-## 技术债与已知缺陷（只登记，不在文档治理任务中修复）
+### 4.6 群宠体验升级真机上线与验收（2026-10-08，真机 `30cc3fe`）
 
-> 等级：**P0** = 功能静默失效或导致无法启动；**P1** = 正确性/一致性风险；**P2** = 质量与可维护性。
-> 全部条目都在 commit `434f2f8` 上核实过（含 `文件:行号`）；其中 T1/T2/T3 已于 `f7f34b5` 修复（见下）。**登记不等于已批准修复**：修复需单独开任务，并按 `AGENTS.md` 的变更分级处理。
+**范围**：主动接话（三条弱触发 + 人类中心）、DeepSeek 大肥鱼 Persona、多 Bot 同群防误触、贴纸 catalog 与 104 张完整导入、`/clear`、群级人设覆盖、`/note`、模型档位路由、链式工具轮次分档等本机已封板内容一次性上线；未改 systemd 结构、未改 DB 结构（`user_version` 仍 4）、未改真实 `.env` 中任何已有 Secret。
 
-### 高危（T1–T3 已修复，保留历史）
+- **部署**：按 `docs/deployment.md` §8.1 的 bundle + SSH 流程。第一次部署 `1a723fa`（群宠体验升级 + 其基线记录），第二次部署 `30cc3fe`（104 槽 catalog + 文档），第三次部署本批文档基线提交（本节上线与验收记录；bundle 按该次提交短哈希命名）。前两次之后均未重启进程（后两次只含运维数据与文档），因此 `MainPID` 与 `started_at` 保持不变。部署前保留回滚点 `<bot-home>/rollback-26e946d/`（旧版本 `bot.db` 副本 + `HEAD.txt` = `26e946d`）；真机 `origin` 重指本批 bundle；`.env` 只补 `BOT_ALIASES=DeepSeek,大肥鱼,深蓝大肥鱼,鲸鱼娘`、`PROACTIVE_TOPIC_MAX_MESSAGES=8`、`PROACTIVE_QUIET_MESSAGES=20`（键数 22，仍 `600`/`bot:bot`，原有 19 个键的值未被读取、未被改写）。
+- **重启与运行状态**（2026-10-08 01:01:08）：`ActiveState=active`、`SubState=running`、`NRestarts=0`、`ExecMainStatus=0`；`storage/health.json` `ok=true`/`db_ok=true`/`outbound_pending=0`；`bot.log` = `配置加载完成` → `Bot 就绪 username=<bot-username> bot_id=<bot-id> model=deepseek-flash` → `沙箱后端就绪 backend=podman version=podman version 4.3.1 workspace=True keep_id=True` → `启动完成`，无 `ERROR`/`Traceback`；部署后 `bot.db` 行数与 sha256 与部署前一致（部署本身未触碰数据）。**文档基线部署后复查**：`MainPID=52755` 未变（`started_at` 仍为 01:01:08，即未重启）、`NRestarts=0`、`health.json` `ok=true`/`db_ok=true`/`outbound_pending=0`/`uptime_s≈1800`，真机 `git rev-parse HEAD` 等于该次 bundle 提交、`git status --porcelain` 为空、跟踪文件 156、提交数 66。
+- **群消息接收前提**：`getChatMember(chat_id, bot_id)` 返回 `status=administrator` ⇒ 走「Bot 是群管理员」这条路径，普通群消息会到达进程；未关 Privacy Mode、未用代码绕过接收限制。
+- **贴纸完整导入**：来源为公开 Telegram 包 `deepseek_whale_girl`（与 GitHub `DejavuMoe/deepseek_wale_girl` 同源，MIT © 2026 Dejavu Moe，104 张 512×512 透明 VP9 WebM），因此**无需下载与重新上传素材**，`deploy/stickers/assets/` 保持为空且仍被 `.gitignore`。真机先 `--dry-run`（`贴纸包 deepseek_whale_girl：共 104 张，匹配 104 个槽位，包内未使用 0 张`、`[dry-run] 未写库`）再正式导入：`已登记 chat_id=<group-chat-id> 条目=104 新增=104 更新=0`；第二次导入 `新增=0 更新=104` ⇒ **幂等**。导入后 `stickers` = 104 行 / 104 个 `file_unique_id` / 104 个 `file_id`，`tags` 无空值、`valence ∈ (-0.8, 0.9)`、`arousal ∈ (0.1, 0.9)`，`last_used_at` 全为 NULL（尚未发出）；导入过程不写 `messages`（行数未变）。**被排除的素材**：候选的其它社区来源因「许可未核实」未被采用（未下载、未入库），无来源不明/许可不清/损坏/格式不符的素材进入生产库。
+- **真实发送（不允许只看数据库）**：在真机上跑真实组件图（receive → gate → debounce → agent loop → outbound，真实生产库 + 真实 Telegram API）：点名轮「大肥鱼，发个贴纸给我看看」真实发出贴纸并投递文本；随后 6 种情绪逐个真实投递成功（`开心得意`→id 88、`难过哭`→79、`生气`→5、`可爱抱抱`→19、`疑惑`→83、`困`→10；两两之间真等 31 秒以尊重真实 30 秒群内冷却，不注入时钟），加上此前两轮共 8 张贴纸被真实使用；全程无 `not_found`、无新的 `tool_failures`（仍为 2 条，即 `bafe096` 之前空贴纸库遗留的 `send_sticker/not_found`）。
+- **主动接话真实结果**：未被点名的 `刚上线就崩了，我破防了` → `TriggerDecision(verdict='respond', reason='emotion', proactive=True)` → 真实投递回复（`摸鱼这块本大肥鱼有发言权——摸得过分不算事……不过上线就崩那是真难受，抱一下。`）；紧接其后的 `今天摸鱼摸得有点过分`（在 20 秒冷却内）→ `wait/cooldown`，**批次为空、不回复**；纯噪声 `哈哈哈哈` → 不回复（0 次模型调用）。
+- **多 Bot 防误触**：`is_bot_author=True` 且被点名的消息 → `ignore/bot_author`，既不入批次、不进模型、也不占主动冷却额度；人类消息随后仍能正常触发（上一行已证明），Bot 不会因为别的 Bot 说话而永久沉默。
+- **Persona 真实表现**：真机部署版 `GLOBAL_PERSONA` 与 `docs/persona.md` §4 逐字一致（8 行，含「知道自己是 AI」「不把自己当成真实的鱼」）。真机提问「大肥鱼，你是不是真的鱼？你是不是 AI 呀？」→ 真实回复：`不是真鱼，是 AI。这点我从来不装——大肥鱼这个蓝圆球只是网友给我画的皮，里面是 DeepSeek 家的。所以你对着我许愿要吃鱼是不会成的，但算个数、翻个文件、陪你唠两句还是排得上的。` —— 自我定位、蓝圆球是二创形象、能力边界（工具/权限）都没有被人设带偏。
+- **工具与权限边界**：同一脚本打印 `allowed_names`：库中有贴纸时 = `('calc', 'read_file', 'send_sticker')`，库为空时 = `('calc', 'read_file')` ⇒ 「空库不下发 `send_sticker`」的修复在真机仍然成立；群设置 `allow_sticker=1`、`allow_write=0`、`allow_code=0`、`sticker_cooldown=30` 与回显一致；`send_sticker` 的匹配/冷却/`mark_used` 核心逻辑未改。
+- **基础回归（真实命令通道，真实群主 `<owner-user-id>`）**：`/health` → `状态：正常 / 实例：default / 数据库：可读 / 出站队列：0 条待发`；`/stats` → `模型调用：9 次 / Token：22254 / 工具调用 3 次、失败 0 次 / 配额：未设置限额`；`/settings` → 模式 `normal` + 七个工具开关 + `贴纸冷却：30 秒` + `人设覆盖：未设置`（三条命令的回复都真实投递到群里）。数据库 `user_version=4`、`chat_settings`/`messages`/`notes`(+fts)/`stickers`/`summaries`(+fts)/`tool_failures`/`updates`/`usage` 齐全，`summaries=5`、`notes=0` ⇒ 记忆/摘要通路未被本批改动破坏；`health.json` `ok=true`/`db_ok=true`。
+- **验证方法的边界（如实记录）**：真机验证用真实组件图 + 合成 `IncomingMessage`（因为无法向已运行进程注入更新），除「消息如何进入」之外全部走生产代码与生产库；所有回复与贴纸都是真实 Telegram 消息。验证过程中出现的两次失败都是探针自身的问题（`debouncer.pending_chats` 被当作方法调用、合成 `message_id` 不是真实消息导致 Telegram 拒绝对该消息回复），**不是产品缺陷**，修的是探针。
+- **结论**：本批升级在真机可用，`tool_failures` 无新增、`health` 正常、无发现真实缺陷，因此**未改任何产品代码**（本批对仓库的改动只有贴纸 catalog 数据与文档）。
 
-1. **T1（P0）摘要「静默 ≥ 120 秒」触发恒不成立 — 已修复（commit `f7f34b5`）**：原实现 `app/session/summary.py` 默认 `time.monotonic()`（`app/main.py:167` 也显式传 monotonic），
-   与 `pending.last_at`（`MAX(created_at)`＝Unix 秒，`app/storage/repo/messages.py:92,118`）差值约 −1.7e9，条件永不满足；离线测试用同域假时钟（`tests/offline/test_summary.py:75-79`、`tests/offline/helpers.py:19-29`）掩盖了它。
-   修复：`SummaryService` 默认时钟改 `time.time`，`app/main.py` 不再注入时钟；新增 `tests/offline/test_summary.py` 的 `ClockDomainTests` 2 条（不注入假时钟）。原影响：只剩「≥40 条消息」「≥6000 字符且 ≥10 条」两条触发路径。契约见 `docs/memory.md` §4。
-2. **T2（P0）迁移失败不可恢复 — 已修复（commit `f7f34b5`）**：原实现 `app/storage/db.py:72-76` 没有 `BEGIN`/`rollback`，而 migration 3 的 `ALTER TABLE usage ADD COLUMN purpose`（`app/storage/schema.sql:83`）不幂等；
-   若迁移中途失败或进程被杀，`user_version` 停在 2 而列已存在，重跑报 `OperationalError: duplicate column name: purpose`，**Bot 永久无法启动**（已用内存 SQLite 复现；本机与真机的迁移块都已成功应用，未触发）。
-   修复：每块 `BEGIN IMMEDIATE` + 失败 `rollback`（不推进 `user_version`），仅对 `("usage", "purpose")` 这一历史半升级形态做严格限定的兼容跳过，其他重复 DDL 仍抛真实错误；新增 `MigrationAtomicityTests` 7 条。契约见 `docs/database.md` §1/§6。
-3. **T3（P1）本轮用户消息可能被裁光 — 已修复（commit `f7f34b5`）**：原 `app/session/context.py` 在 `reserved` 已超预算时会把本轮消息一并 pop，违反 `docs/memory.md` §2 与 F3.1 的「本轮永不丢」。
-   修复：`build()` 生成 `keep = frozenset(item.message_id for item in batch.items)` 并传入两处 `_trim(..., keep=keep)`，`_trim` 循环遇 `keep` 即停；新增 `test_oversized_batch_survives_budget_trim`。
+### 4.7 真实使用反馈修正（2026-10-08，真机 `172ab6b`）
 
-### 安全与沙箱
+**范围**：按用户本轮 5 条反馈修正——① 清污生产库（删探针合成行）、② 群回复长度上限 ≈280 字、③ 用户操作别的 Bot 时本 Bot 不插嘴（含不发贴纸）、④ 指令可发现（`/help` + 菜单）、⑤ 人设自我认识（知道自己的感知边界与「谁能操作我」）；**未批准**把被回复消息原文喂给模型（用户答复「先看我前一个」）。未改 systemd 结构、未改 DB 结构（`user_version` 仍 4）、未改真实 `.env` 中任何已有 Secret（`REPLY_MAX_CHARS` 未配置，走默认 280）。
 
-4. **T4（P1，已修复，`d59a703`）CLI 非零退出不映射 `execution_failed`**（用户点名）— 原状：只有后端调用**抛异常**时才映射（`runner.py:128-131`）；
-   Podman 以 125/126/127 退出时 argv 原样成为工具结果，「容器没起来」与「程序正常失败」不可区分 —— 阶段 7 首次真机验收的 `--workdir /workspace` 事故正是由此漏报。
-   修复：`app/sandbox/backends.py` 新增 `CLI_FAILURE_EXIT_CODES = frozenset({125, 126, 127})`，`runner.py` 在超时判定之后、读输出之前按该集合映射为 `SandboxError("execution_failed", …)` 并销毁容器，argv 退出码不再返回给模型；
-   离线测试 2 条（`tests/offline/test_sandbox.py` 的 `RunnerTests`），契约见 `docs/tools.md` §2 `run_code`。**改动运行期行为，真机需随下一次部署复验。**
-5. **T5（P2）沙箱 stderr 未清洗** — 容器/CLI 的 stderr 原样进入模型上下文（`runner.py:138,146-148`），与 `docs/security.md` §3「上下文里不出现宿主机绝对路径」冲突。
-6. **T6（P2，已修复，`b41bff4`）`--cap-drop=ALL` 与 `no-new-privileges` 未被验收覆盖** — 实现在 `app/sandbox/spec.py:68-70`，但 `scripts/verify_sandbox.py` 无对应检查项。
-   修复：新增两项 Tier A 检查，直接读容器内 `/proc/self/status`（不依赖 `capsh` 等镜像里可能没有的工具）——「能力集清空」要求 `CapBnd`（bounding set）为 0（容器内是非 root，`CapEff` 本来就是 0 所以不作断言），「禁止提权」要求 `NoNewPrivs` 为 1；字段缺失即 FAIL。脚本从 13 项变 15 项，判读口径同步到 `docs/deployment.md` §12.6 与 `docs/security.md` §4；`tests/offline/test_verify_sandbox.py` 加 1 条负路径（仍带能力位 / 仍允许提权必须 FAIL 并翻转 `Tier A`）并扩充全绿用例断言。**只改验收脚本与测试，不影响 Bot 运行期行为；真机需在下一次部署时复跑对齐 15 项。**
-7. **T7（P2，已修复，`4ea2326`）验收脚本判定口径弱** — `want_ok=False` 的两项（无网络、只读根）任何非零退出都 PASS，区分不出「容器没启动」；
-   `Tier A：PASS` 汇总只聚合 1 项（原 `scripts/verify_sandbox.py:66,76-77,145-149`）。判读口径见 `docs/deployment.md` §12.6。
-   **已修复（`4ea2326`）**：两条负向断言先打印探针标记（`PROBE net`/`PROBE rofs`）再触发禁止操作，判定要求「退出码符合预期 + 探针标记出现 + 预期错误签名出现」三者同时成立（`check()` 新增 `error_contains`）；`results` 改为 `(tier, name, ok, detail)` 四元组，逐项输出带 `[A]`/`[B]`/`[AB]` 标记，`Tier A`/`Tier B` 按显式 tier 归属聚合全部相关项（含 2 项全局清理检查），任一项 FAIL 都翻转结论；新增 `tests/offline/test_verify_sandbox.py` 4 条（假后端跑脚本 `main()`：全绿、容器没起来、单项非 root 失败会翻转 `Tier A`、Tier B 未启用 fail-closed），并用旧脚本反向验证过 4 条会失败。真机复跑安排在下一次部署/里程碑。
-8. **T8（P2）`resolve_path` 未复核 base 自身** — `app/tools/workspace.py:45-47` 只对拼接后的目标做 `is_relative_to`，未像 `:63-71` 那样逐段查符号链接；base 目录本身被替换为符号链接时没有保护。
+- **生产库清污**（方案 1；备份 `storage/backup/bot.db.bak-20261008-014850`，用 `sqlite3.Connection.backup` 做的一致性快照）：BEFORE `messages=89`（其中探针合成 `user_id=42` 14 行）/ `updates=65` / `usage=47`（探针 5 行）/ `summaries=5`（含被摘要器吃进去的探针原文）/ `stickers=104` / `tool_failures=2` → AFTER `messages=75`（全为真实群主 `<owner-user-id>`，`probe42=0`）/ `updates=51`（全真实）/ `usage=42` / `summaries=0`（按真实消息重新生成，重启前已自增到 1 行）/ `stickers=104` / `tool_failures=2`（保留，未删）。**过程中发生的错误与修复（如实记录）**：删除探针 update 的条件写成 `update_id>=900000`，而真实 Telegram `update_id` 是 9 位数（`457943832`–`457943882`），结果把 51 条真实行一起删了；随即用上述备份按 `update_id > 1000000` 复原（`REAL_ROWS 51`、`PROBE_ROWS 14`、`PROBE_IDS (900001, 930012)`、`LIVE_UPDATES 51`、`LIVE_PROBE_LEFT 0`）。教训：按数值区间删行前必须先看 `MIN`/`MAX` 分布；`updates` 只是 48 小时去重缓存，清空只影响 Telegram 重放保护，不影响业务数据。
+- **代码改动**（`172ab6b6e814eca3fc9fcf582bc6743c48f7dd42`，67 提交 / 跟踪文件 156 / 工作树干净）：`app/config.py` 新增 `REPLY_MAX_CHARS`（默认 280，0 = 不限）→ `app/llm/prompts.py` 的 `length_rule()` + `fit_reply()` 把约束写进输出规则段并在超长时按句末裁剪 → `app/session/context.py`/`runner.py` 让提示词、出站消息、入库文本用同一份裁剪结果；`app/telegram/parse.py` 新增 `reply_to_other_bot`（`IncomingMessage` 不携带被回复正文，只看作者是不是 Bot）→ `app/gate/trigger.py` 对「人类回复另一个 Bot」默认 `ignore/other_bot_reply`，只有强触发（@ / 回复本 Bot / 叫别名）才回应；`app/ops/commands.py` 新增公开 `/help` 与 `BOT_COMMANDS`，`/settings` 无参末尾提示「指令：/help 查看全部指令」；`app/main.py` 启动时 `set_my_commands` 注册菜单（失败只降级为没有菜单，不挡启动）；`GLOBAL_PERSONA` 重写为 10 行（感知边界 + 谁能操作我 + 群主/管理员权限边界）。
+- **部署**：按 `docs/deployment.md` §8.1 的 bundle 流程。bundle `dsh_deploy_172ab6b.bundle`（sha256 `b08be1c55f2c6181401dd90661c96edb7f1b62db8fd440ff82b5e301e209c78a`，两端 `sha256sum` 一致），真机 `git bundle verify` 通过 → `git fetch` → `git remote set-url origin <bot-home>/bundles/dsh_deploy_172ab6b.bundle` → `git checkout 172ab6b`；真机 `git rev-parse HEAD` = 该提交、`git status --porcelain` 为空、提交数 67、跟踪文件 156。**本次含产品代码改动，因此按要求重启**：`2026-10-08 01:58:02` 收到 SIGTERM（`收到信号 signum=15` → `已关闭`）→ `01:58:08` `启动完成`，停机约 6 秒。
+- **重启后运行状态**：`ActiveState=active`、`SubState=running`、`MainPID=54668`、`NRestarts=0`、`ExecMainStatus=0`；`storage/health.json` `ok=true`/`db_ok=true`/`outbound_pending=0`；`bot.log` 启动序列 `配置加载完成`（已含新配置项，`BOT_TOKEN`/`LLM_API_KEY` 仍被脱敏）→ `Bot 就绪 username=<bot-username> bot_id=<bot-id> model=deepseek-flash` → `沙箱后端就绪` → `启动完成`，无 `Traceback`；全文 `WARNING|ERROR` 仍只有阶段 9 演练故意注入的 2 条（第 48、50 行），**无新增**。
+- **数据不动**：重启前后 `user_version=4`、`messages=75`、`updates=51`、`usage=43`、`summaries=1`、`stickers=104`、`tool_failures=2`（仍是修复前那两条 `send_sticker/not_found` `1791380630`/`1791380646`，无新增）、`probe42=0`；`chat_settings` 为空表 ⇒ 该群走 schema 默认值（`mode=normal`、`allow_sticker=1`、`sticker_cooldown=30`、写/代码/主机信息默认关），与 §4.6 观测一致。真实 `messages` 作者只有群主 `<owner-user-id>`（75 条）⇒ 探针污染已清除干净。
+- **真机验证（真实 API + 真实代码 + 生产库只读）**：① `getMyCommands` 真实 Telegram API 返回 6 条菜单 `help/settings/note/stats/health/clear`，描述与本机 `BOT_COMMANDS` 逐字一致；② 用真机 venv（`<bot-home>/app/.venv/bin/python`）加载真实 `.env` 跑部署版代码：`reply_max_chars=280`、输出规则段含「280 字以内」、`fit_reply("甲"*200+"。"+"乙"*200)` → 201 字且以 `。` 结尾、`GLOBAL_PERSONA` 10 行、`help_text()` 覆盖全部 6 个指令；③ 真机定向离线测试 `python -m unittest tests.offline.test_gate tests.offline.test_prompts tests.offline.test_commands tests.offline.test_pipeline` → `Ran 188 tests` / `OK`；④ 全过程只读生产库（查询以 `file:…?mode=ro` 打开，回放类检查用副本，**未再向生产库写入任何合成行**）。
+- **验证方法的边界（如实记录）**：真机无法向已运行进程注入真实 Telegram 更新，因此「人类回复另一个 Bot → `ignore/other_bot_reply`」这条规则由离线测试（新增 5 条，含端到端 1 条：不调用模型、不出站、照常入库）与真机定向测试共同证明，尚未在真实群里由真人回复别的 Bot 覆核；`/help` 的群内真实回执由用户下一条消息自然触发（菜单已注册、进程已带新代码）。
+- **结论**：5 条反馈对应的改动已上线真机并验证通过，无发现真实缺陷；`tool_failures` 无新增、`health` 正常、数据未被本次操作弄丢（含一次误删后的完整复原）。
 
-### 数据与记忆
+### 4.8 回复目标唯一修复（2026-10-08，真机 `50b4159`）
 
-9. **T9（P1，已修复，`1826d89`）没有事务边界** — 原状：各 repo 自己 `commit()`（`app/storage/repo/summaries.py:65,136`、`notes.py:48`、`stickers.py:73,90`），
-   主表 + FTS 的多语句写可能半提交、或被其他任务顺带提交；无 `rollback`。修复：新增 `app/storage/tx.py` 的 `transaction()`（`SAVEPOINT` … `RELEASE` / `ROLLBACK TO`；整进程共享一条连接，`BEGIN` 会冲突），14 个写入入口（`messages` insert/clear_chat、`chat_settings.upsert`、`usage.record`、`updates` mark_seen/purge_old、`tool_failures` record/purge_old、`notes` upsert/delete、`summaries` insert/prune、`stickers` register/mark_used）统一在事务内完成并去掉自己的 `commit()`，失败整体回滚；离线测试 10 条（`tests/offline/test_transactions.py`），契约见 `docs/database.md` §6。**改动运行期写入路径，真机需随下一次部署复验。**
-10. **T10（P1，已修复，`b41bff4`）`stickers.last_used_at` 存 `time.monotonic()`**（`app/tools/builtin/send_sticker.py:113,117,146`），与 `docs/database.md` §1「统一 Unix 秒」冲突；重启后「优先未近期使用」的 tie-break 语义反转（`send_sticker.py:89-96`）。
-    修复：`SendStickerTool` 拆成两个时钟——群内冷却仍用 `time.monotonic`（进程相对秒、不落库），落库改 `wall_clock`（默认 `time.time`）写 Unix 秒；契约偏差从 `docs/database.md` §1 移除（旧值只可能残留在本机开发库，数值比 Unix 秒小、语义仍是「很久没用过」，真机 `stickers` 为 0 行）；离线测试 `tests/offline/test_stickers.py` 更新断言并新增 1 条（冷却时钟 1000.0 时落库值必须 > 1.6e9 且不等于进程相对秒）。**改运行期写入值，真机需随下一次部署复验。**
-11. **T11（P2）迁移解析脆弱** — 裸 `;` 切分（`app/storage/db.py:30`）、编号缺口/重复块无校验（`db.py:25,43`）、版本校验只看块数量（`db.py:67`）。
-12. **T12（P2，已修复，`7382639`）`chat_settings.upsert` 读-改-写无锁**（`app/storage/repo/chat_settings.py`）：两次 await 之间可被改写，存在丢更新 —— 阶段 8 F5.2 改为单条原子 `INSERT … ON CONFLICT DO UPDATE`，只写调用方给出的列（离线测试用 `mock` 断言不再读取当前设置）。
-13. **T13（P2）`notes` 没有运行时写入路径** — 只有运维脚本 `scripts/register_note.py`；500 字上限也只在脚本里校验（`app/storage/repo/notes.py` 层无约束）。
-14. **T14（P2）`thread_id` 恒为 NULL** — `messages.recent()` 支持该参数（`app/storage/repo/messages.py:69-71`）但没有调用方传入；摘要、游标、FTS 都是 chat 级（阶段 8 做论坛主题隔离）。
-15. **T15（P2，已修复，`101c26c`）`tool_failures` 表未建**（阶段 8 F5.4）—— migration 4 建表 + `idx_tool_failures_tool_time` / `idx_tool_failures_chat_time`，计入熔断的失败经 `ToolExecutor.failure_recorder` 留痕，启动时与每小时清理 7 天前记录（`app/storage/repo/tool_failures.py`）；进程内熔断计数仍在内存（与 `docs/security.md` §9 一致）。
-16. **T16（P2）纵深防御缺口** — `stickers.mark_used` 只按 `id`（`app/storage/repo/stickers.py:88-90`）、`DELETE FROM summaries WHERE id=?`（`summaries.py:134`）；当前所有调用路径都带 chat 校验，审查未发现可利用的越权路径。
+**范围**：用户要求「每次回复只响应当前触发消息；被跳过的消息视为已跳过，之后不补答，也不一次回好几条旧消息」。程序侧原本已满足（出站 `reply_to_message_id` 恒为本轮批次最后一条，`app/session/runner.py`），缺口是模型侧没有该约束，故本批只改提示词与文档，**无契约变更**（未动工具 schema / DB / 权限表 / 出站限流），也未改 `GLOBAL_PERSONA`（`docs/persona.md` §4 与该常量有逐字一致断言）。
 
-### 工具与契约
+- **代码与文档**（`50b4159de81dc87b40ea5711a068d98ee4035878`，68 提交 / 跟踪文件 156）：`app/llm/prompts.py` 的 `OUTPUT_RULES` 新增两句（只回应当前触发消息、历史只用于理解语义、跳过即 pass、不补答/不顺带回答/不一次回多条，连发只挑一条、通常最后一条），位置在「插不上话就不要说话」句与 `NO_REPLY` 句之间；`docs/requirements.md` §2.1 新增第 9–13 条（含「今天天气不错（未回）→ 你在干嘛？（触发）→ 只回你在干嘛？」正反例）、判定顺序与 F 表新增 `F2.13`（P1）。
+- **测试**：本机 `Ran 647 tests` / `OK (skipped=2)` / 退出码 0（643 → 647，新增 4 条，明细见 §3）；定向 `tests.offline.test_prompts tests.offline.test_pipeline` → `Ran 80 tests` / `OK`。
+- **部署**：按 `docs/deployment.md` §8.1 的 bundle 流程。bundle `dsh_deploy_50b4159.bundle`（sha256 `8f034527772f5ac49a04420e1686307442f4ab160ec2a00eccfb371094ba2194`，两端 `sha256sum` 一致），真机 `git bundle verify` 通过 → `git fetch … main:refs/remotes/origin/main` → `git remote set-url origin <bot-home>/bundles/dsh_deploy_50b4159.bundle` → `git checkout 50b4159`；真机 `git rev-parse --short HEAD` = `50b4159`、`git status --porcelain` 为空、跟踪文件 156。**本次含产品代码（提示词）改动，因此按要求重启**：`2026-10-08 17:13:46` 收到 SIGTERM（`收到信号 signum=15` → `已关闭`）→ `17:13:52` `启动完成`，停机约 6 秒。
+- **重启后运行状态**：`ActiveState=active`、`SubState=running`、`MainPID=64443`、`NRestarts=0`、`ExecMainStatus=0`；`storage/health.json` `ok=true`/`db_ok=true`/`outbound_pending=0`；`bot.log` 启动序列 `配置加载完成`（`BOT_TOKEN`/`LLM_API_KEY` 仍被脱敏）→ `Bot 就绪 username=<bot-username> bot_id=<bot-id> model=deepseek-flash` → `沙箱后端就绪 backend=podman version=4.3.1 workspace=True keep_id=True` → `启动完成`，重启后无新增 `Traceback`/`WARNING`/`ERROR`（日志全文 179 行，4 处 `Traceback` 位于第 106/122/131/147 行，均早于本次启动序列）。
+- **数据不动**：重启前后 `user_version=4`、`messages=159`、`updates=231`、`usage=81`、`summaries=8`、`stickers=104` 完全一致（生产库以 `file:…?mode=ro` 只读打开，未写入任何合成行）。
+- **真机定向验证**：用真机 venv 跑部署版代码 `python -m unittest tests.offline.test_prompts tests.offline.test_pipeline` → `Ran 80 tests` / `OK`；`app.llm.prompts.OUTPUT_RULES` 含「当前触发你的那条消息」（`rule_present=ok`）。
+- **GitHub 远端**：本批起项目正式远端为 GitHub 公开仓库 `youwmaoo-hub/groupbuddy`（本机 `origin`，`main` 已推送且与本机基线一致）；真机侧暂无 GitHub 凭据（`<bot-home>/.ssh` 不存在），真机 `origin` 仍是 Bot 用户持久目录里的 bundle，待配置部署密钥后再切换。
+- **验证方法的边界（如实记录）**：真机无法向已运行进程注入真实 Telegram 更新，「跳过的消息不再补答」在真实群里的观感需用户后续自然对话确认；本批已由离线端到端用例（旧消息只作背景、`reply_to_message_id` = 本轮最新消息）与真机定向测试共同证明。
+- **结论**：修复已上线真机并验证通过，`health` 正常、数据前后一致、无新增错误。
 
-17. **T17（P2）`ToolExecutor(max_payload_bytes=...)` 参数无效**（`app/tools/executor.py:43,127-128`）：实际上限由各 `ToolSpec.max_payload_bytes`（默认 4096，`registry.py:67`）决定。
-18. **T18（P2）`read_file` 的续读前提不成立** — 单次超过 16 KB 时整包丢弃 `too_large`，模型拿不到 `total_lines`（`docs/tools.md` §4）。
-19. **T19（P2）`SANDBOX_OUTPUT_KB` 与 20480 耦合** — 调大沙箱输出上限后，stdout+stderr 很容易超过 `run_code` 的 `ToolSpec` 上限，工具结果整包 `too_large`（`app/tools/executor.py:133-138`）。
-20. **T20（P2）`calc` 值域只对整数生效** — 结果绝对值 ≤10^100 的检查只覆盖 `int`，浮点结果只校验有限性（`app/tools/builtin/calc.py:90-97`）。
+### 4.9 开源化（2026-10-08，`92755c3`）
 
-### 代码质量与死代码
+**范围**：按用户要求把项目转为开源——仓库由私有改为公开、补齐开源必需文件、把文档里的实例标识换成占位符、删除账号下另外两个公共仓库。**不改运行期行为**（只动文档、模板与占位符；`scripts/backup_db.py` 只改了 docstring 里的示例路径）。
 
-21. **T21（P2）无调用方的死代码**：`Debouncer.flush/flush_all/pending_chats`（`app/gate/debounce.py:76,79,85`）、`UpdateDeduplicator.purge`（`app/gate/dedupe.py:20`）、`Settings.env_present`（`app/config.py:230`）、`get_logger`（`app/logging_setup.py:66`）、`StickerStore` 协议（`app/storage/repo/stickers.py:93`）、`SandboxErrorLike`（`app/tools/builtin/run_code.py:43`）。（原条目里的 `messages.clear_chat` 已被 `/clear` 接上，`8b14aab`，不再计入死代码。）
-22. **T22（P2）docstring 失准**：`app/config.py:205` 称 `Settings` 不可变但没设 `frozen`；`app/gate/dedupe.py:1` 写「批次级去重」实为逐 `update_id`。
-23. **T23（P2）装配路径瑕疵**：`app/main.py:67` 重复调用 `apply_migrations`（第二次为空操作）；`:185`/`:190` 正常路径 `shutdown()` 走两次；`app/sandbox/backends.py:290-296` 日志占位符把 `keep_id` 填进 `workspace=%s`；`app/tools/workspace.py:109-110` 死代码。
-24. **T24（P2）业务层反向依赖适配层**：`app/gate/debounce.py:10`、`app/gate/filters.py:7`、`app/gate/trigger.py:14`、`app/session/runner.py:22` 反向 import `app.telegram.parse`，与 `docs/architecture.md` §2 冲突；`app/telegram/__init__.py` 一旦变成 re-export 就形成环。
+- **许可**：`LICENSE` = MIT，© 2026 youwmaoo-hub（用户选定）。
+- **新增文件（10 个）**：`README.md`（定位、能力、快速开始、离线测试、部署、目录结构、文档地图、安全与隐私、许可）、`CONTRIBUTING.md`（`AGENTS.md` 摘要：开工顺序、硬规则、测试纪律、文档纪律、PR 要求、许可）、`SECURITY.md`（支持范围、GitHub 私密漏洞报告入口、在/不在范围内、部署者须知）、`CHANGELOG.md`（Keep a Changelog 形式，按阶段与提交汇总到 0.1.0）、`.github/workflows/tests.yml`（ubuntu-latest + Python 3.13：装依赖 → `compileall` → `unittest discover` → 校验 `.env`/数据库/素材未入库）、`.github/ISSUE_TEMPLATE/{bug_report.yml,feature_request.yml,config.yml}`、`.github/PULL_REQUEST_TEMPLATE.md`（要求写清验证命令、证据来源、契约与文档同步、脱敏确认）。
+- **标识占位符化**（`git grep` 复核后 tracked 文件里已无真实标识）：`docs/status.md` 中 bot 用户名 ×4 → `<bot-username>`、bot id ×4 → `<bot-id>`、真实群主 user id ×3 → `<owner-user-id>`、真实群 id ×3 → `<group-chat-id>`、VPS 主机名 ×1 → `<vps-host>`、`/home/bot` ×29 → `<bot-home>`；`TODO.md` ×2、`docs/deployment.md` ×1、`scripts/backup_db.py`（docstring 示例）×2 同样替换；`GitHub 私有仓库` ×5 → `GitHub 公开仓库`。**未改动两份原始需求文件** `优化与前言.txt`、`流程与要求.txt`（`AGENTS.md` §14 禁止修改；已检查其中只有 `chat_id` 语义说明与 `-100123456` 这类示例 id，无真实凭据与真实 id）。
+- **仓库设置与清理**：`gh repo edit` 更新简介并加 topics（telegram-bot / telegram / aiogram / python / llm / sqlite / sqlite-fts5 / podman / sandbox / self-hosted / chatbot）、可见性由 private 改为 public；删除账号下另外两个公共仓库 `tideline-gesture-field`（自建）与 `hypit`（fork）。（推送后确认：`gh repo view` → `visibility=PUBLIC`、`licenseInfo=MIT License`、11 个 topics、简介生效；`gh repo list youwmaoo-hub` 只剩 `groupbuddy`，两个删除命令均 exit 0，见 §4.10。）
+- **验证**：本机 `Ran 647 tests` / `OK (skipped=2)`（本批只有文档与模板，测试数字不变）；tracked 文件中无真实用户名/id/群 id/主机名/`/home/bot`，也无 `.env`、`storage/`、`*.db`、贴纸素材。本机无法执行 GitHub Actions，CI 首次运行结果见 §4.10。
+- **边界**：本批不改 `app/` 行为、**未上真机**，真机仍 @ `50b4159`（见 §4.8）——与本机在这一批上不是同一棵树，差异只有文档/模板/占位符；真机要跟进需按 `docs/deployment.md` §8.1 再走一次部署。
 
-### 测试与工程
+### 4.10 开源化推送确认（2026-10-08，本文件所在提交）
 
-25. **T25（P1，已补测，`6b93fd6`）关键路径零覆盖**：`app/main.py`、`app/logging_setup.py`、`app/telegram/handlers.py`、`app/telegram/sender.py` 原先没有任何测试；`CliBackend.run` 与 `DeepSeekClient` 的类体从未执行；`SecretFilter` 无测试。
-    A1–A3 修复期间正是这个缺口让 `app/main.py` 引用 `time.monotonic` 却未 `import time` 的装配缺陷（后台摘要任务一启动即 `NameError`）躲过了全部离线测试，直到改时钟域时才暴露。
-    已补齐（只加测试、不改产品代码）：`tests/offline/test_logging.py` 10 条（`SecretFilter` 的 msg/tuple/dict 三条脱敏路径、根 logger 装配与轮转文件、噪声库降级、`get_logger`）、`test_telegram_sender.py` 7 条（异常 → `RateLimited`/`SendFailed`、不设 `parse_mode`）、`test_handlers.py` 4 条（update → runner、异常不外抛）、`test_client.py` 13 条（请求组装、usage/tool_calls 提取、错误翻译、`aclose`）、`test_main.py` 8 条（DB 探测、失败留痕、`stop()` 收尾、每小时清理、信号注册）、`test_sandbox.py::CliBackendRunTests` 3 条（真实子进程退出码 0/3、超时销毁）；全量 546 条 OK。契约同步：`docs/architecture.md` §8、`docs/decisions/0006-credentials-not-in-git.md`。真机尚未同步（只含测试与文档，不影响运行期行为）。
-26. **T26（P2）分层测试缺口**：`tests/offline/test_layering.py` 只锁 5 条规则，未覆盖「适配器不得直连 SQLite/workspace/执行器/沙箱」，也不禁止 T24 的反向 import；`test_layering.py:118` 的断言文案 `config/tools/config` 疑似笔误。
-27. **T27（P2）依赖漂移与质量门禁**：`requirements.txt` 多数键只写 `>=`（`openai` / `aiosqlite` / `pydantic` / `pydantic-settings` / `tzdata`；`aiogram` / `fastapi` / `uvicorn` 有上界），本机 openai 3.24.0 / 真机 3.26.0 已漂移；无锁文件。CI 已有（`.github/workflows/tests.yml`，2026-10-08 起：编译检查 + 全量离线用例 + 凭据与运行数据入库检查，见 `docs/status.md` §4.10）；**仍无** lint 与类型检查。
-28. **T28（P2）平台条件跳过**：Windows 上软/硬链接相关 3 条用例 `skipTest`（`tests/offline/test_files.py:90,103,127`），本机全绿不代表 Linux 行为（真机已跑同一套测试，见 `docs/status.md`）。
-29. **T29（P2）测试环境副作用与 flaky 风险**：`tests/offline/test_sandbox.py:162-169` 直接改 `os.environ`；`test_executor.py:39` 与 `test_sandbox.py:263,267,281` 依赖 `sleep` 时序。
-30. **T30（P2）代码注释与当前实现不符（文档治理阶段不动代码，仅登记）**：`app/tools/policy.py:43` 仍写「阶段 3 只有 L0 工具」，但 L0–L3 均已注册（见 `docs/tools.md` §3）。修注释属代码改动，需另开任务。
-31. **T31（P1，已修复，`e1dcb6a`）工具清单在本轮内被快照**（工具契约；`app/llm/loop.py:89`）：第 1 轮取一次清单后，后续轮次继续下发「本轮已禁用/已熔断」的工具，模型会调用只可能返回 `cooldown` 的工具，白花一整轮模型调用与 token，与 `docs/tools.md` §1、`docs/security.md` §9「本轮从可用清单移除」及 F4.8 验收「失败工具不再重复调用」不符。修复：每轮重新取清单（为空即不带工具、强制给答案）；`cooldown` 文案改用 `BreakerConfig.round_failures`。回归：`tests/offline/test_loop.py`（未修复时 `spec_calls` 断言失败）、`tests/offline/test_executor.py`。发现于工具体验优化。
+**范围**：把 §4.9 的开源化改动推送到 GitHub 并确认仓库设置生效；**不改代码、不动真机**。
 
-### 已确认没有问题的部分（避免重复排查）
+- **推送**：`git push origin main` → `387467d..92755c3  main -> main`（exit 0）；`git ls-remote origin refs/heads/main` = `92755c3646981c0181b0d7bec2f630ef51ee115c` = 本地 `git rev-parse HEAD`；本机 `git status --porcelain` 为空，跟踪文件 166、提交数 71。
+- **仓库设置**：`gh repo edit youwmaoo-hub/groupbuddy --visibility public --accept-visibility-change-consequences` + 简介 + 11 个 topics（exit 0）；`gh repo view --json visibility,licenseInfo,repositoryTopics,description` → `visibility=PUBLIC`、`licenseInfo=MIT License`、topics 11 个、简介生效。
+- **旧仓库清理**：`gh repo delete youwmaoo-hub/tideline-gesture-field --yes` 与 `gh repo delete youwmaoo-hub/hypit --yes` 均 exit 0；`gh repo list youwmaoo-hub --json name,visibility,isFork` 现只剩 `groupbuddy`（PUBLIC、`isFork=false`）。
+- **CI 首次运行**：`.github/workflows/tests.yml` 在 `92755c3` 上跑通——`gh run list` → `tests | completed | success`，run `37760925291`（`https://github.com/youwmaoo-hub/groupbuddy/actions/runs/37760925291`）；步骤为 ubuntu-latest + Python 3.13：依赖安装 → `compileall` → `unittest discover` 全绿。本机无法执行 Actions，故此为唯一来源。
+- **真机状态（未动，只读复查）**：`groupbuddy.service` `ActiveState=active`、`SubState=running`、`MainPID=64443`、`NRestarts=0`、`ExecMainStatus=0`；`storage/health.json` → `ok=true`、`db_ok=true`、`outbound_pending=0`、`uptime_s≈3000`；`<bot-home>/app` 侧 `HEAD=50b4159`、`dirty=0`、`origin=<bot-home>/bundles/dsh_deploy_50b4159.bundle`。本批只改文档与模板，未重新部署，故真机仍停在 `50b4159`。
+- **边界**：不改 `app/` 运行期行为；真机与本机在文档/模板层面相差两个提交（`92755c3` 与本次确认提交），功能代码完全一致。真机要切到 GitHub 远端仍需先配只读部署密钥（见 §4.8、§5）。
 
-- 未见 SQL 注入点：值全部走 `?` 占位符，动态 SQL 只拼固定列名/条件；FTS `MATCH` 串参数化且词表受正则限制（实测 `near` 与小写 `or/and/not` 在 FTS5 中按普通 token 处理）。
-- 未见跨群越权读取路径：messages / summaries / notes / stickers / usage / chat_settings 的查询都带 `chat_id` 条件。
-- 摘要的模板、游标、失败不推进语义与 `docs/memory.md` §4、`docs/database.md` §3 一致。
-- 沙箱 argv 的 12 项固定参数在 `app/sandbox/spec.py` 内一致，模型无法影响镜像/挂载/runtime。
+### 4.11 默认接话改造（2026-10-08，本机 `39687b4`；真机上线见 §4.12）
+
+- **范围**：用户要求"群里大部分能接话的消息都回"，同时保留限制。改动只动发言判定、合并与输出规则，不新增依赖、不改数据库、不改权限与出站契约。
+- **代码**：
+  - `app/gate/trigger.py`：强触发（`mention`/`reply_to_bot`/`alias`）之后依次过重复过滤与冷却，通过即 RESPOND；弱规则（疑问/报错/资源/追问/话题/情绪/安静后开场）只决定原因码，都没命中落新增的 `general` 兜底；删除"沉默词表"`not_addressed` 与 `quota`。
+  - `app/gate/limits.py`：`ProactiveLimiter` 只保留冷却（默认 20 秒）；新增 `RepeatGuard`（同一人同一句话在 `DUPLICATE_WINDOW_SECONDS` 默认 300 秒内只接第一次，去空白 + 大小写归一），原因码 `repeat`。
+  - `app/config.py`：`DEBOUNCE_SECONDS`/`DEBOUNCE_MAX_MESSAGES` 默认改为 `0`/`1`（连发不合并）；删除 `PROACTIVE_WINDOW_SECONDS`、`PROACTIVE_MAX_PER_WINDOW`；新增 `DUPLICATE_WINDOW_SECONDS`。
+  - `app/llm/prompts.py` + `app/session/runner.py`：输出规则写明"这条消息已经通过筛选、轮到你了：默认就接一句"，`NO_REPLY` 收窄到纯符号/纯链接/纯转发媒体；首轮 `NO_REPLY` 时追加一句"必须回"的追问重跑一次（只多一次调用，仍记 usage）。
+  - 人设（`GLOBAL_PERSONA` 与 `docs/persona.md` §4 逐字一致）：去掉"没人点名你、你也插不上话时就不说话"，改为"接话自然一点，别硬凑话题、也别句句卖萌"。
+- **测试（本机 Windows + `.venv` Python 3.13 + 离线 FakeBackend）**：`Ran 656 tests` / `OK (skipped=2)`（647 → 656，新增 15 条、改写 6 条，明细见 §3）；定向 `tests.offline.test_pipeline/test_prompts/test_gate/test_limits` → `Ran 136 tests` / `OK`。
+- **文档**：`docs/requirements.md` §2.1（规则 2/3/8/10/13 + 判定顺序表 13 行 + 三条闸门说明）、F2.2–F2.11 验收口径；`docs/architecture.md` §2 表格与运行期行为；`docs/token.md` §3 链 1；`docs/deployment.md` §3 主动接话；`docs/persona.md` §3/§4/§5；`docs/security.md` §12；`README.md`、`docs/README.md` 路由表、`TODO.md` 阶段 2、`CHANGELOG.md`（Unreleased）、`.env.example`。
+- **CI**：GitHub Actions（ubuntu-latest + Python 3.13，`compileall` → `unittest discover`）在含本改动的 `aa557db` 上全绿：run `37766258091` `completed/success`（同一提交的前一次 push run `37766234629` 亦为 `success`；`gh run list` 可查）。
+- **兼容性**：`.env` 里保留已删除的 `PROACTIVE_WINDOW_SECONDS`/`PROACTIVE_MAX_PER_WINDOW` 会被静默忽略（未知键走默认值），真机 `.env` 不需要改也能启动；反之不设 `DUPLICATE_WINDOW_SECONDS` 走默认 300 秒。
+- **边界（必须如实区分）**：本节的验证**只在真机之外**——本机 Windows、离线 fake 模型与 fake 发送器；真机部署、重启与 GitHub 远端切换见 §4.12，"是否过于话痨""真实群里的观感"这类结论仍需用户在真实群里自然对话确认。改的是运行期行为（发言判定与 prompt），回滚可按 `docs/deployment.md` §8.1 退回上一个 bundle（`dsh_deploy_50b4159.bundle`）。
+- **结论**：默认接话已在本机实现并全绿，随后按用户决定部署真机（见 §4.12）。
+
+### 4.12 默认接话改造真机上线与真机 `origin` 切换 GitHub（2026-10-08，真机 `ede3ef2`）
+
+**范围**：把 §4.11 的默认接话改造按 `docs/deployment.md` §8.1 部署到真机（含重启与运行复核），并把真机 `origin` 从持久 bundle 切到 GitHub 公开仓库（只读部署密钥）。**不改代码、不改数据库**。
+
+- **bundle**：本机 `%TEMP%\dsh_deploy_ede3ef2.bundle`，sha256 `031ea0f6b09d62f029ab66317466ce9eff20361aa8b70971b1e99952e09d4d4f`（两端 `sha256sum` 一致）；`scp` 到 `/tmp/` 后 `cp` 到持久目录 `<bot-home>/bundles/dsh_deploy_ede3ef2.bundle`（`bot:bot`、`644`）。
+- **更新**：`git bundle verify` → 「The bundle records a complete history.」→ `git fetch <bundle> main:refs/remotes/origin/main`（`50b4159..ede3ef2`）→ `git checkout ede3ef2`；真机 `HEAD=ede3ef2`、`git status --porcelain` 为空、跟踪文件 166（上一批 156，新增 10 个开源文件）。
+- **重启**：本批含产品代码（发言判定与 prompt），按要求重启：`2026-10-08 18:56:56` `收到信号 signum=15` → `已关闭` → `18:57:01` `配置加载完成` → `18:57:02` `启动完成`（停机约 5 秒）；启动序列含 `Bot 就绪 username=<bot-username> bot_id=<bot-id> model=deepseek-flash` → `沙箱后端就绪 backend=podman version=4.3.1 workspace=True keep_id=True`。重启后 `ActiveState=active`、`SubState=running`、`MainPID=65962`、`NRestarts=0`、`ExecMainStatus=0`；`storage/health.json` → `ok=true`、`db_ok=true`、`outbound_pending=0`。
+- **新默认值确实生效（启动日志为证）**：`配置加载完成` 行显示 `DEBOUNCE_SECONDS=0.0 DEBOUNCE_MAX_MESSAGES=1 DUPLICATE_WINDOW_SECONDS=300.0`，且不再出现 `PROACTIVE_WINDOW_SECONDS`/`PROACTIVE_MAX_PER_WINDOW`——说明新默认值生效，真机 `.env` 里遗留的旧键被静默忽略（**无需改真机 `.env`**）。
+- **真机 `origin` 切换 GitHub**：以 `bot` 身份 `ssh-keygen -t ed25519` 生成部署密钥 `<bot-home>/.ssh/id_ed25519_github`（注释 `groupbuddy-deploy@vps`），用 `gh repo deploy-key add` 注册到 `youwmaoo-hub/groupbuddy`（id `165780113`、标题 `vps-bot-readonly`、**read-only**）；`<bot-home>/.ssh/config` 写 `Host github.com` + `HostName github.com` + `User git` + `IdentityFile` + `IdentitiesOnly yes`，`known_hosts` 由 `ssh-keyscan -t ed25519 github.com` 写入；`git remote set-url origin git@github.com:youwmaoo-hub/groupbuddy.git` 后 `git fetch origin` 成功，`git ls-remote` 返回 `ede3ef2…`；真机 `HEAD=origin/main=ede3ef2`、`dirty=0`、跟踪文件 166。**只读密钥不能 push**，发布仍由本机推送 GitHub；装代码仍可继续走 bundle 流程。
+- **坑（如实记录）**：第一次用 `printf '%s\n' …` 经 SSH 写 `<bot-home>/.ssh/config` 时格式串被吃掉，文件变成一行含字面 `n`（`Host github.comn  HostName github.comn …`），导致 `git@github.com: Permission denied (publickey)`。改为在本机写好文件 → `scp` 到 `/tmp` → 远端 `tr -d '\r' > <bot-home>/.ssh/config` + `chmod 600` 后正常。
+- **数据不动**：部署前后以 `file:…?mode=ro` 只读复核完全一致——`user_version=4`、`messages=168`、`updates=239`、`stickers=104`、`usage=85`、`summaries=9`（本次部署没有产生任何合成数据）。
+- **验证方法的边界（如实记录）**：真机无法向已运行进程注入真实 Telegram 更新，所以「普通闲聊是否都有回」「20 秒冷却与 300 秒重复过滤是否合适」「首轮 `NO_REPLY` 追问是否触发」这三条需要在真实群里由用户自然对话确认（届时看 `bot.log` 的 `触发判定 … 原因=` 与 `本轮不说话`/追问记录）；代码路径已由离线端到端用例覆盖（§4.11、§3）。
+- **回滚**：如需退回，按 `docs/deployment.md` §8.1 用上一批 bundle `dsh_deploy_50b4159.bundle`（`git fetch` + `git checkout 50b4159` + 重启）；本批未改数据库，回滚不回滚数据都一样。
+- **结论**：默认接话改造已上线真机并验证启动/运行/数据正常，真机 `origin` 已切到 GitHub（只读）；本机、GitHub `main`、真机三处同一提交 `ede3ef2`。
+
+### 4.13 控制面板与服务层（2026-10-08，本机；**未上真机**）
+
+**范围**：用户要求「开源版本 + 简易操作面板 + 整合发布、只保留核心代码与使用方法」。本批实现阶段 10 的 F6.1–F6.4（控制面板与服务层），并同步文档（ADR 0011、`docs/architecture.md`、`docs/requirements.md` F6/§4、`docs/domain.md`、`docs/security.md` §2.3/§6/§11/§13、`docs/deployment.md` §13、`TODO.md` 阶段 10、`README.md`、`docs/README.md` 路由表、`CHANGELOG.md`）。
+
+- **新增代码**：`app/services/`（`context.py` `ServiceContext`、`settings.py` 群设置读/列/写复用 `app/ops/commands.py` 的 `resolve_setting`/`resolve_persona_setting`、`overview.py` 概览 + 日志尾部 256 KB 脱敏有界、`credentials.py` 凭据状态与写入永不返回明文）；`app/control/`（`auth.py` 口令→级别、`app.py` 路由与安全响应头、`__main__.py` `python -m app.control`、`static/index.html|app.js|style.css` 零构建静态页）。
+- **改动文件**：`app/config.py`（`PANEL_ENABLED`/`PANEL_HOST`/`PANEL_PORT`/`PANEL_TOKEN`/`PANEL_READONLY_TOKEN` + `MIN_PANEL_TOKEN_CHARS=12` 校验；`Settings.secrets` 纳入两个面板口令；`describe()` 掩码）、`app/ops/health.py`（新增 `read_snapshot`/`parse_snapshot`）、`app/storage/repo/messages.py`（新增 `totals`/`chat_activity`）、`app/storage/repo/chat_settings.py`（新增 `list_all`）、`requirements.txt`（`fastapi`/`uvicorn` 列为**可选**依赖）、`.env.example`（新增面板键、`LLM_BASE_URL` 改占位、`BOT_ALIASES` 中立化）。
+- **本机测试**：`Ran 688 tests` / `OK (skipped=2)`（656 → +32：`test_control_auth.py` 11 + `test_control_api.py` 18 + `test_layering.py` 3；明细见 §3）。面板 HTTP 用例自带最小 ASGI 客户端（不依赖 `httpx`），服务层叠加测试用临时 `.env`，不写仓库根 `.env`。
+- **面板形态（已验证的部分）**：默认关闭（`PANEL_ENABLED=false`）、默认只监听 `127.0.0.1:8787`；未配置任何口令时 `create_app` 直接拒绝、`python -m app.control` 退出码 2；鉴权 `Authorization: Bearer`（`PANEL_TOKEN`→ADMIN、`PANEL_READONLY_TOKEN`→VIEWER，`hmac.compare_digest`；越权 403 / 未带口令 401）；关闭 `docs`/`redoc`/`openapi`，统一安全响应头与严格 CSP，`/api/*` 带 `Cache-Control: no-store`；静态页零构建、无内联脚本、无内联样式。
+- **未验证（如实记录）**：本机没有真机环境，**未验证** systemd 第二个单元、真实端口监听、浏览器实际访问与 SSH 隧道链路——真机启用需按 `docs/deployment.md` §13 执行并复验。
+- **未实施**：凭据仍是明文 `.env`（`0600`，10.2 的 `credentials`/`audit_log` 表与主密钥托管未做）；多实例聚合与多用户身份（`Principal`/`WebUser`）未做；不提供公网暴露方案。
+- **结论**：面板是可选的第二个进程、默认关闭，不影响既有部署与运行路径；契约见 §13 与 ADR 0011。
+
+### 4.14 开源发布包 v1.0.0（2026-10-08，本机，静态打包；**未在真机验证**）
+
+**范围**：用户要求「整合发布一个版本、只含核心代码与如何使用/修改说明，把不需要的排除」。
+
+- **做法**：`git archive` 取 `61d3965` 的跟踪文件 → 解到 `release/groupbuddy-v1.0.0/`，排除两份原始需求记录（`优化与前言.txt`、`流程与要求.txt`），补写 `release/groupbuddy-v1.0.0/发布与使用说明.md`（要准备什么 / 安装 / 部署 24/7 / 面板 / 怎么改（含换形象）/ 升级回滚 / 许可），再打包 `release/groupbuddy-v1.0.0.zip`（约 0.5 MB、181 条目、顶层目录 `groupbuddy-v1.0.0/`）。开发仓库原样保留，不改产品代码。
+- **排除项检查**：包内无 `storage/` 与运行数据（`bot.db`/WAL/日志/`health.json`/备份）、无真实 `.env`、无 `__pycache__`/`.pyc`、无虚拟环境、无贴纸素材本体（`deploy/stickers/assets/` 本就 gitignore）；`BOT_TOKEN=123456:REPLACE_ME` 是占位值。
+- **中立化检查**：`BOT_ALIASES` 为空（示例 `MyBot,小助手`）、`.env.example` 的 `LLM_BASE_URL` 是占位 `https://api.example.com/v1`、`LLM_MODEL=your-model-name`；无硬编码主机/IP（只出现 `127.0.0.1` 回环默认值与测试夹具、`1.1.1.1` 沙箱网络探针），无个人 API Key 或 Token。
+- **仍属示例的部分**：内置人格是「DeepSeek 大肥鱼 / 鲸鱼娘」二创形象（代码默认），发布说明 §6.1 写明换成自己形象要改的四处：`PERSONA` 环境变量或群级 `/settings persona_override`、`app/llm/prompts.py::GLOBAL_PERSONA`（同步 `docs/persona.md` §4，测试逐字校验）、`BOT_ALIASES` 与 `app/ops/commands.py:133` 的 `/help` 文案、贴纸包 `deploy/stickers/catalog.json`。
+- **未验证（如实记录）**：发布包**没有**在干净机器上从零 `pip install -r requirements.txt` + 启动验证；688 条离线用例是在开发树上跑的，不是解包后跑的；真机也没拉这个包。
+- **已发布**：2026-10-08 推送 GitHub 公开仓库（`0bce001..fef063c`，快进）；该提交触发的 CI run `37780520212` 结论 `success`（编译检查 + 全量离线用例 + 凭据/运行数据入库检查）。
+- **结论**：发布包只含核心代码、文档、脚本与模板，凭据与运行数据不入包。
+
+## 5. 尚未做 / 尚未上线（重要）
+
+- **控制面板已实现，但尚未上真机（2026-10-08，本机，见 §4.13）**：`app/control/` + `app/services/` 已完成并在本机 688 条离线用例全绿，默认关闭、默认只监听回环，因此**不部署也不影响真机**。真机若要启用，需要：`pip install -r requirements.txt`（含可选依赖 `fastapi`/`uvicorn`）、在 `.env` 增 `PANEL_ENABLED=true` 与 ≥12 字符的 `PANEL_TOKEN`（可选 `PANEL_READONLY_TOKEN`）、按 `docs/deployment.md` §13.3/§13.4 前台试跑或加 systemd 用户级单元 `groupbuddy-panel.service`、用 SSH 隧道访问；尚未真机复验（systemd 第二单元、端口监听、浏览器链路）。
+- **默认接话改造已上线真机（2026-10-08，`39687b4` + `aa557db` + `ede3ef2`）**：发言策略、重复过滤、合并默认关闭、输出规则与人设措辞都已改完、本机全绿并部署到真机（见 §4.11、§4.12）；真机 @ `ede3ef2` 运行中。**遗留观察项**：真实群里的观感（是否话痨、冷却与重复过滤是否合适、首轮 `NO_REPLY` 追问是否触发）需要自然对话确认，再决定是否调 `PROACTIVE_COOLDOWN_SECONDS`/`DUPLICATE_WINDOW_SECONDS`。
+- **开源化已完成（2026-10-08，`5b14ab0`）**：仓库公开（`youwmaoo-hub/groupbuddy`，MIT）、开源文件与 CI/Issue/PR 模板就位、文档标识已占位符化、两个旧公共仓库已删除（见 §4.9）；遗留：GitHub Actions 首次运行已通过（`92755c3`，run `37760925291`，见 §4.10）；真机当时仍在 `50b4159`（差异仅文档与模板，不影响运行）；真机已于 2026-10-08 随 §4.12 升到 `ede3ef2`。
+- **回复目标唯一修复已上线真机（2026-10-08，`50b4159`）**：每轮只响应当前触发消息、被跳过的消息不再补答已部署并验证（见 §4.8）；本机 `main` 与真机同一棵树（本机多一条本文件基线提交）。
+- **真实使用反馈修正已上线真机（2026-10-08，`172ab6b`）**：回复长度上限、别人的 Bot 对话不插嘴、`/help` 与指令菜单、人设自我认识均已部署并验证（见 §4.7）；本机 `main` 与真机为同一棵树。
+- **群宠体验升级已上线真机（2026-10-08，`30cc3fe`）**：主动接话 / Persona / 多 Bot 防误触 / 104 槽贴纸 catalog 与完整导入均已部署并真机验收（证据见 §4.6），本机 `main` 与真机现为同一棵树；本批未改产品代码。
+
+- **Bot 已在真机 24/7 运行**：systemd 用户级单元 `groupbuddy.service`（`Restart=always`、`RestartSec=5`，配合 `Linger=yes` 开机自启），真机证据见 §4.3，部署契约见 `docs/deployment.md` §12.9。
+- **真实 `.env` 已就位**：`<bot-home>/app/.env`（`600`、`bot:bot`，只写覆盖项，绝对路径）；仓库内仍只有 `.env.example`，本文件与所有文档都不记录任何凭据值。
+- **正式远端已配置，真机也已切到 GitHub（2026-10-08）**：项目 `origin` = GitHub 公开仓库 `youwmaoo-hub/groupbuddy`，`main` 已推送且与本机基线一致（见 §4.8、§4.10）；真机 `origin` 也已改为 `git@github.com:youwmaoo-hub/groupbuddy.git`，用 `bot` 用户的**只读**部署密钥 `vps-bot-readonly`（id `165780113`）`git fetch`（见 §4.12）。装代码仍走 git bundle + SSH（bundle 在 Bot 用户持久目录），因为只读密钥不能 push；真机要改成可推送需另加一把可写密钥（属部署决策，当前不需要）。
+- 备份/恢复与更新/回滚演练已完成（见 §4.4）；**仍未实现**：程序内自动备份任务与 `BACKUP_INTERVAL_SECONDS`/`BACKUP_KEEP` 环境键（当前只能手工跑 `scripts/backup_db.py`）、体积膨胀时的 `VACUUM`（离线手工）、容器托管（`Dockerfile`/`compose.yaml`，可选路径）。`PRAGMA optimize` 已例行化（`29f6687`：每 7 天一次，契约见 `docs/database.md` §5、`docs/architecture.md` §5）。
+- 阶段 8 内明确留到后续的项：**均已实施**——链 3 的工具轮次按意图分档（已于 `a5bf651` 实施：闲聊 1 轮、其余沿用全局 `TOOL_MAX_ROUNDS`，见 §3 与 `docs/token.md` §5.2）、模型档位路由（已于 `e26ea3c` 实施，见 §3 与 `docs/token.md` §5.1）。原留后项 `/clear` 已补做（`8b14aab`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）），群级人设 Persona 已实现（`c29ecac`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）），长期笔记 `/note` 已实现（`495389b`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）；记忆体验优化的第一项，见 `docs/memory.md` §6），工具体验优化修复 T31（`e1dcb6a`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）：工具清单逐轮重取，本轮被禁用的工具不再下发给模型），关键路径补测 T25（`6b93fd6`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）：只新增测试与文档，不改运行期行为，因此不影响真机运行），验收脚本判定口径 T7（`4ea2326`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）：只改 `scripts/verify_sandbox.py` 的判定与 4 条离线测试 + 文档，不影响 Bot 运行期行为；真机复跑安排在下一次部署/里程碑），repo 写入事务边界 T9（`1826d89`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）：**这条改变了运行期写入路径**（repo 不再自己 `commit()`，改由 `app/storage/tx.py` 的 SAVEPOINT 事务提交），因此下一次真机部署必须连同一次真实收发冒烟一起复验，并按 `docs/deployment.md` §8.1 备好回滚），阶段 9 小优化 `PRAGMA optimize`（`29f6687`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）：housekeeping 每 7 天多执行一条 `PRAGMA optimize`，失败只记日志不影响循环；随下一次批量部署一起上），容器运行时保留退出码 T4（`d59a703`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）：**这条改变了运行期行为**——容器以 125/126/127 退出时不再把 argv 结果当工具结果返回，而是回 `execution_failed` 并销毁容器，部署后建议真机补一次 `run_code` 冒烟；随下一次批量部署一起上），验收脚本能力/提权覆盖 T6 与贴纸时间口径 T10（`b41bff4`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）：T6 只改 `scripts/verify_sandbox.py` 与离线测试、不影响运行期行为，按 §4.2 下次部署复跑 15 项；**T10 改运行期写入值**——`stickers.last_used_at` 由进程相对秒改为 Unix 秒（冷却仍用 `time.monotonic`），部署后首次 `send_sticker` 即写入 Unix 秒；两项随下一次批量部署一起上），模型档位路由（`e26ea3c`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）：新增配置键 `LLM_MODEL_STRONG` 与 `app/llm/routing.py`，**该键留空时行为与成本与升级前完全一致**——真机 `.env` 现在没有这个键，所以不同步也不会改变真机运行期行为；要启用需在真机 `.env` 增键，属部署决策，随下一次批量部署一起上），群宠体验升级（`ba7afe1`，本机；已随本批部署同步真机（2026-10-08，见 §4.6）：**这条改变了运行期行为与提示词**——主动接话新增三条弱触发（同话题 / 情绪反应 / 久静后开场，冷却 20 秒与每 300 秒 3 次的上限不变，全部纯规则 0 token）、内置 Persona 换成「DeepSeek 大肥鱼」群宠定位、其他 Bot 的消息在判定入口直接 `ignore` 且不占冷却与额度；贴纸 catalog 与两个导入脚本属运维侧、不改运行期执行路径，但真机要按情绪取到贴纸仍需先按 `deploy/stickers/README.md` 导入素材（空库时 `send_sticker` 仍不下发，`bafe096` 语义不变）。部署时另注意两点：①真机 `.env` 的 `BOT_ALIASES` 建议显式配置（如 `DeepSeek,大肥鱼,深蓝大肥鱼,鲸鱼娘`），不要写 `bot` 这类通用词，否则 `@其他bot` 会被当成叫本 Bot；②Telegram 侧需关掉 Privacy Mode 或把 Bot 设为群管理员，否则普通群消息根本到不了进程、主动接话不生效（`docs/deployment.md` §12.10）。随下一次批量部署一起上）。
+- **模型档位路由：已实施（`e26ea3c`，2026-10-07）**：唯一入口 `app/llm/routing.py::ModelRouter.choose(*, intent, purpose)`——默认档 = `LLM_MODEL`（现为 `deepseek-flash`），升级档 = `LLM_MODEL_STRONG`（留空或与默认同名即视为未配置，不改路由），只有 `purpose=chat` 且 `intent=complex` 且有升级档时才换模型；summary / 后台任务继续走默认档且 purpose 不变；复杂判定仍沿用既有的纯规则（代码块 / 单条 ≥400 字 / 链接 / 指代检索需求），不新增独立分类器、不增加额外一次 LLM 判断、不引入依赖；选择过程抛错即 fail-safe 回默认档；路由发生在配额判定之后，不绕过 quota / tool policy / sandbox / 权限；`usage` 记最终实际使用的 model（`purpose=chat`）。成本影响：`LLM_MODEL_STRONG` 留空时与升级前完全一致；填了之后只有复杂轮换模型，且缓存按模型隔离，升级轮可能按未命中价计费。评估背景（2026-10-07）：真实使用成本 < $0.01（§4.5：29 次 chat 调用 ≈ 44k 输入 / 4.5k 输出、观察到的轮次 `tool_calls=0`），没有复杂轮次质量不足的证据，所以默认不配置升级档；唯一可用方向是把复杂轮次升级到 `deepseek-v4-pro`（提高花费换质量），其价格与可得性未核实，属部署决策。**链 3 轮次分档：已实施（`a5bf651`，2026-10-07）**——同一入口 `app/llm/routing.py::tool_round_limit(intent, settings)`：只把全局 `TOOL_MAX_ROUNDS`（默认 2，可选 0–4）调低，闲聊 1 轮（原表写 0 轮，但 0 轮会连贴纸工具一起关掉，故取 1 轮）、复杂任务与无法判断仍用全局上限（部署方设 4 即对应表里的「代码调试 4 轮」）；未登记意图与异常输入一律回全局上限，分档不会突破部署方设置。契约与评估结论见 `docs/requirements.md` 未决问题 #2、`docs/token.md` §5/§5.1/§5.2、`docs/architecture.md` §3/§7。
+- 未引入 lint、类型检查、锁文件（CI 已有，见 §4.10 与 `TODO.md` T27）。
+
+## 6. 技术债摘要
+
+完整清单（T1–T31，含等级与 `文件:行号`）在 `TODO.md` §技术债与已知缺陷。`f7f34b5` 已修复其中 3 条，阶段 8 F5.2（`7382639`）追加修复 1 条，F5.4（`101c26c`）追加修复 1 条，工具体验优化（`e1dcb6a`）追加修复 1 条（T31），关键路径补测（`6b93fd6`）补上 1 条（T25，只加测试），验收脚本判定口径（`4ea2326`）修复 1 条（T7），repo 写入事务边界（`1826d89`）修复 1 条（T9），容器运行时保留退出码（`d59a703`）修复 1 条（T4）：
+
+- **T1（P0，已修复）**：摘要「静默 ≥120 秒」触发恒不成立（`time.monotonic()` 与 Unix 秒比较）——记忆能力静默退化。
+- **T2（P0，已修复）**：迁移无事务 + `ALTER TABLE` 不幂等——迁移中途失败会让 Bot **永久无法启动**。
+- **T3（P1，已修复）**：本轮消息在超出字符预算时被 history 裁剪丢弃。
+- **T12（P1，已修复，`7382639`）**：`chat_settings.upsert` 先读再写，并发下会丢更新（群主命令即将把设置写入变成热路径）——改为单条原子 `INSERT … ON CONFLICT DO UPDATE`，只写调用方给出的列；离线测试用 `mock` 断言 upsert 不再读取当前设置。
+- **T15（P1，已修复，`101c26c`）**：`tool_failures` 表缺失，`/stats` 无失败数据源——migration 4 建表 + 两个索引，计入熔断的失败（超时 / 工具错误 / 未预期异常）经 `failure_recorder` 留痕，启动时与每小时清理 7 天前的行；调用前拒绝（`permission_denied` / `invalid_arguments` / `cooldown`）不入表。
+- **T31（P1，已修复，`e1dcb6a`）**：工具清单在本轮内被快照（`app/llm/loop.py:89`）——第 1 轮取一次后，后续轮次仍下发「本轮已禁用/已熔断」的工具，模型可能再次调用只可能返回 `cooldown` 的工具，白花一整轮模型调用与 token；与 `docs/tools.md` §1、`docs/security.md` §9 的「本轮从可用清单移除」及 F4.8 验收「失败工具不再重复调用」不符。修复：每一轮重新取清单（清单为空即不带工具、强制给答案），`cooldown` 文案改用 `BreakerConfig.round_failures` 而不是写死 2。发现路径：工具体验优化（代码 + 契约证据；同类浪费在真实使用中已由 `send_sticker` 空库双失败暴露过一次）。
+- **T4（P1，已修复，`d59a703`）**：容器运行时以保留退出码 125/126/127（CLI 自身失败 / 容器内命令不可执行 / 命令不存在）退出时，`runner.py` 原样把 argv 的退出码当工具结果返回，「容器没起来」与「程序正常失败」不可区分（阶段 7 首次真机验收的 `--workdir /workspace` 事故正是由此漏报）。修法：`app/sandbox/backends.py` 新增 `CLI_FAILURE_EXIT_CODES = frozenset({125, 126, 127})`，`runner.py` 在超时判定之后、读输出之前按该集合抛 `SandboxError("execution_failed", …)` 并销毁容器；这三个码由 podman/docker 保留、无法与「程序自己 `exit 125/126/127`」区分，属已知取舍（错误文案提示改用其他退出码）。离线回归 2 条（见 §3），契约同步 `docs/tools.md` §2 `run_code` 与 §3 错误码表。**注意：这条改变了运行期行为**，真机需随下一次部署复验。
+- **T9（P1，已修复，`1826d89`）**：各 repo 自己 `commit()`、无 `rollback`（`summaries.py:65,136`、`notes.py:48`、`stickers.py:73,90` 等 14 处），主表 + FTS 的多语句写可能半提交，或被执行其他任务的写入时顺带提交。修法：新增 `app/storage/tx.py` 的 `transaction()`（`SAVEPOINT` … `RELEASE` / `ROLLBACK TO`，因为整进程共享一条连接、`BEGIN` 会与之冲突），14 个写入入口全部改为在事务内完成并去掉自己的 `commit()`；主表与 FTS 要么一起生效要么一起回滚。离线回归 10 条（见 §3），契约同步 `docs/database.md` §6 与 `docs/architecture.md` 模块表。**注意：这条改变了运行期写入路径**，真机需随下一次部署复验。
+- **T25（P1，已补测，`6b93fd6`）**：`app/main.py`、`app/logging_setup.py`、`app/telegram/handlers.py`、`app/telegram/sender.py` 零测试，`CliBackend.run` 与 `DeepSeekClient` 类体从未执行，`SecretFilter` 无测试——A1–A3 修复期间正是这个缺口让 `app/main.py` 缺 `import time` 的装配缺陷躲过全部离线测试。补法：只加测试（45 条，见 §3），不改产品代码；契约文档同步 `docs/architecture.md` §8 与 `docs/decisions/0006-credentials-not-in-git.md`。
+
+- **T10（P1，已修复，`b41bff4`）**：`stickers.last_used_at` 写 `time.monotonic()`（进程相对秒），与 `docs/database.md` §1「统一 Unix 秒」冲突，重启后「优先未近期使用」的 tie-break 语义反转。修法：`SendStickerTool` 拆成两个时钟——群内冷却仍用 `time.monotonic`（不落库），落库改 `wall_clock`（默认 `time.time`）写 Unix 秒；`docs/database.md` §1 的偏差条移除（旧值只可能残留在本机开发库，数值比 Unix 秒小、仍被当作「很久没用过」）。离线回归 1 条 + 更新 1 条（见 §3）。**注意：这条改变了运行期写入值**，真机需随下一次部署复验。
+- **T6（P2，已修复，`b41bff4`）**：`--cap-drop=ALL` 与 `no-new-privileges` 只有 `app/sandbox/spec.py:68-70` 的实现，`scripts/verify_sandbox.py` 没有任何验收项（安全契约只能靠人工读代码保证）。修法：新增两项 Tier A 检查，直接读容器内 `/proc/self/status`（不依赖 `capsh` 之类镜像里可能没有的工具）——`CapBnd`（bounding set）必须为 0（容器内是非 root，`CapEff` 本来就是 0，不作断言）、`NoNewPrivs` 必须为 1，字段缺失即 FAIL；脚本 13 → 15 项，判读口径同步 `docs/deployment.md` §12.6 与 `docs/security.md` §4，负路径由 `tests/offline/test_verify_sandbox.py` 覆盖。只改验收脚本与测试，不影响运行期行为；真机需在下一次部署时复跑对齐。
+- B 组技术债当前没有未修复项：原先最严重的两项已于 `b41bff4` 一并修复（T6 验收覆盖、T10 时间口径，明细见上两条）。（关键路径零覆盖 T25 已于 `6b93fd6` 补测：`app/main.py`、`app/logging_setup.py`、`app/telegram/handlers.py`、`app/telegram/sender.py`、`CliBackend.run` 与 `DeepSeekClient`；验收脚本判定口径 T7 已于 `4ea2326` 修复：负向断言要求探针标记与错误签名，`Tier A`/`Tier B` 按显式归属聚合；repo 层无事务边界 T9 已于 `1826d89` 修复：写入统一走 `app/storage/tx.py`，失败整体回滚，不再有半提交；CLI 非零退出不映射 `execution_failed`（T4）已于 `d59a703` 修复：容器以 125/126/127 退出时回 `execution_failed` 并销毁容器；验收脚本 T6 于 `b41bff4` 加上能力集（`CapBnd`=0）与提权位（`NoNewPrivs`=1）两项检查（13 → 15 项）；贴纸 `last_used_at`（T10）于 `b41bff4` 改由 `wall_clock`（`time.time`）写 Unix 秒，冷却仍用 `time.monotonic`。）
+
+其余分类：安全与沙箱（T4–T8）、数据与记忆（T9–T16）、工具契约（T17–T20）、代码质量（T21–T24）、测试与工程（T25–T30）。
+
+## 7. 下一步
+
+0. **当前批处理路线（用户 2026-10-07 指定，按序推进）**：真实使用反馈 → `/clear`（已完成，`8b14aab`）→ Persona（群级配置，**已完成，`c29ecac`**）→ **记忆体验优化（里程碑 B，进行中：第一项长期笔记 `/note` 已补做 `495389b`——填上 `docs/memory.md` §6 一直标注「尚未实现」的写入路径；其余候选按真实使用证据再评估）** → 工具体验优化（**已完成，`e1dcb6a`**：修复 T31 工具清单逐轮重取；其余候选（工具数量、新基础设施）无真实证据，未自造）→ 模型档位路由（**已完成，`e26ea3c`**：最小规则型路由，默认档 `LLM_MODEL`、可选升级档 `LLM_MODEL_STRONG`，见 `docs/token.md` §5.1）→ 链式工具轮次优化（**已完成，`a5bf651`**：按意图分档，闲聊 1 轮——原表 0 轮会连贴纸工具一起关掉，故取 1 轮；其余沿用全局上限 `TOOL_MAX_ROUNDS`，见 `docs/token.md` §5.2）→ Stage 10.0 服务层接口预留（`docs/domain.md`/`docs/architecture.md` §10 已预留，无冻结接口规格，属产品设计）→ B 组技术债（T25 关键路径补测已完成 `6b93fd6`，只加测试；T7 验收脚本判定口径已修 `4ea2326`，含 4 条离线测试与文档；T9 repo 写入事务边界已修 `1826d89`，含 10 条离线测试与契约同步；T4 容器运行时保留退出码已修 `d59a703`，含 2 条离线测试与 `docs/tools.md` 契约同步；T6 验收脚本能力/提权覆盖与 T10 贴纸 Unix 秒已修 `b41bff4`，含 1 + 1 条离线测试与 `docs/deployment.md`/`docs/security.md`/`docs/database.md` 契约同步）→ 阶段 9 小优化（`PRAGMA optimize` 已例行化 `29f6687`，含 4 条离线测试；`BACKUP_*` 属部署契约变化、正式 remote 需用户确认，未做）→ 群宠体验升级（**已完成并已真机上线，`ba7afe1` + 贴纸 catalog `30cc3fe`**：主动接话三条弱触发 + 人类中心、DeepSeek 大肥鱼 Persona、贴纸 catalog 与批量导入；契约见 `docs/requirements.md` §2.1 与 F2.8–F2.11、`docs/persona.md`、`deploy/stickers/README.md`）→ **Stage 10 服务层与控制面板（已完成 2026-10-08：`app/services/` 服务层 + `app/control/` 面板 + ADR 0011，本机 688 条全绿，见 §4.13；下一项：整合开源发布版本）**（模型档位路由已由 `e26ea3c` 完成、链式工具轮次优化已由 `a5bf651` 完成、群宠体验升级已由 `ba7afe1` 完成；T10/T6 完成后不再自动寻找新技术债，按用户最近的批处理指令执行）。原则：已有真实反馈优先处理，无真实证据的新需求不自造；低风险可回滚的决定自行完成并记录。里程碑 A（`/clear` + Persona）已完成；该路线的模块形态统一为「Telegram adapter → `app/ops/` 规则入口 → repo」，Persona 与 `/note` 都按此落地，后续工具 UX 沿用同一形态。
+1. **阶段 8 已全部完成并通过真机验收**（真机 `88531d2`：416 条全量 OK、沙箱 13 项全 PASS、migration 4 与 `host_info` Linux 行为符合契约）：F5.2（管理员判定 + 命令通道 + T12）、F5.1（`/settings <字段> <值>` 写入、即时生效）、F5.3（日/月配额）、F5.4（`/stats` + `/health`，`tool_failures` 留痕与 7 天清理，与 `storage/health.json` 同一内部状态）、F4.7（`host_info`：`cpu`/`memory`/`disk_free`/`python`/`uptime_s`，L4 + `allow_host_info` 默认关）与四模式（`78ae9cf`：窗口 / 输出上限 / 工具档位，`docs/token.md` §5）。阶段 8 内明确留到后续的**两项均已实施**：链 3 轮次分档（`a5bf651`）与模型档位路由（已于 `e26ea3c` 实施，见 `docs/token.md` §5.1/§5.2；`/clear` 已于 `8b14aab` 补做，群级人设 Persona 已由 `c29ecac` 补做）。
+2. **阶段 9（部署与 24/7）进行中**：最小生产闭环已完成并真机验证（systemd 用户级单元、真实 `.env`、启动时 migration、health 心跳、Telegram 真机收发、stop/start/restart 与 `SIGKILL` 自动重启，见 §4.3）；备份/恢复与更新/回滚演练已通过（`scripts/backup_db.py`、`docs/deployment.md` §8.1，证据见 §4.4），真机当前已同步到本机 `main`（`30cc3fe` + 本批文档基线提交，群宠体验升级 + 104 槽贴纸已上线并真机验收，见 §4.6）。首次真实使用发现的空贴纸库问题已在真机同步并复验（见 §4.5）。阶段 9 未完成部分：程序内自动备份任务与 `BACKUP_*` 环境键、体积膨胀时的 `VACUUM`（离线手工）、容器托管（可选路径）；`PRAGMA optimize` 已在 `29f6687` 随 housekeeping 按周执行。
+3. B 组技术债已全部修复，不再需要立项（T6 / T10 随 `b41bff4`；T1–T3 已随 `f7f34b5`、T12 已随 `7382639`、T15 已随 `101c26c`、T25 已随 `6b93fd6`、T7 已随 `4ea2326`、T9 已随 `1826d89`、T4 已随 `d59a703`）；剩余 P2 项（T5 stderr 清洗、T8 `resolve_path`、T11 迁移解析、T13 已由 `/note` 补上运行时写入路径、T14 `thread_id`、T16 纵深防御等）按真实证据再决定。
+4. 是否配置正式远端（GitHub），以便后续换 Agent 维护。
+
+## 8. 如何重新生成这些证据
+
+```bash
+# 本机（Windows，仓库根）
+python -m unittest discover -s tests -t .
+
+# 真机（Linux VPS，bot 用户；注意用单引号包住 bash -lc 的内容）
+sudo -u bot bash -lc 'cd <bot-home>/app && .venv/bin/python -m unittest discover -s tests -t .'
+sudo -u bot bash -lc 'cd <bot-home>/app && .venv/bin/python scripts/verify_sandbox.py'   # 需要容器运行时
+```
+
+生产托管（阶段 9，systemd 用户级单元；root 操作 bot 的 `--user` 实例必须显式给 `XDG_RUNTIME_DIR`）：
+
+```bash
+U=bot; R=/run/user/$(id -u "$U")
+sudo -u "$U" env XDG_RUNTIME_DIR=$R systemctl --user is-enabled groupbuddy.service
+sudo -u "$U" env XDG_RUNTIME_DIR=$R systemctl --user show -p MainPID -p NRestarts -p ActiveState -p ExecMainStartTimestamp groupbuddy.service
+sudo -u "$U" env XDG_RUNTIME_DIR=$R systemctl --user start|stop|restart groupbuddy.service
+cat <bot-home>/app/storage/health.json          # checked_at 每 60 秒推进
+tail -n 20 <bot-home>/app/storage/logs/bot.log # 用户级 journalctl 在目标机无 journal 文件
+```
+
+代码同步（bundle 是装代码通道；真机 `origin` 自 2026-10-08 起已是 GitHub 公开仓库，可改用 `git fetch origin`，替换 `<sha>`）：
+
+```bash
+# 本机（部署用私钥与本地临时目录不入文档）
+git bundle create <本地临时目录>/dsh_deploy_<sha>.bundle main
+scp -i <部署用私钥> <本地临时目录>/dsh_deploy_<sha>.bundle root@<vps>:/tmp/
+
+# 真机：确认 sha256 一致后（不要改 origin，它现在指向 GitHub）
+sha256sum /tmp/dsh_deploy_<sha>.bundle
+sudo -u bot bash -lc 'cd <bot-home>/app && git bundle verify /tmp/dsh_deploy_<sha>.bundle \
+  && git fetch /tmp/dsh_deploy_<sha>.bundle main:refs/remotes/origin/main \
+  && git checkout <sha>'
+```
+
+真机侧的 GitHub 只读部署密钥（一次性配置，2026-10-08 完成，见 §4.12）：
+
+```bash
+# 真机：以 bot 身份生成密钥（只读用途，不给仓库写权限）
+sudo -u bot bash -lc 'ssh-keygen -q -t ed25519 -N "" -C groupbuddy-deploy@vps -f <bot-home>/.ssh/id_ed25519_github && cat <bot-home>/.ssh/id_ed25519_github.pub'
+
+# 本机：把公钥注册为只读部署密钥（gh 已登录仓库所有者；不加 --allow-write 即只读）
+gh repo deploy-key add <pubkey文件> --repo youwmaoo-hub/groupbuddy --title vps-bot-readonly
+gh repo deploy-key list --repo youwmaoo-hub/groupbuddy
+
+# 真机：<bot-home>/.ssh/config 里指定 Host github.com + IdentityFile + IdentitiesOnly yes，
+#       known_hosts 用 ssh-keyscan -t ed25519 github.com 写入，然后
+sudo -u bot bash -lc 'cd <bot-home>/app && git remote set-url origin git@github.com:youwmaoo-hub/groupbuddy.git && git fetch origin && git ls-remote origin main'
+```
+
+写入 `<bot-home>/.ssh/config` 时**不要**用 `printf '%s\n' …` 经 SSH 一行带过去：实测格式串被吃掉，文件变成一行含字面 `n`（`Host github.comn  HostName github.comn …`），表现为 `git@github.com: Permission denied (publickey)`；改为本机写好文件 → `scp` 到 `/tmp` → 远端 `tr -d '\r' > <bot-home>/.ssh/config` + `chmod 600` 即可。
+
+备份与恢复（阶段 9；`<快照>` 取 `storage/backups/` 下最新一份）：
+
+```bash
+# 在线备份（Bot 不停机），输出 path/bytes/user_version/integrity/各表行数
+sudo -u bot bash -lc 'cd <bot-home>/app && .venv/bin/python scripts/backup_db.py'
+
+# 恢复演练：必须以 bot 身份复制（否则 WAL 切换报 attempt to write a readonly database），
+# 且只对副本操作，不替换线上 bot.db
+sudo -u bot mkdir -p /tmp/dsh_restore_probe
+sudo -u bot cp <bot-home>/app/storage/backups/<快照> /tmp/dsh_restore_probe/bot.db
+# 校验副本：用现有脚本对副本再做一次快照，输出的 bytes/user_version/integrity/各表行数即为副本实况
+sudo -u bot bash -lc 'cd <bot-home>/app && .venv/bin/python scripts/backup_db.py --db /tmp/dsh_restore_probe/bot.db --dest /tmp/dsh_restore_probe/verify'
+```
+
+副本与线上逐项对照（`user_version`、8 表行数、`first_user`/`last_assistant` 片段）应完全一致（`IDENTICAL=yes`）；
+应用层可读性用临时探针验证：`load_settings()` → `open_db()` → `apply_migrations()`（阶段 9 实测 `migrations_version=4`、`messages=2`），
+探针脚本属一次性产物，不入库。
+
+更新与回滚按 `docs/deployment.md` §8.1 五步执行；bundle 传到 `/tmp` 后建议复制到 Bot 用户持久目录存档
+（真机最近几批为 `<bot-home>/bundles/dsh_deploy_ede3ef2.bundle`、`dsh_deploy_50b4159.bundle`），后续 `git fetch` 不依赖 `/tmp`。
+
+约束：`<bot-home>/app` 属主是 `bot`，root 直接执行 git 会报 `dubious ownership`，所有 git 操作必须经 `sudo -u bot bash -lc '…'`；
+`podman images` / `podman ps` 必须在 `bot` 用户可读的目录（如 `<bot-home>/app`）里执行，否则会因 `cannot chdir to /root` 而失败；
+**`bash -lc` 的内容必须用单引号，不要用双引号**：双引号会让外层 shell 先展开 `$(…)` / `$?` / `$HOME`，实测导致 `cd` 未生效（留在 `/root`，报 `.venv/bin/python: No such file or directory`）且重定向文件变成 root 所有（`bot` 再写就 `Permission denied`）；
+`systemctl --user` 在 root 会话下必须带 `XDG_RUNTIME_DIR=/run/user/<uid>`（否则 `Failed to connect to bus: No medium found`），且**必须给单元名**（`systemctl --user is-active` 不带名字会报 `Too few arguments.`）。

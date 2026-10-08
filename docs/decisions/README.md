@@ -34,6 +34,7 @@
 | [0008](0008-no-redis-vector-mq.md) | 暂不引入 Redis / 容器化部署 / Webhook 入站 / 向量库 / MQ | 已接受 |
 | [0009](0009-long-polling-single-instance.md) | long polling + 单实例（一个 Token 一个进程） | 已接受 |
 | [0010](0010-fts5-not-vector.md) | 检索用 FTS5（双字 bigram + bm25），不用向量库 | 已接受 |
+| [0011](0011-control-panel-fastapi.md) | 控制面板用 FastAPI + 零构建静态页，独立进程只经服务层 | 已接受 |
 
 ## 4. 模板
 

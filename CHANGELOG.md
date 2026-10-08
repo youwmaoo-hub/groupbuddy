@@ -3,7 +3,28 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 的组织方式，
 版本号对应 `docs/status.md` 的提交基线。提交哈希可在 GitHub 直接打开。
 
-## [Unreleased]
+## [1.0.0] - 2026-10-08
+
+第一个开源发布版：单进程、单 Bot Token 的 Telegram 群宠，外加一个**可选**的本地控制面板；
+本机 `Ran 688 tests / OK (skipped=2)`。发布内容与安装步骤见 `release/groupbuddy-v1.0.0/`。
+
+### Added
+
+- **控制面板（可选，独立进程，ADR 0011）**：`python -m app.control` 起一个默认只监听 `127.0.0.1:8787`
+  的 HTTP 面板，与本 Bot 共用同一个 SQLite 库；`PANEL_ENABLED=false` 时不装、不开都不影响机器人。
+  - 能看：运行概览（心跳/运行时长/消息数/当日 token 与工具失败/出站队列/数据库可读）、群列表与群详情、
+    日志尾部（脱敏、最多 256 KB、1–1000 行）。
+  - 能改：群设置（模式、各工具开关、贴纸冷却、群人设），与 `/settings` 走**同一条校验与写路径**。
+  - 凭据：写入/替换/删除 `BOT_TOKEN` 与 `LLM_API_KEY`，**只写不读**——接口永不返回明文（连掩码都不回），
+    按 name 精确改 `.env`（同目录临时文件 + `chmod 0600` + `os.replace`），写入后回 `restart_required: true`。
+  - 鉴权：`Authorization: Bearer <token>` 两级口令（`PANEL_TOKEN`→管理员、`PANEL_READONLY_TOKEN`→只读），
+    `hmac.compare_digest` 比较，越权 403；口令非空时不足 12 字符直接被配置校验拒绝；未配口令拒绝启动。
+  - 收紧响应面：关闭 `docs`/`redoc`/`openapi`，统一安全响应头与严格 CSP，`/api/*` 带 `Cache-Control: no-store`，
+    前端为零构建静态页、无内联脚本；不提供公网暴露方案（远程用 SSH 隧道）。
+- 服务层 `app/services/`：面板与 Telegram 命令通道共用的唯一业务入口
+  （`context.py` / `settings.py` / `overview.py` / `credentials.py`），不 import Web 框架与 aiogram、不读环境变量、不拼 SQL。
+- 可选依赖 `fastapi` / `uvicorn`：只在 `app/control/` 里 import，分层测试锁死；不开面板可以不装。
+- 发布包 `release/groupbuddy-v1.0.0/`：只含核心代码、文档与部署说明（不含运行数据、`.env`、虚拟环境与开发用原始需求记录）。
 
 ### Changed
 
@@ -14,6 +35,8 @@
 - 连发消息默认**不合并**：`DEBOUNCE_SECONDS=0`、`DEBOUNCE_MAX_MESSAGES=1`，每条消息各自成批，调大才恢复合并。
 - 输出规则改为"已决定接话就不许沉默"：首轮 `NO_REPLY` 时程序追加一句"必须回"的追问重跑一次；
   人设里"插不上话就不说话"的措辞同步改为"接话自然一点"。
+- 开源化中立化：`.env.example` 的 `LLM_BASE_URL` 改为占位端点 `https://api.example.com/v1`、
+  `LLM_MODEL` 改为 `your-model-name`、`BOT_ALIASES` 改为通用示例（文档里的具体模型/人设只作为示例）。
 
 ## [0.1.0] - 2026-10-08
 

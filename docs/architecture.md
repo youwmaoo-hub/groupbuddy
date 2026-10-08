@@ -22,8 +22,8 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 - `gate/`、`session/`、`tools/`、`storage/` 不得 import aiogram，不得 import `telegram/`。
 - `app/config.py` 是唯一读取环境变量的地方；其余模块只接收 `Settings`。
 - `app/main.py` 只做装配：注入 LLM 客户端与发送器，便于测试替换。
-- 三层职责：**适配器**（今天 `app/telegram/`，将来 `app/control/`）→ **服务**（今天 `app/session/`，阶段 10 抽 `app/services/`）→ **领域/存储/工具**（`app/domain/`、`app/storage/`、`app/tools/policy.py`）。
-- 适配器只做协议转换：不得直连 SQLite、workspace、工具执行器、沙箱；控制面板的一切读写经 Control API → 服务层（`docs/domain.md` §3）。
+- 三层职责：**适配器**（`app/telegram/`、`app/control/`）→ **服务**（`app/session/` 的会话编排与 `app/services/` 的业务入口）→ **领域/存储/工具**（`app/domain/`、`app/storage/`、`app/tools/policy.py`）。
+- 适配器只做协议转换：不得直连 SQLite、workspace、工具执行器、沙箱；控制面板的一切读写经 `app/services/`（`docs/domain.md` §3、ADR 0011）。
 - **已知偏差（技术债）**：`gate/`、`session/` 里有 4 处反向 import `app.telegram.parse`（`gate/debounce.py`、`gate/filters.py`、`gate/trigger.py`、`session/runner.py`），与本节「不得 import `telegram/`」冲突；
   一旦 `app/telegram/__init__.py` 变成 re-export 就会成环。`tests/offline/test_layering.py` 目前只锁 5 条规则，既没覆盖「适配器不得直连 SQLite/workspace/执行器/沙箱」这条，也没禁止上述反向 import（见 `TODO.md`）。
 - `app/domain/` 只放对象与身份（纯数据结构），不反向依赖任何业务层。
@@ -80,8 +80,14 @@ telegram（适配层） → gate（闸门） → session（会话编排） → l
 | | `app/ops/health.py` | 健康状态唯一来源：`HealthState` 快照 + `storage/health.json` 心跳 + `/health` 共用；只读、原子写 |
 | | `app/ops/metrics.py` | `/stats` 文案渲染：当日 token 用量、工具调用/失败（错误率）、配额余量；只读不新建统计体系 |
 | | `app/storage/repo/tool_failures.py` | 工具失败留痕（计入熔断的失败）：写入、按群区间计数、7 天清理（T15） |
-| 控制面（阶段 10） | `app/control/*` | HTTP 适配器：面板 API，只调服务层（现不存在） |
-| 服务（阶段 10） | `app/services/*` | 业务唯一入口（instances / credentials / chat_settings / usage / memory_admin / workspace_admin / status） |
+| 控制面（阶段 10，已实施） | `app/control/app.py` | HTTP 适配器：面板路由与安全响应头；只解析请求、调服务层、转 JSON，不写 SQL/不碰文件/不读环境变量 |
+| | `app/control/auth.py` | 口令 → 级别（`PANEL_TOKEN`=ADMIN、`PANEL_READONLY_TOKEN`=VIEWER）；`Bearer` 头 + `hmac.compare_digest`，不用 Cookie |
+| | `app/control/__main__.py` | 面板进程入口 `python -m app.control`：独立进程、与 Bot 共用同一 SQLite；无口令/未开启则拒绝启动 |
+| | `app/control/static/*` | 零构建静态页（原生 HTML/CSS/JS）；静态壳不含数据，数据一律走需鉴权的接口 |
+| 服务（阶段 10，已实施） | `app/services/context.py` | `ServiceContext`：连接 + `Settings` + `.env` 路径 + 心跳路径；测试可覆盖后两者 |
+| | `app/services/settings.py` | 群设置的读/列/写：字段校验复用 `app/ops/commands.py`，写库只走 `chat_settings.upsert` 单字段更新 |
+| | `app/services/overview.py` | 运行概览：心跳 + 消息/用量计数 + 日志尾部（256 KB 上限、脱敏、行数有界） |
+| | `app/services/credentials.py` | 凭据状态（配没配 + 来源）与写入/删除：按 name 精确改 `.env`（0600 原子替换），永不返回明文 |
 | 出站 | `app/outbound/queue.py` | 统一出口；重试与退避 |
 | | `app/outbound/ratelimit.py` | per-chat 与全局令牌桶 |
 | 记账 | `app/storage/repo/usage.py` | tokens / 工具调用 / 耗时（含 `purpose` 维度：chat / summary） |
@@ -147,9 +153,9 @@ Telegram Update
 Docker 只支持 Tier A | 独立沙箱服务 / microVM（确有必要时） |
 | 部署方式 | 单机单进程 + long polling | systemd 或容器托管，24/7 自愈（阶段 9） |
 | 情绪注入 | 动态段末条可选，默认不注入 | 阶段 5+ 由贴纸/情绪数据驱动（`docs/persona.md` §2） |
-| 控制面板与多实例 | 单进程单实例、`chat_id` 租户键、控制面不存在 | 每实例一进程 + Control API 调服务层（阶段 10，对象与租户键见 `docs/domain.md`） |
-| 凭据存储 | `.env` → `BotInstance`（只写不读、掩码） | 面板写入 + 加密存储 + 审计（阶段 10，见 `docs/security.md` §6） |
-| 多用户身份 | Telegram 用户 id 即身份 | WebUser 与 TelegramActor 分离，服务层收 `Principal`（阶段 10，见 `docs/domain.md` §3） |
+| 控制面板与多实例 | **面板已实施**：`app/control/`（独立进程）+ `app/services/`；多实例仍不存在（单进程单实例、`chat_id` 租户键） | 多实例 = 每实例一进程 + 每实例一份存储根；面板只经服务层（ADR 0011，对象与租户键见 `docs/domain.md`） |
+| 凭据存储 | `.env` → `BotInstance`（只写不读）；**面板写入已实施**（按 name 精确改行 + 0600 + 原子替换） | 加密存储 + 主密钥托管 + 变更审计仍留给后续（`docs/security.md` §6） |
+| 多用户身份 | Telegram 用户 id 即身份；面板只有部署者口令两级，**没有 WebUser/Principal 模型** | WebUser 与 TelegramActor 分离，服务层收 `Principal`（`docs/domain.md` §3） |
 | 语音输入输出 | 不存在 | 输入走工具层、输出走 `OutboundQueue` 新增媒体方法（阶段 11+，见 `docs/domain.md` §5） |
 
 ## 8. 测试缝（为离线验证而存在）
@@ -159,7 +165,7 @@ Docker 只支持 Tier A | 独立沙箱服务 / microVM（确有必要时） |
 - `tests/offline/` 用标准库 `unittest`，不需要网络、不需要真实 Bot Token、不需要 API Key。
 - 本地开发（Windows）与生产（Linux VPS）跑同一套代码，不维护平台分支。
 - **证据分级**：本地离线 `unittest` 通过只证明本机逻辑；沙箱与平台行为必须由**真机证据**证明（VPS 上跑同一套测试 + `scripts/verify_sandbox.py`）。两类证据分别记录在 `docs/status.md`，不得互相替代（见 `AGENTS.md` 证据纪律）。
-- **覆盖率现状**：624 个测试方法覆盖闸门/会话/工具/沙箱/存储/记忆/命令/运行指标/进程入口/模型档位路由/工具轮次分档/贴纸目录导入。原先零覆盖的关键路径已补齐（T25）：`app/logging_setup.py`（`SecretFilter` 的 msg/tuple/dict 三条脱敏路径 + 根 logger 装配与轮转文件、噪声库降级）、`app/telegram/sender.py`（异常 → `RateLimited`/`SendFailed`、不设 `parse_mode`）、`app/telegram/handlers.py`（update → runner、异常不外抛）、`app/llm/client.py`（请求组装、usage/tool_calls 提取、错误翻译）、`app/main.py`（数据库探测、工具失败留痕、`stop()` 收尾与信号注册、每小时清理）与 `CliBackend.run`（真实子进程的退出码与超时销毁）；对应 `tests/offline/test_logging.py`、`test_telegram_sender.py`、`test_handlers.py`、`test_client.py`、`test_main.py`、`test_sandbox.py::CliBackendRunTests`。真机验收脚本 `scripts/verify_sandbox.py` 的判定逻辑（负向断言的探针标记与错误签名、`Tier A`/`Tier B` 按显式归属聚合）由 `tests/offline/test_verify_sandbox.py` 用假后端离线覆盖（T7）。仍需覆盖的是需要真实 Telegram/容器/真机的路径（由真机证据证明，见本文件本节的证据分级）。写入事务边界（T9，`tests/offline/test_transactions.py`）与 `PRAGMA optimize` 的维护节奏（`tests/offline/test_storage.py`、`tests/offline/test_main.py`）也已有离线覆盖；容器运行时保留退出码 125/126/127 到 `execution_failed` 的映射（T4）由 `tests/offline/test_sandbox.py::RunnerTests` 覆盖；贴纸 `last_used_at` 写 Unix 秒而非进程相对秒（T10）由 `tests/offline/test_stickers.py` 覆盖；验收脚本新增的能力集（`CapBnd`=0）与提权位（`NoNewPrivs`=1）两项检查及其负路径（T6）由 `tests/offline/test_verify_sandbox.py` 覆盖。模型档位路由（`app/llm/routing.py` 的默认档 / 升级档 / fail-safe，以及 `ContextBuilder.intent` 的复杂度规则）由 `tests/offline/test_routing.py`（12 条）与 `tests/offline/test_pipeline.py` 的 5 条端到端用例（升级并记账、普通任务默认档、无强模型回退、配额优先、模式语义不变）覆盖；工具轮次分档（`app/llm/routing.py::tool_round_limit` 的闲聊 1 轮 / 未登记意图沿用全局上限 / `min` 不突破上限）由 `tests/offline/test_routing.py::ToolRoundTests`（5 条）与 `tests/offline/test_pipeline.py` 的 4 条端到端用例（闲聊 1 轮后不再下发工具、闲聊仍下发 `send_sticker` 并真的发出、普通任务仍 2 轮、`TOOL_MAX_ROUNDS=3` 时复杂任务用满 3 轮）覆盖。阶段 8「群宠体验升级」的三项改动由 `tests/offline/test_gate.py`（话题延续 / 情绪表达 / 安静后开场 / Bot 作者永不回复四条新规则及其与闸门的交互）、`tests/offline/test_pipeline.py`（未被点名的信息量消息真的触发主动回复、纯噪声 0 次模型调用、主动回复后进入冷却、其他 Bot 消息不回复）、`tests/offline/test_prompts.py`（`GLOBAL_PERSONA` 与 `docs/persona.md` §4 逐字一致）与 `tests/offline/test_sticker_catalog.py`（19 条：manifest 文件/目录校验、非法条目拒绝、素材名路径穿越防护、按 emoji 匹配贴纸包、幂等 UPSERT 与 `--dry-run` 不写库）覆盖。
+- **覆盖率现状**：688 个测试方法覆盖闸门/会话/工具/沙箱/存储/记忆/命令/运行指标/进程入口/模型档位路由/工具轮次分档/贴纸目录导入/控制面板与服务层（阶段 10：`tests/offline/test_control_auth.py` 覆盖口令→级别与 `Bearer` 头 fail-closed，`tests/offline/test_control_api.py` 用自带最小 ASGI 客户端覆盖 401/403、凭据写入不回显、日志脱敏有界、安全响应头与概览降级）。原先零覆盖的关键路径已补齐（T25）：`app/logging_setup.py`（`SecretFilter` 的 msg/tuple/dict 三条脱敏路径 + 根 logger 装配与轮转文件、噪声库降级）、`app/telegram/sender.py`（异常 → `RateLimited`/`SendFailed`、不设 `parse_mode`）、`app/telegram/handlers.py`（update → runner、异常不外抛）、`app/llm/client.py`（请求组装、usage/tool_calls 提取、错误翻译）、`app/main.py`（数据库探测、工具失败留痕、`stop()` 收尾与信号注册、每小时清理）与 `CliBackend.run`（真实子进程的退出码与超时销毁）；对应 `tests/offline/test_logging.py`、`test_telegram_sender.py`、`test_handlers.py`、`test_client.py`、`test_main.py`、`test_sandbox.py::CliBackendRunTests`。真机验收脚本 `scripts/verify_sandbox.py` 的判定逻辑（负向断言的探针标记与错误签名、`Tier A`/`Tier B` 按显式归属聚合）由 `tests/offline/test_verify_sandbox.py` 用假后端离线覆盖（T7）。仍需覆盖的是需要真实 Telegram/容器/真机的路径（由真机证据证明，见本文件本节的证据分级）。写入事务边界（T9，`tests/offline/test_transactions.py`）与 `PRAGMA optimize` 的维护节奏（`tests/offline/test_storage.py`、`tests/offline/test_main.py`）也已有离线覆盖；容器运行时保留退出码 125/126/127 到 `execution_failed` 的映射（T4）由 `tests/offline/test_sandbox.py::RunnerTests` 覆盖；贴纸 `last_used_at` 写 Unix 秒而非进程相对秒（T10）由 `tests/offline/test_stickers.py` 覆盖；验收脚本新增的能力集（`CapBnd`=0）与提权位（`NoNewPrivs`=1）两项检查及其负路径（T6）由 `tests/offline/test_verify_sandbox.py` 覆盖。模型档位路由（`app/llm/routing.py` 的默认档 / 升级档 / fail-safe，以及 `ContextBuilder.intent` 的复杂度规则）由 `tests/offline/test_routing.py`（12 条）与 `tests/offline/test_pipeline.py` 的 5 条端到端用例（升级并记账、普通任务默认档、无强模型回退、配额优先、模式语义不变）覆盖；工具轮次分档（`app/llm/routing.py::tool_round_limit` 的闲聊 1 轮 / 未登记意图沿用全局上限 / `min` 不突破上限）由 `tests/offline/test_routing.py::ToolRoundTests`（5 条）与 `tests/offline/test_pipeline.py` 的 4 条端到端用例（闲聊 1 轮后不再下发工具、闲聊仍下发 `send_sticker` 并真的发出、普通任务仍 2 轮、`TOOL_MAX_ROUNDS=3` 时复杂任务用满 3 轮）覆盖。阶段 8「群宠体验升级」的三项改动由 `tests/offline/test_gate.py`（话题延续 / 情绪表达 / 安静后开场 / Bot 作者永不回复四条新规则及其与闸门的交互）、`tests/offline/test_pipeline.py`（未被点名的信息量消息真的触发主动回复、纯噪声 0 次模型调用、主动回复后进入冷却、其他 Bot 消息不回复）、`tests/offline/test_prompts.py`（`GLOBAL_PERSONA` 与 `docs/persona.md` §4 逐字一致）与 `tests/offline/test_sticker_catalog.py`（19 条：manifest 文件/目录校验、非法条目拒绝、素材名路径穿越防护、按 emoji 匹配贴纸包、幂等 UPSERT 与 `--dry-run` 不写库）覆盖。
 - Windows 上软链接/硬链接相关用例会 `skipTest`（平台能力差异），因此「拒绝符号链接/硬链接」在 Windows 上是**条件跳过**、在 Linux 真机上才真正执行。
 
 ## 9. 可部署性约束（细节见 `docs/deployment.md`）
@@ -172,7 +178,7 @@ Docker 只支持 Tier A | 独立沙箱服务 / microVM（确有必要时） |
 - 健康检查只读：心跳 + 日志，不调用 LLM、不产生成本（§7）。
 - 可迁移：换机只需重新部署代码 + 恢复持久数据 + 配置 `.env`（§9）。
 
-## 10. 控制面板接入点与返工风险（阶段 10 预留，现在不实现）
+## 10. 控制面板接入点与返工风险（面板与凭据已实施，多实例仍预留）
 
 对象、身份与租户键见 `docs/domain.md`；面板只经 Control API → 服务层访问。
 
@@ -186,6 +192,11 @@ Docker 只支持 Tier A | 独立沙箱服务 / microVM（确有必要时） |
 | 6 | 队列/限速器/去重是进程内按 `chat_id` 的状态 | 多实例塞进一个进程会互相干扰（429 退避、出站配额） | 单进程 = 单实例，多实例 = 多进程；控制面不共享运行态，不引 Redis（§1） |
 | 7 | `usage` 与设置无实例维度 | 面板的配额、账单、状态需要跨实例聚合 | 运行态数据留实例库；控制面记实例级汇总（阶段 10 建表，`docs/database.md` §7） |
 | 8 | 出站只有文本 `send_message` | 语音/图片进来要改所有调用点 | 出站消息将来加 `kind`；语音走"新增方法、不改签名"（`docs/domain.md` §5） |
+| 9 | 日志脱敏只依赖 `Settings.secrets` 两个字段 | 面板新增凭据不会被脱敏 | `AGENTS.md` §3 规则 16：新增凭据必须注册进脱敏集合 |
+| 10 | 实例在装配期固定（`build_router`/`parse_update` 注入 bot 身份） | 面板"创建 Bot"后期待热生效，误以为架构不支持 | 实例生命周期由部署控制（写配置 + 启进程），不做热加载（`docs/deployment.md` §6） |
+
+**现状（2026-10-08，ADR 0011）**：#2、#3、#5 已落地——面板只经 `app/services/`（#2，`tests/offline/test_layering.py` 锁死）、凭据只写不读且经 `Settings.bot_instance()` 出口（#3）、设置写入复用同一校验与单字段 upsert、授权只由后端判定（#5）。
+#1、#4、#6、#7 仍是预留：多实例隔离、`Principal` 身份模型、跨实例汇总表都没实现；面板目前是"单实例 + 部署者口令两级"。
 ## 11. 装配与关闭顺序（`app/main.py` 是唯一装配点）
 
 启动：`Settings`（唯一读 `.env`）→ 日志 → `open_db` + 迁移 → Telegram Dispatcher/Router → 出站队列与限速器 →
@@ -206,5 +217,4 @@ Docker 只支持 Tier A | 独立沙箱服务 / microVM（确有必要时） |
 | 贴纸存储 | `StickerStore` 协议（`app/storage/repo/stickers.py`） | `DbStickerStore` | 构造注入 |
 
 这些是**唯一**允许替换实现的缝；其余模块之间按 §2 单向依赖直连，不引入新抽象层（`docs/decisions/0002`、`0003`）。
-| 9 | 日志脱敏只依赖 `Settings.secrets` 两个字段 | 面板新增凭据不会被脱敏 | `AGENTS.md` §3 规则 16：新增凭据必须注册进脱敏集合 |
-| 10 | 实例在装配期固定（`build_router`/`parse_update` 注入 bot 身份） | 面板"创建 Bot"后期待热生效，误以为架构不支持 | 实例生命周期由部署控制（写配置 + 启进程），不做热加载（`docs/deployment.md` §6） |
+

@@ -150,10 +150,13 @@ class FakeSender:
 class DbTestCase(unittest.IsolatedAsyncioTestCase):
     """带临时数据库的测试基类：不触碰项目 storage/。"""
 
+    #: 子类可覆盖：追加传给 `make_settings` 的配置项（例如面板口令）。
+    SETTINGS_OVERRIDES: dict[str, object] = {}
+
     async def asyncSetUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.tmp = Path(self._tmp.name)
-        self.settings = make_settings(self.tmp)
+        self.settings = make_settings(self.tmp, **self.SETTINGS_OVERRIDES)
         self.connection = await open_db(self.settings)
         await apply_migrations(self.connection)
 

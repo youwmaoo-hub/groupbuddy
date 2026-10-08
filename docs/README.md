@@ -33,6 +33,8 @@
 | 当前 commit、阶段进度、测试数字、真机验收证据、技术债摘要 | `docs/status.md` | 其他文档（只引用） |
 | 某个设计为什么这样定、放弃过哪些方案 | `docs/decisions/` | 其他文档（只引用） |
 | 运行环境、Docker/systemd、持久化目录、备份恢复、健康检查、优雅关闭、换机迁移、VPS 上线准备（rootless Podman / subuid-subgid / 预拉镜像 / 沙箱验收） | `docs/deployment.md` | architecture（只引用） |
+| 控制面板怎么开、怎么用、怎么关、改了什么什么时候生效 | `docs/deployment.md` §13（可选进程与运维） | 其他文档（只引用） |
+| 控制面板为什么用 FastAPI、为什么不用 Cookie、为什么默认关闭 | `docs/decisions/0011-control-panel-fastapi.md` | 其他文档（只引用） |
 
 ## 3. 文件清单与唯一职责
 
@@ -70,5 +72,6 @@
   `workspace`（每群工作区）、`Trigger`（发言闸门）、`Policy`（程序侧权限判定）、
   `OutboundQueue`（出站队列）、L0–L4（工具等级）、
   `BotInstance`（实例，租户键第一段）、`Credential`（凭据，归属实例）、
-  `Principal`（运行期请求主体，Web 用户与 Telegram 用户不复用）、控制面（Control API，阶段 10）、
+  `Principal`（运行期请求主体，Web 用户与 Telegram 用户不复用）、控制面板（Control API，阶段 10 已实施：
+  独立进程 `python -m app.control`，见 `docs/deployment.md` §13 与 ADR 0011）、
   本轮（round，一次回复任务的边界：只处理开始时已入库的消息）、情绪（mood，动态段末条的可选语气状态）。

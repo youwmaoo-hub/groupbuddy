@@ -39,7 +39,7 @@
 工具可用 = 已注册 ∩ 本群开关 ∩ **模式档位**（`docs/token.md` §5）：economy 只放 L0 且贴纸关、normal 只看群开关、smart 额外放行 L0 只读工具、unrestricted 放行全部已注册工具且不看群开关。**下发清单再过滤一层「本轮是否有意义」**：当前群贴纸库为空时 `send_sticker` 不下发给模型（空库必然 `not_found`，真实使用中发现它会白花一轮工具调用并污染 `/stats` 错误率）；这只影响下发给模型的清单，执行路径的 `permission_denied`/`not_found` 语义不变（模型若硬调仍按原契约返回）。未注册、或注册但未登记等级的工具一律拒绝（fail-closed）。第 3 步的身份判定由 `app/ops/admin.py`（`AdminRegistry`）提供：目前只有群主命令用它；将来某个等级要求管理员时，工具侧复用同一个判定，不另起一套。当前已注册的等级是 L0–L4：L0–L3 为 `calc`/`search_web`/`read_file`/`write_file`/`send_sticker`/`run_code`，L4 为 `host_info`（阶段 8 F4.7；始终注册，能否调用只看 `allow_host_info`，默认关；等级本身不要求管理员）。
 
 系统提示（System3）只能注入**已裁剪**的工具清单；模型永远不能提升自己的权限。
-- **授权只由后端判定**：前端隐藏按钮、前端参数、面板传入的身份都不构成授权；面板改设置走同一条判定（`docs/domain.md` §3）。
+- **授权只由后端判定**：前端隐藏按钮、前端参数、面板传入的身份都不构成授权；面板改设置走同一条判定（`app/control/auth.py` 后端判级别，`app/services/settings.py` 复用 `app/ops/commands.py` 的字段校验与单字段 upsert，见 §2.3、`docs/domain.md` §3）。
 
 ### 2.1 群主命令（阶段 8，仅管理员）
 
@@ -70,6 +70,15 @@
 - **模式只能由群管理员设置**（`/settings mode <值>`，见 §2.1）；模型与普通成员都不能改。默认值是 `normal`，与阶段 7 之前的行为一致；未知值按 `normal` 处理（fail-safe，不放大权限）。
 - 模式放大的是**工具档位**，不是绕过：`unrestricted` 放行全部已注册工具但仍受注册表、schema 校验、超时、沙箱与路径校验约束；`economy` 只放 L0、不因模式获得更高等级。
 - 非管理员改模式仍被拒（同 §2.1 的固定拒绝文案）；`/settings` 的字段校验不因模式变化。
+
+### 2.3 控制面板（阶段 10，ADR 0011）
+
+- **形态**：独立进程 `python -m app.control`，与机器人共用同一个 SQLite（WAL + `busy_timeout=5000`）；面板崩溃不影响回复，面板也不代替操作者启停机器人（改凭据只回 `restart_required: true`）。
+- **默认关闭 + 只监听回环**：`PANEL_ENABLED=false`、`PANEL_HOST=127.0.0.1`；没有配置 `PANEL_TOKEN` / `PANEL_READONLY_TOKEN` 时**拒绝启动**，不提供"无鉴权模式"。公网暴露不在本项目范围内（部署者自行加 SSH 隧道或反向代理，见 `docs/deployment.md` §13）。
+- **鉴权**：口令只经 `Authorization: Bearer <token>` 头传递，服务端用 `hmac.compare_digest` 比对；`PANEL_TOKEN` → ADMIN、`PANEL_READONLY_TOKEN` → VIEWER，其余 401，VIEWER 写操作 403。**不用 Cookie、不进 URL**：没有 Cookie 就没有 CSRF 面，访问日志关闭（`access_log=False`），口令不会被写进日志。
+- **口令强度**：`PANEL_TOKEN` / `PANEL_READONLY_TOKEN` 非空时至少 12 字符（`MIN_PANEL_TOKEN_CHARS`，配置校验直接拒绝过短的），且必须同时进 `Settings.secrets`（脱敏集合）。
+- **响应面收紧**：关闭 `/docs`、`/redoc`、`/openapi.json`；固定安全响应头（`X-Content-Type-Options: nosniff`、`Referrer-Policy: no-referrer`、严格 CSP 且 `default-src 'none'`）；`/api/*` 一律 `Cache-Control: no-store`；静态壳不含任何数据，静态文件里没有内联脚本（CSP 因此不需要 `unsafe-inline`）。
+- **分层**：`app/control/` 不写 SQL、不碰文件、不读环境变量、不 import aiogram；一切读写经 `app/services/`，凭据写入只调 `app/services/credentials.py`（见 §6）。
 
 ## 3. 工作区与路径
 
@@ -140,14 +149,14 @@
 
 ## 6. 密钥与敏感信息
 
-- 唯一来源：`.env`（不在版本库）。`.env.example` 只放键名与占位符。阶段 10 起由控制面安全存储注入，读取路径不变（`Settings.bot_instance()`）。
+- 唯一来源：`.env`（不在版本库）。`.env.example` 只放键名与占位符。控制面（面板）写入的也是同一个 `.env`（`app/services/credentials.py` 按 name 精确改行、同目录临时文件 + `chmod 0600` + `os.replace`），读取路径不变（`Settings.bot_instance()`）。**加密存储与主密钥托管仍未实施**：当前是明文文件 + 文件权限。
 - 密钥禁止出现在：代码、日志、数据库、错误消息、工具输出、模型上下文、容器内环境变量。
 - 日志写入前做形态遮蔽（`sk-`、`<数字>:<字母数字串>` 等）；发现疑似凭据即替换为 `[redacted]`。
 - 出错时只输出分类与短句，不输出堆栈、路径、配置内容。
 - 生产环境默认无调试模式；调试开关只能由 `.env` 显式配置，且不得改变本节的遮蔽规则与 §7 的日志过滤规则。
-- 凭据生命周期：**只写不读**（接口只能掩码显示，永不返回明文）、可替换、可删除，每次变更留审计记录（阶段 10 建 `audit_log`）。
+- 凭据生命周期：**只写不读**（接口只能写入、替换、删除；状态查询只回"配没配 + 来源"，连掩码都不返回，永不返回明文）、可替换、可删除。面板接口契约：`GET /api/credentials`（仅 ADMIN）返回 `{name, label, configured, source}`；`PUT /api/credentials/{name}` 与 `DELETE /api/credentials/{name}` 都只回 `restart_required: true` 与最新状态，不回显写入值。**每次变更留审计记录（`audit_log`）仍未实施**，目前只落服务日志（经脱敏过滤器）。
 - 凭据按实例归属（`BotInstance` / `Credential`，见 `docs/domain.md` §1、§4）；一个实例的凭据不出现在另一个实例的配置、日志或上下文里。
-- 新增任何凭据字段必须同时注册进日志脱敏集合（`Settings.secrets` → `BotInstance.secret_values()`），否则视为缺陷。
+- 新增任何凭据字段必须同时注册进日志脱敏集合（`Settings.secrets` → `BotInstance.secret_values()`；面板口令走 `Settings.panel_tokens`），否则视为缺陷。
 
 ## 7. 日志
 
@@ -190,8 +199,9 @@
 6. 429 场景下其他群消息仍能正常发送。
 7. 长回复分段后顺序正确、无内容丢失。
 8. 跨实例读取（另一个 `bot_instance_id` 的记忆、workspace、配额、群设定）一律拒绝。
-9. 凭据按实例归属：本实例的 Bot Token / LLM Key 不泄漏到其他实例与任何接口返回体。
+9. 凭据按实例归属：本实例的 Bot Token / LLM Key 不泄漏到其他实例与任何接口返回体（面板的 `/api/credentials` 与概览接口同样只回状态，不回明文；有离线用例锁定）。
 10. FTS 检索必须带 `chat_id`（`JOIN` 主表 + `WHERE chat_id = ?`）：跨群召回属于缺陷。
+11. 面板启用时：只监听 `127.0.0.1`，口令 ≥12 字符且不是文档里的示例值；未配置口令时拒绝启动；`Authorization` 头口令不会出现在访问日志里（access log 关闭）。
 
 ## 12. 关于其他 Bot 的消息
 
@@ -215,5 +225,6 @@ Telegram 目前允许 Bot 之间互相通信，"收不到其他 Bot 消息"不�
 6. 发送 SIGTERM 后进程能优雅退出（排空队列并关闭数据库与 HTTP 连接）。
 7. 日志与错误消息不含 Secret、Token、文件正文、环境变量。
 8. 必需配置缺失或持久目录不可写时拒绝启动（fail-closed），不带默认密钥跑起来。
+9. 若启用控制面板：`PANEL_ENABLED=true` 时必须有 `PANEL_TOKEN`（≥12 字符）、只监听回环地址；面板进程与机器人进程共用同一 SQLite 且 WAL 已开；改完凭据后重启机器人再确认生效。
 
 部署形态与目录约定见 `docs/deployment.md`。

@@ -129,7 +129,7 @@
 - 已完成（阶段 9 小优化 `PRAGMA optimize` 例行化，`29f6687`）：`app/storage/db.py` 新增 `optimize()`；housekeeping 循环加 `OPTIMIZE_INTERVAL_SECONDS`（7 天）门槛，启动后第一次清理执行一次、之后每 7 天一次，失败只记 `后台清理失败` 且下一轮重试；4 条离线测试（`tests/offline/test_storage.py`：只发一条 `PRAGMA optimize`、真实迁移库可重复执行；`tests/offline/test_main.py`：跑过 ≥4 轮清理仍只优化一次、失败重试）；契约见 `docs/database.md` §4 维护行、`docs/architecture.md` §5。
 - 待做（阶段 9 剩余）：程序内自动备份任务与 `BACKUP_INTERVAL_SECONDS`/`BACKUP_KEEP` 环境键（当前仅手工跑脚本）、容器托管（`Dockerfile`/`compose.yaml`，可选路径）、体积膨胀时的 `VACUUM`（离线手工，不在进程内自动跑）、正式远端（GitHub）。
 
-### 阶段 10 · Web 控制面板与多实例（暂不开发，仅预留）
+### 阶段 10 · Web 控制面板与多实例（**面板与凭据已实施** 2026-10-08；多实例仍预留）
 
 - 前置：阶段 8（设置与配额）、阶段 9（部署与持久化）。
 - 覆盖需求：F6.1–F6.5（语音 F6.6 属阶段 11+）。
@@ -137,8 +137,15 @@
   → 10.2 控制库与凭据加密（`bot_instances`/`users`/`credentials`/`audit_log` + 主密钥托管，见 `docs/database.md` §7）
   → 10.3 Control API（HTTP 适配器 `app/control/`；引入 Web 框架属新依赖，需单独批准）
   → 10.4 前端（任意栈，只调 Control API）。
-- 验收：面板只能经服务层读写；凭据只写不读且掩码显示；越权请求由后端拒绝；两个实例的记忆/workspace/配额互不可见；Web 用户与 Telegram 用户身份不混用。
-- 明确不做：实例热加载、多实例共享运行态（队列/限速器/去重）、为面板引入 Redis / 微服务 / K8s。
+- **已完成（2026-10-08，ADR 0011，契约见 `docs/deployment.md` §13、`docs/security.md` §2.3）**：
+  - 10.1 服务层 `app/services/`（`context.py` / `settings.py` / `overview.py` / `credentials.py`）：面板与命令通道共用同一套校验（`app/ops/commands.py` 的 `resolve_setting` / `resolve_persona_setting`）与同一条写路径；服务层不 import Web 框架与 aiogram、不读环境变量、不拼 SQL。
+  - 10.3 Control API `app/control/`（`app.py` 路由、`auth.py` 口令→级别、`__main__.py` `python -m app.control`）：只调服务层；`Authorization: Bearer` 两级口令（`PANEL_TOKEN`→ADMIN、`PANEL_READONLY_TOKEN`→VIEWER，`hmac.compare_digest`，越权 403/401）；关闭 docs/redoc/openapi，固定安全头与严格 CSP，`/api/*` no-store。
+  - 10.4 前端：零构建静态页（`app/control/static/index.html|app.js|style.css`），只调 Control API，不含内联脚本。
+  - 凭据写入：`app/services/credentials.py` 只写不读——`GET /api/credentials` 只回「配没配 + 来源」，`PUT`/`DELETE` 按 name 精确改 `.env`（同目录临时文件 + `chmod 0600` + `os.replace`），回 `restart_required: true`。
+  - 依赖：`fastapi` / `uvicorn` 是**可选依赖**（`requirements.txt` 末尾单独标注），只在 `app/control/` 里 import，分层测试（`tests/offline/test_layering.py`）锁死。
+- **仍未实施**：10.2（`bot_instances`/`users`/`credentials`/`audit_log` 表与主密钥托管；当前凭据仍是明文 `.env` 0600）、多实例聚合、多用户身份与角色（`Principal`/`WebUser`）、实例热加载。
+- 验收（已完成部分）：面板只能经服务层读写；越权请求由后端拒绝；凭据接口连掩码都不回、日志脱敏集合含面板口令；未配口令拒绝启动、默认只监听回环。多实例部分（两实例记忆/workspace/配额互不可见、Web 用户与 Telegram 用户身份不混用）待 10.2 实施后再验收。
+- 明确不做：实例热加载、多实例共享运行态（队列/限速器/去重）、为面板引入 Redis / 微服务 / K8s、控制面板公网暴露方案。
 
 ## 推进规则
 

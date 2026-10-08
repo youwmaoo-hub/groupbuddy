@@ -81,15 +81,15 @@ F2.1 只覆盖强触发；"不需要 @ 也能主动回复"（§2.1 第 1 条）�
 | F5.4 | 运行指标（/stats、/health） | P2 | 能看 token 用量与错误率（管理员专用命令，0 token、不进模型；`/stats` 复用 `usage` + `tool_failures`（保留 7 天），`/health` 与 `storage/health.json` 共用同一状态；契约见 `docs/security.md` §2.1、`docs/deployment.md` §7） |
 | F5.5 | 指令可发现 + 回复长度上限 | P1 | 群成员知道有哪些指令、该找谁用：`/help` 公开（不设门槛）列出全部指令，`/settings` 无参数时提示 `/help`，启动时注册 Telegram 指令菜单；**不泄露**本群设置内容与内部状态。回复长度按 `REPLY_MAX_CHARS`（默认 280 字，0 = 不限）约束并在超长时按句末兜底裁剪，出站与入库同一份文本（契约见 `docs/security.md` §2.1、`docs/token.md` §5） |
 
-### F6 控制面板与多实例（阶段 10，本阶段只预留接口与边界）
+### F6 控制面板与多实例（面板与凭据已实施 2026-10-08；多实例、语音仍预留）
 
 | 编号 | 需求 | 优先级 | 验收 |
 |---|---|---|---|
-| F6.1 | 对象与身份分离：`BotInstance` / `Credential` / `Principal`；Web 用户 ≠ Telegram 用户 | P2 | 对象与键见 `docs/domain.md` §1、§3 |
-| F6.2 | 面板只能经服务层访问：Control API → 服务层；禁止直连 SQLite / workspace / 工具执行器 / 沙箱 | P2 | 新增 `app/control/`、`app/services/`；分层测试覆盖（`docs/architecture.md` §2） |
-| F6.3 | 凭据只写不读：掩码显示、替换、删除、审计 | P2 | 任何接口不返回明文；变更进 `audit_log` |
-| F6.4 | 面板改设置同样由后端 Policy Engine 判定权限 | P2 | 前端隐藏按钮不构成授权 |
-| F6.5 | 多实例隔离：每实例一份存储根，跨实例一律拒绝 | P2 | 跨实例用例全部拒绝（`docs/security.md` §11） |
+| F6.1 | 对象与身份分离：`BotInstance` / `Credential` / `Principal`；Web 用户 ≠ Telegram 用户 | P2 | `BotInstance` / `LLMCredentials` 已存在（`app/domain/bot_instance.py`）；**`Principal` / WebUser 未实施**，面板目前只有部署者口令两级（`docs/domain.md` §3） |
+| F6.2 | 面板只能经服务层访问：`app/control/` → `app/services/`；禁止直连 SQLite / workspace / 工具执行器 / 沙箱 | P2 | **已实施**：`app/control/` 只解析请求与转 JSON，业务全在 `app/services/`；`tests/offline/test_layering.py` 锁死依赖方向（`docs/architecture.md` §2、ADR 0011） |
+| F6.3 | 凭据只写不读：掩码显示、替换、删除、审计 | P2 | **部分实施**：`GET /api/credentials` 只返回"配没配 + 来源"，写入/删除按 name 精确改 `.env`（0600 原子替换），永不返回明文或掩码；**`audit_log` 未建**，变更只落服务日志 |
+| F6.4 | 面板改设置同样由后端判定权限 | P2 | **已实施**：口令 → ADMIN/VIEWER 由 `app/control/auth.py` 判定，只读口令写设置 403；前端隐藏按钮不构成授权 |
+| F6.5 | 多实例隔离：每实例一份存储根，跨实例一律拒绝 | P2 | **未实施**（预留）：形态仍是单进程单实例，多实例 = 每实例一进程 + 每实例一份存储根 |
 | F6.6 | 语音能力：输入走工具层、输出走 `OutboundQueue` 新增媒体方法 | P2 | 阶段 11+ 才实现（`docs/domain.md` §5） |
 
 ## 2. 行为规则（产品层）
@@ -186,6 +186,6 @@ F2.1 只覆盖强触发；"不需要 @ 也能主动回复"（§2.1 第 1 条）�
 | 7 | 记账时区与展示时区 | 存储 UTC；`usage.day` 与展示按 `TIMEZONE`（默认 Asia/Shanghai） |
 | 8 | 备份频率与保留 | 目标形态：程序内每周 1 次、保留 7 份（`BACKUP_KEEP` 可配），见 `docs/database.md` §5。**状态：阶段 9 才实现**；当前需人工 `sqlite3 .backup`（WAL 下不要直接 `cp`） |
 | 9 | 沙箱调用方式（Bot 不接触 docker/podman socket 时怎么起容器） | 已定（阶段 7）：rootless Podman 的受限 CLI 调用（白名单 argv、无 shell、启动时探测一次）；Docker 备选且只有 Tier A；独立沙箱服务保留为将来预留（`docs/security.md` §4） |
-| 10 | 多实例数据形态 | 阶段 10 定；默认每实例一份 `DATA_DIR`/`DB_PATH`/`WORKSPACE_ROOT`（迁移最小、隔离最强），备选单库加 `bot_instance_id` 列 |
-| 11 | 凭据加密与主密钥托管 | 阶段 10 定；候选 AES-GCM + 600 权限主密钥文件或系统 keyring，引入新依赖需单独批准 |
-| 12 | Control API 鉴权与 Web 框架 / 前端栈 | 阶段 10 定；是否引入 FastAPI 等新依赖、自建账号还是 OAuth、公开部署如何防滥用 |
+| 10 | 多实例数据形态 | **仍未定（面板先行，多实例不在本版）**；默认每实例一份 `DATA_DIR`/`DB_PATH`/`WORKSPACE_ROOT`（迁移最小、隔离最强），备选单库加 `bot_instance_id` 列 |
+| 11 | 凭据加密与主密钥托管 | **仍未定**：当前明文存 `.env`（不在版本库、权限 0600），候选 AES-GCM + 600 权限主密钥文件或系统 keyring，引入新依赖需单独批准（面板写入不改变存储形态） |
+| 12 | Control API 鉴权与 Web 框架 / 前端栈 | **已定（2026-10-08，ADR 0011）**：后端 FastAPI + uvicorn（可选依赖，只在 `app/control/` import），前端零构建静态页；鉴权用 `Authorization: Bearer` 口令两级（`PANEL_TOKEN` / `PANEL_READONLY_TOKEN`）+ `hmac.compare_digest`，不用 Cookie/OAuth；默认只监听 `127.0.0.1` 且默认关闭，公网暴露由部署者自行加隧道或反向代理，本项目不给方案 |

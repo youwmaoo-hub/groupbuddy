@@ -25,7 +25,7 @@ while every permission decision stays in code, never in the model.
 
 ## 快速开始
 
-要求 **Python 3.13**（开发与验收基线），以及一个 Telegram Bot Token 与一个 OpenAI 兼容的 LLM Key。
+要求 **Python ≥3.11**（开发与验收基线 3.13），以及一个 Telegram Bot Token 与一个 OpenAI 兼容的 LLM Key。
 
 ```bash
 python -m venv .venv
@@ -34,8 +34,7 @@ cp .env.example .env                           # 然后填 BOT_TOKEN / LLM_API_K
 .venv/bin/python -m app.main
 ```
 
-`.env` 永不入库（见 `docs/security.md` §6）；仓库里只有 `.env.example` 的占位值。
-私聊默认完全不处理（`ALLOW_PRIVATE_CHAT=false`）；`run_code` 需要 `SANDBOX_BACKEND` 指向可用的
+`.env` 永不入库（见 `docs/security.md` §6）；仓库里只有 `.env.example` 的占位值。私聊默认完全不处理（`ALLOW_PRIVATE_CHAT=false`）；`run_code` 需要 `SANDBOX_BACKEND` 指向可用的
 rootless Podman/Docker，缺省 `auto` 在探测不到时会**拒绝执行**而不是退回宿主机。
 
 可选：`SEARCH_BACKEND=none|fake`（`none` 时不注册 `search_web`）、`LLM_MODEL_STRONG`（复杂轮升级档，
@@ -47,10 +46,10 @@ rootless Podman/Docker，缺省 `auto` 在探测不到时会**拒绝执行**而�
 
 ```bash
 python -m unittest discover -s tests -t .
-# Ran 647 tests / OK (skipped=2)
+# Ran 688 tests / OK (skipped=2)
 ```
 
-- 当前基线见 [`docs/status.md`](docs/status.md) §3（本机 647 通过；Windows 上有 2 条软/硬链接用例跳过）。
+- 当前基线见 [`docs/status.md`](docs/status.md) §3（本机 688 通过；Windows 上有 2 条软/硬链接用例跳过）。
 - 与沙箱、容器、部署有关的结论必须另上真机验证：本机（Windows、离线、FakeBackend）只能证明离线逻辑。
 - **测试是契约**：不允许为了变绿而放宽断言、删用例或跳过失败用例（见 `AGENTS.md` §3）。
 
@@ -59,6 +58,27 @@ python -m unittest discover -s tests -t .
 真机走 systemd 用户级单元 + rootless Podman，持久化目录与备份/恢复/回滚演练见
 [`docs/deployment.md`](docs/deployment.md)（唯一权威）。代码同步用 `git bundle` 或直接 `git pull`，
 两者都只依赖提交历史，可离线回滚。
+
+## 控制面板（可选）
+
+一个**可选的第二个进程**，与本 Bot 共用同一个 SQLite 库，只在需要看状态 / 改群设置时开：
+
+```bash
+# .env 里加（口令用 python -c "import secrets;print(secrets.token_urlsafe(24))" 生成）
+# PANEL_ENABLED=true
+# PANEL_TOKEN=<管理员口令，≥12 字符>
+# PANEL_READONLY_TOKEN=<只读口令，可留空>
+.venv/bin/python -m app.control              # 默认 127.0.0.1:8787
+ssh -L 8787:127.0.0.1:8787 <user>@<vps>      # 远程用 SSH 隧道，不要直接开端口
+```
+
+- 能做：看运行概览与日志尾部（脱敏）、列群看群、改群设置（模式 / 工具开关 / 贴纸冷却 / 群人设）、
+  写入或替换 `BOT_TOKEN` 与 `LLM_API_KEY`。
+- 不做：不启停机器人、不写 `.env` 以外的文件、没有多用户账号、不提供公网暴露方案。
+- 默认关闭且没有口令就拒绝启动；鉴权走 `Authorization: Bearer <token>`（管理员 / 只读两级）。
+  完整步骤见 [`docs/deployment.md`](docs/deployment.md) §13，安全边界见 `docs/security.md` §2.3，
+  为什么这样选见 [ADR 0011](docs/decisions/0011-control-panel-fastapi.md)。
+- `fastapi` / `uvicorn` 是**可选依赖**，只在 `app/control/` 里 import；不开面板可以不装。
 
 ## 目录结构
 
@@ -73,8 +93,10 @@ app/
   ├── storage/    SQLite 访问层、repo、迁移、事务边界、冷备份
   ├── ops/        运维命令、配额、指标、贴纸目录
   ├── telegram/   入站解析、handler、发送器、管理员判定
+  ├── control/    控制面板 HTTP 适配器（可选依赖：fastapi/uvicorn + 零构建静态页）
+  ├── services/   业务唯一入口：面板与命令通道共用的读写路径
   └── domain/     领域对象与身份模型
-tests/offline/    42 个文件、647 条离线用例
+tests/offline/    43 个文件、688 条离线用例
 docs/             设计文档（入口见 docs/README.md 路由表）
 scripts/          导入/备份/沙箱验收脚本
 ```
@@ -95,6 +117,7 @@ scripts/          导入/备份/沙箱验收脚本
 | 表结构、索引、迁移、保留清理 | [`docs/database.md`](docs/database.md) |
 | Token/成本优化 | [`docs/token.md`](docs/token.md) |
 | 为什么这样设计（ADR） | [`docs/decisions/`](docs/decisions/) |
+| 控制面板怎么开、怎么用、怎么关 | [`docs/deployment.md`](docs/deployment.md) §13 |
 | 当前基线、测试与验收证据 | [`docs/status.md`](docs/status.md) |
 | 路线图与阶段验收标准 | [`TODO.md`](TODO.md) |
 

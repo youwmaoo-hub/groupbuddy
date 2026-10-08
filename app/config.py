@@ -15,6 +15,9 @@ from app.domain.bot_instance import BotInstance, LLMCredentials
 
 REDACTED = "[redacted]"
 
+#: 面板访问口令的最短长度：太短的口令会被 `redact()` 误伤日志里的无关文本。
+MIN_PANEL_TOKEN_CHARS = 12
+
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 
@@ -110,6 +113,26 @@ class Settings(BaseSettings):
     log_dir: Path = Field(default=Path("storage/logs"), alias="LOG_DIR")
     log_file: str = Field(default="bot.log", alias="LOG_FILE")
 
+    # --- 控制面板（阶段 10，docs/requirements.md F6） ---
+    # 默认关闭：不配置就完全不开放任何端口（安全默认值，见 docs/security.md §2）。
+    panel_enabled: bool = Field(default=False, alias="PANEL_ENABLED")
+    # 默认只监听本机：要对外开放必须显式改 PANEL_HOST，并自行置于反向代理/防火墙之后。
+    panel_host: str = Field(default="127.0.0.1", alias="PANEL_HOST")
+    panel_port: int = Field(default=8787, ge=1, le=65535, alias="PANEL_PORT")
+    #: 可写凭据；面板用它判定"管理员级"请求（Authorization: Bearer）。
+    panel_token: str = Field(default="", alias="PANEL_TOKEN")
+    #: 只读凭据：只能看概览/群设置/日志，不能改任何东西。
+    panel_readonly_token: str = Field(default="", alias="PANEL_READONLY_TOKEN")
+
+    @field_validator("panel_token", "panel_readonly_token", mode="after")
+    @classmethod
+    def _check_panel_token(cls, value: str) -> str:
+        """空 = 未配置；非空则必须够长，否则 short token 会被日志脱敏误伤无关文本。"""
+        token = value.strip()
+        if token and len(token) < MIN_PANEL_TOKEN_CHARS:
+            raise ValueError(f"面板访问口令至少 {MIN_PANEL_TOKEN_CHARS} 个字符（或留空表示未配置）")
+        return token
+
     @field_validator("log_level", mode="before")
     @classmethod
     def _upper_log_level(cls, value: object) -> object:
@@ -138,8 +161,17 @@ class Settings(BaseSettings):
 
     @property
     def secrets(self) -> tuple[str, ...]:
-        """必须脱敏的字符串；日志过滤器用它做替换。"""
-        return self.bot_instance().secret_values()
+        """必须脱敏的字符串；日志过滤器用它做替换。
+
+        Bot Token / API Key 来自 `BotInstance`（docs/domain.md §4）；面板口令同样必须脱敏，
+        否则一次异常堆栈或访问日志就能把面板口令写进日志文件。
+        """
+        return (*self.bot_instance().secret_values(), *self.panel_tokens)
+
+    @property
+    def panel_tokens(self) -> tuple[str, ...]:
+        """已配置的面板口令（含只读口令）；供脱敏使用，不做任何形式的展示。"""
+        return tuple(token for token in (self.panel_token, self.panel_readonly_token) if token)
 
     def describe(self) -> str:
         """启动时打印配置摘要；凭据一律遮蔽。"""
@@ -185,8 +217,13 @@ class Settings(BaseSettings):
             "SANDBOX_OUTPUT_KB": self.sandbox_output_kb,
             "TIMEZONE": self.timezone,
             "LOG_LEVEL": self.log_level,
+            "PANEL_ENABLED": self.panel_enabled,
+            "PANEL_HOST": self.panel_host,
+            "PANEL_PORT": self.panel_port,
             "BOT_TOKEN": REDACTED,
             "LLM_API_KEY": REDACTED,
+            "PANEL_TOKEN": REDACTED if self.panel_token else "(未配置)",
+            "PANEL_READONLY_TOKEN": REDACTED if self.panel_readonly_token else "(未配置)",
         }
         return " ".join(f"{key}={value}" for key, value in items.items())
 

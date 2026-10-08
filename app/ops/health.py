@@ -86,6 +86,32 @@ def write_snapshot(path: Path, snapshot: dict[str, object]) -> None:
     os.replace(temporary, path)
 
 
+def read_snapshot(path: Path) -> dict[str, object] | None:
+    """读心跳文件：面板判断机器人是否在运行的唯一依据。
+
+    文件不存在、不可读或内容损坏时一律返回 None——面板据此显示"没有心跳"，
+    而不是把异常渲染成"运行正常"（docs/deployment.md §7）。
+    """
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    except OSError:
+        logger.warning("健康心跳读取失败 path=%s", path, exc_info=True)
+        return None
+    return parse_snapshot(raw)
+
+
+def parse_snapshot(raw: str) -> dict[str, object] | None:
+    """解析心跳 JSON；坏数据按"没有心跳"处理，不让面板接口 500。"""
+    try:
+        data = json.loads(raw)
+    except (TypeError, ValueError):
+        logger.warning("健康心跳内容无法解析")
+        return None
+    return data if isinstance(data, dict) else None
+
+
 async def health_loop(
     state: HealthState,
     path: Path,

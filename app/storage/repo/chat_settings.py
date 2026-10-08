@@ -34,6 +34,21 @@ async def get(connection: aiosqlite.Connection, chat_id: int) -> dict[str, objec
     return dict(row)
 
 
+async def list_all(connection: aiosqlite.Connection, *, limit: int) -> list[dict[str, object]]:
+    """列出被配置过的群（面板群列表用），按最近更新排序。
+
+    只读：面板展示与机器人 `/settings` 读的是同一张表、同一份默认值语义。
+    """
+    columns = ", ".join(("chat_id", *COLUMNS))
+    cursor = await connection.execute(
+        f"SELECT {columns} FROM chat_settings ORDER BY updated_at DESC, chat_id ASC LIMIT ?",
+        (int(limit),),
+    )
+    rows = await cursor.fetchall()
+    await cursor.close()
+    return [dict(row) for row in rows]
+
+
 async def upsert(connection: aiosqlite.Connection, chat_id: int, **changes: object) -> None:
     """写入/更新设置字段，只接受已知列。
 

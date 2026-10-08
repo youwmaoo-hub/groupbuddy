@@ -164,6 +164,35 @@ async def last_assistant_text(connection: aiosqlite.Connection, *, chat_id: int)
     return str(row[0])
 
 
+async def totals(connection: aiosqlite.Connection) -> dict[str, int]:
+    """面板概览用：消息总数与出现过的群数量（只做计数，不读任何原文）。"""
+    cursor = await connection.execute("SELECT COUNT(*), COUNT(DISTINCT chat_id) FROM messages")
+    row = await cursor.fetchone()
+    await cursor.close()
+    if row is None:
+        return {"chats": 0, "messages": 0}
+    return {"chats": int(row[1]), "messages": int(row[0])}
+
+
+async def chat_activity(connection: aiosqlite.Connection, *, limit: int) -> list[dict[str, object]]:
+    """最近活跃的群（面板群列表用）：只给计数与最后消息时间，不返回原文。
+
+    面板不做聊天记录浏览（docs/requirements.md F6.5）：运维视图只需要知道
+    「哪个群在用、最后一次说话是什么时候」，原文留在库里面板无权查看。
+    """
+    cursor = await connection.execute(
+        "SELECT chat_id, COUNT(*) AS messages, MAX(created_at) AS last_at "
+        "FROM messages GROUP BY chat_id ORDER BY last_at DESC LIMIT ?",
+        (int(limit),),
+    )
+    rows = await cursor.fetchall()
+    await cursor.close()
+    return [
+        {"chat_id": int(row[0]), "messages": int(row[1]), "last_at": int(row[2])}
+        for row in rows
+    ]
+
+
 async def clear_chat(connection: aiosqlite.Connection, chat_id: int) -> int:
     """/clear 用：删除该群消息原文，不影响其他群。"""
     async with transaction(connection):

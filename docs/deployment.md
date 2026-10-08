@@ -11,7 +11,7 @@
 - 允许存在的差异只有 `.env`、容器运行时与进程托管方式；业务代码不写平台分支、不依赖 Windows 特性。
 - 禁止把本机路径、用户名、主机名、IP、域名写进代码或文档。
 - 路径一律用 `pathlib` + 配置项拼接，不用字符串硬编码盘符或斜杠。
-- 支持部署方式：Docker/Podman 容器，或 systemd 直接跑 Python。
+- 支持部署方式：Docker/Podman 容器，或 systemd 直接跑 Python；控制面板是**可选**的第二个进程（`python -m app.control`，见 §13）。
 - 贴纸登记属一次性本地运维操作，三种方式都只读写 SQLite、不读 `.env`，schema 版本需要 ≥2（先启动一次 Bot 应用迁移）：
   - 单张：`python scripts/register_sticker.py --chat-id … --file-id … --file-unique-id … --valence … --arousal … [--tags a,b] [--db storage/bot.db]`；输出不回显 `file_id`。
   - 本地目录批量（推荐）：把素材放进 `deploy/stickers/assets/`（已 `.gitignore`），`python scripts/register_sticker.py --chat-id … --manifest deploy/stickers/catalog.json [--asset-dir deploy/stickers/assets] [--dry-run]`；`--asset-dir` 会拒绝路径穿越、校验素材存在与可选 `sha256`。
@@ -36,7 +36,7 @@
 - 工具轮次（可选）：`TOOL_MAX_ROUNDS` 是**全局上限**（默认 2，可选 0–4），按意图分档只在这个上限之下调低（闲聊 1 轮，复杂任务与无法判断用全局上限）；想把链 3 的「代码调试 4 轮」放开就把它设为 4（见 `docs/token.md` §5.2）。
 - 实例身份：`BOT_INSTANCE_ID`（默认 `default`）。多实例部署时每实例注入不同的 `DATA_DIR`/`DB_PATH`/`WORKSPACE_ROOT`，互不共享目录（见 `docs/domain.md` §2）。
 - 主动接话（阶段 8「群宠体验升级」，全部是纯规则、0 token，见 `docs/requirements.md` §2.1）：
-  - `BOT_ALIASES`：Bot 的昵称列表（逗号分隔，默认空）。**建议显式配置**（如 `DeepSeek,大肥鱼,深蓝大肥鱼,鲸鱼娘`）：别名既用于"被叫到"的强触发，也参与 `@名字` 识别；不要写 `bot` 这类通用词，否则 `@其他bot` 会被误判成叫本 Bot。
+  - `BOT_ALIASES`：Bot 的昵称列表（逗号分隔，默认空）。**建议显式配置成你自己 Bot 的名字**（如 `BOT_ALIASES=MyBot,小助手`）：别名既用于"被叫到"的强触发，也参与 `@名字` 识别；不要写 `bot` 这类通用词，否则 `@其他bot` 会被误判成叫本 Bot。
   - `PROACTIVE_TOPIC_MAX_MESSAGES`（默认 8）：与 Bot 上一条发言共享关键词的"话题延续"窗口，按条数计。
   - `PROACTIVE_QUIET_MESSAGES`（默认 20）：安静多久之后算"新话题开场"，按条数计；这两个键（连同 `FOLLOWUP_MAX_MESSAGES` 追问窗口）**只影响日志里的原因码**，不再决定回不回。
   - `PROACTIVE_COOLDOWN_SECONDS`（默认 20 秒）：未点名回复的冷却；`DUPLICATE_WINDOW_SECONDS`（默认 300 秒）：同一人同一句话在该窗口内只接第一次，0 = 关闭。**已删除** `PROACTIVE_WINDOW_SECONDS` / `PROACTIVE_MAX_PER_WINDOW`（不再有每窗口上限，`.env` 里留着也会被静默忽略）。被点名（@ / 回复 / 别名）不受冷却与重复过滤限制。
@@ -44,6 +44,7 @@
   - 群消息接收前提见 §12.10（Telegram 侧 Privacy Mode / 管理员）——不满足时普通群消息根本到不了进程，主动接话不会生效。
 - 配额（阶段 8 F5.3）：`QUOTA_DAILY_TOKENS` / `QUOTA_MONTHLY_TOKENS`，**0 或未配置 = 不限额**；按 `chat_id` 按 `TIMEZONE` 的自然日/自然月统计该群已用 token，超额时本轮不调用模型（语义见 `docs/token.md` §4.1）。配额不随群设置变化，只能由部署方改 `.env`。
 - `.env.example` 列出常用键与默认值；`.env` 只写需要覆盖的键。键名拼错会被**静默忽略**（走默认值），改完按 §12.5 核对启动日志里的 `配置加载完成` 一行。
+- 控制面板（可选，默认关闭）：`PANEL_ENABLED`（默认 `false`）、`PANEL_HOST`（默认 `127.0.0.1`）、`PANEL_PORT`（默认 `8787`）、`PANEL_TOKEN`（管理员口令）、`PANEL_READONLY_TOKEN`（只读口令）。两个口令非空时都至少 12 字符，否则配置校验直接拒绝；生成方式与部署步骤见 §13。
 
 ## 4. 时间与 UTC
 
@@ -70,7 +71,7 @@
 ## 7. 健康检查
 
 - 只读轻量：进程存活、最后一次成功处理更新的时间戳、数据库可读、出站队列深度。
-- 形态：`storage/health.json` 心跳 + 日志；不新开 HTTP 端口。
+- 形态：`storage/health.json` 心跳 + 日志；**机器人进程本身不新开 HTTP 端口**。控制面板是独立进程、可选开启（见 §13），开与不开都不影响心跳这条健康路径。
 - 健康检查不得调用 LLM、不得产生 token 成本；失败只告警、不自动重启（避免重启风暴）。
 - 心跳周期 60 秒（`app/ops/health.py`，进程内常量，不需要新的环境变量）；快照键为
   `instance` / `ok` / `started_at` / `checked_at` / `uptime_s` / `last_update_at` / `db_ok` / `outbound_pending`，
@@ -126,9 +127,11 @@
 - 上线或换机后跑一次真实验收 `scripts/verify_sandbox.py`（无网络、非 root、只读根、越界写失败、超时销毁、
   其他群 workspace 与宿主目录不可见）；Tier B 任一项不 PASS 就把 `SANDBOX_TIER_B=off` 只保留 Tier A。
 
-## 11. 明确不做（阶段 1–9）
+## 11. 明确不做
 
 Kubernetes、微服务、Redis、外部数据库、Nginx、Webhook 入口、多机 HA、CI/CD 平台、自动扩容。
+
+控制面板（§13）不改变这份清单：它是**同机本地的第二个 Python 进程**，不是 Webhook 入口、不需要 Nginx、不引入队列或外部数据库，也不提供公网暴露方案。
 
 ## 12. Linux VPS 上线准备（阶段 7 沙箱）
 
@@ -297,3 +300,79 @@ sudo -u "$U" env XDG_RUNTIME_DIR=/run/user/$(id -u "$U") systemctl --user show -
 - 验证（不改代码）：把 Bot 拉进群后发一条普通消息（不 @、不回复），看 `storage/logs/bot.log` 有无该 `update_id` 的处理记录、`messages` 表是否新增该条；若完全没有，就是 Privacy Mode 未关。
 - 进程侧不额外配置：`app/main.py` 用 `start_polling(...)` 默认接收全部 update，不设 `drop_pending_updates`、不按 `allowed_updates` 过滤；`app/telegram/handlers.py` 只处理消息类 update。
 - 其他 Bot 的消息即使到达也会在触发判定前被丢弃（`docs/security.md` §12），既不触发回复也不占用冷却与额度。
+
+## 13. 控制面板（可选，阶段 10，ADR 0011）
+
+面板是**可选的第二个 Python 进程**，与本 Bot 共用同一个 SQLite 库；不装、不开、停掉都不影响机器人。
+
+### 13.1 能做什么 / 不做什么
+
+- 能做：看运行概览（实例、心跳与运行时长、消息数、当日 token 用量与工具失败、出站队列深度、数据库可读）；列出与查看群；改群设置（`mode`、各工具开关、`sticker_cooldown`、群人设）；写入/替换/删除 `BOT_TOKEN` 与 `LLM_API_KEY`；看日志尾部（最多 256 KB、脱敏、1–1000 行，默认 200）。
+- 不做：启停或重启机器人（只提示需要重启）；写 `.env` 以外的任何文件；多用户账号与角色；跨实例聚合；公网暴露方案（不给 Nginx/HTTPS 配置）。
+
+### 13.2 前置条件
+
+- 机器人已能正常运行（`.env` 里有 `BOT_TOKEN` 与 `LLM_API_KEY`）。
+- `pip install -r requirements.txt`：`fastapi` / `uvicorn` 在依赖清单末尾且**是可选项**；不装它们时机器人照常运行，`python -m app.control` 会直接 `ModuleNotFoundError`。
+- 生成口令（管理员与只读各一个，建议 ≥24 字符）：`python -c "import secrets;print(secrets.token_urlsafe(24))"`。
+- `.env` 追加（示意，**别把真实口令提交进 Git**）：
+
+```
+PANEL_ENABLED=true
+PANEL_HOST=127.0.0.1
+PANEL_PORT=8787
+PANEL_TOKEN=<管理员口令，≥12 字符>
+PANEL_READONLY_TOKEN=<只读口令，≥12 字符；不想给只读就留空>
+```
+
+- 口令非空时短于 12 字符会被配置校验直接拒绝（启动即报错，不会静默降级）；`.env` 权限保持 600（§12.4），面板写入也保持 0600。
+
+### 13.3 启动与访问
+
+- 前台试跑：`python -m app.control`。未设 `PANEL_ENABLED=true`、或两个口令都为空时，进程以退出码 2 拒绝启动并打印中文原因。
+- 本机访问 `http://127.0.0.1:8787/`；远程不要直接开端口，用 SSH 隧道：
+  `ssh -L 8787:127.0.0.1:8787 <bot 用户>@<vps>`，然后在浏览器打开 `http://127.0.0.1:8787/`。
+- 接口鉴权走 `Authorization: Bearer <token>`：管理员口令可读可写，只读口令只能读（写操作返回 403）。口令不进 URL、不用 Cookie。
+
+### 13.4 systemd 用户级单元（可选）
+
+与 §12.9 同一套约定，`WorkingDirectory` 必须是项目根，`<APP_DIR>` 换成实际路径：
+
+```ini
+[Unit]
+Description=groupbuddy control panel
+After=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=<APP_DIR>
+ExecStart=<APP_DIR>/.venv/bin/python -m app.control
+Restart=always
+RestartSec=5
+KillSignal=SIGTERM
+TimeoutStopSec=30
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=default.target
+```
+
+```bash
+U=<bot 用户>; R=/run/user/$(id -u "$U")
+sudo -u "$U" env XDG_RUNTIME_DIR=$R systemctl --user daemon-reload
+sudo -u "$U" env XDG_RUNTIME_DIR=$R systemctl --user enable --now groupbuddy-panel
+sudo -u "$U" env XDG_RUNTIME_DIR=$R systemctl --user status groupbuddy-panel --no-pager
+```
+
+### 13.5 改动什么时候生效
+
+- 群设置：**下一轮消息即生效**（每轮重新读 `chat_settings`），不需要重启任何进程。
+- 凭据：写入 `.env` 后必须 `systemctl --user restart groupbuddy` 才生效；面板只回 `restart_required: true`，不会替你重启。
+- 日志：面板读 `<LOG_DIR>/<LOG_FILE>` 的尾部并在返回前脱敏；日志轮转后读到的就是新文件。
+
+### 13.6 运维注意
+
+- 两个进程共用 SQLite（WAL + `busy_timeout=5000`）：面板请求挂住不会锁死机器人；反过来也不要一边跑面板一边用 `sqlite3` 开长事务。
+- 安全底线：默认只监听回环；口令泄露就在 `.env` 里换新口令并重启面板；面板不记录访问日志（含口令的 Header 不会落盘）。
+- 关闭面板：把 `PANEL_ENABLED` 改回 `false` 并 `systemctl --user disable --now groupbuddy-panel`，机器人零影响。
+- 面板的完整安全边界见 `docs/security.md` §2.3 与 §6；为什么这样选见 ADR 0011。
